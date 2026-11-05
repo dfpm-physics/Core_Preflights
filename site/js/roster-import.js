@@ -189,6 +189,22 @@ export function emailProblem(email) {
   return null;
 }
 
+/**
+ * Is this a usable section name? A section code is whatever the course calls its sections
+ * (`M1A`, `W2C`, `LAB-3`, `Sec 4`), so there is no required pattern: courses with no M and T days
+ * name them freely. This only refuses what is plainly not a name, such as a whole sentence or a
+ * column that landed in the wrong place. Returns a plain sentence, or '' when the name is fine.
+ */
+export function sectionCodeProblem(code) {
+  const c = String(code || '').trim();
+  if (!c) return 'the section is blank';
+  if (c.length > 24) return `section "${c.slice(0, 24)}…" is longer than 24 characters, so it is probably not a section name`;
+  if (!/^[A-Za-z0-9][A-Za-z0-9 ._\-\/]*$/.test(c)) {
+    return `section "${c}" has characters a section name cannot use; use letters, numbers, spaces, hyphens, dots, underscores or slashes`;
+  }
+  return '';
+}
+
 /** Mirrors the students_cadet_id_range CHECK. */
 export function studentIdProblem(raw) {
   const digits = clean(raw).replace(/[^0-9]/g, '');
@@ -275,8 +291,14 @@ const IDENTITY_NORM = {
  */
 export function identityFlags(row, opts = {}) {
   const { courseCode = null, termCode = null } = opts;
-  const [subj, num] = String(courseCode || '').toLowerCase().split('-');
+  const code = String(courseCode || '').toLowerCase();
+  const [subj, num] = code.split('-');
   const expected = { subject: subj || '', course_number: num || '', term: termCode || '' };
+  // A code like phys-215 names a subject and a number, so the Subject and Course Number columns can be compared with it.
+  // A code like e30-lab does not (its halves are not a subject and a number), and saying "this course is e30" would be
+  // nonsense. Such a row is still FLAGGED when its columns name anything, because silence about a course is not
+  // agreement; the flag just says plainly that the comparison is not possible, and a person decides.
+  const comparable = /^[a-z]+-\d+[a-z]?$/.test(code);
   const flags = [];
 
   for (const { field, label } of IDENTITY_FIELDS) {
@@ -288,7 +310,8 @@ export function identityFlags(row, opts = {}) {
       field, label,
       key: `${field}=${got}`,
       value: clean(row[field]),
-      expected: clean(expected[field]),
+      expected: field === 'term' || comparable ? clean(expected[field]) : '',
+      courseCode: field === 'term' || comparable ? null : code,   // set when the code cannot be compared with this column
     });
   }
   return flags;
@@ -421,6 +444,8 @@ export function parseRosterFile(text, opts = {}) {
 
     const code = raw.section.toUpperCase();
     if (!code) return skip('missing section');
+    const codeProblem = sectionCodeProblem(code);
+    if (codeProblem) return skip(codeProblem);
     if (knownSections && !knownSections[code]) {
       // Not an error: a first import into an empty offering legitimately has no sections yet,
       // and the page offers to create them. Recorded so the count still reconciles.
@@ -808,6 +833,18 @@ export function sectionDefaultsFrom(code) {
   const letter = m?.[1] || '';
   const digit = m?.[2] ? Number(m[2]) : null;
   // Only the day letters this convention actually uses. 'A1B' must not become an 'A-day' section.
-  const meeting_days = ['M', 'T', 'W', 'R', 'F'].includes(letter) ? [letter] : [];
+  // A day letter counts only when a digit follows it (`M1A`, `W2`), so `MECH-1` or `Mon` is not read as an M-day.
+  const meeting_days = digit != null && ['M', 'T', 'W', 'R', 'F'].includes(letter) ? [letter] : [];
   return { meeting_days, period: Number.isFinite(digit) ? digit : null };
+}
+
+/**
+ * One plain sentence fragment saying what a new section will start with, for the preview:
+ * `meets M, period 1` or `no meeting days`. The page shows it BEFORE the section is created, so a
+ * course that does not use M and T days sees that nothing has been assumed for its sections.
+ */
+export function describeSectionDefaults(code) {
+  const d = sectionDefaultsFrom(code);
+  const days = d.meeting_days.length ? `meets ${d.meeting_days.join(', ')}` : 'no meeting days';
+  return d.period != null ? `${days}, period ${d.period}` : days;
 }

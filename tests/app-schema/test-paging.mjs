@@ -14,47 +14,28 @@
 //      multi-page path — the only place a row can be dropped or repeated — would never execute.
 //      A test that cannot fail is not a test.
 //
-// Runs against phys-110 Fall 2026 as the test faculty account, which directs it. Read-only.
+// Runs against the seeded staging offering as the seeded director. Read-only.
 
-import { createClient } from '@supabase/supabase-js';
-import { readFileSync } from 'node:fs';
-import { check, section, summary } from './harness.mjs';
+import { check, section, summary, signInAsStaff } from './harness.mjs';
 import { chunked, fetchAll, SUBMISSION_SELECT, GRADE_SELECT } from '../../site/js/schema.js';
-
-const PHYS110_FALL2026 = 'f47168c4-3cc2-4554-85f5-13ec89c6f99d';
-
-const envPath = new URL('../../supabase/admin/.env', import.meta.url);
-let env = {};
-try {
-  env = Object.fromEntries(readFileSync(envPath, 'utf8').split(/\r?\n/)
-    .filter(l => l.includes('=') && !l.trimStart().startsWith('#'))
-    .map(l => { const i = l.indexOf('='); return [l.slice(0, i).trim(), l.slice(i + 1).trim()]; }));
-} catch { /* handled below */ }
 
 section('whole-course reads are not silently truncated');
 
-if (!env.PREP_TEST_FACULTY_EMAIL) {
-  console.log('  [skip] no PREP_TEST_FACULTY_* in supabase/admin/.env — see tests/browser-harness/README.md');
-  process.exit(summary() ? 0 : 1);
-}
-
-const db = createClient('https://shzvpmlnqfmzfmuxkowi.supabase.co',
-  'sb_publishable_wHlVYRPryp7fgByHaDujZw_AXvonsru',
-  { db: { schema: 'app' }, auth: { persistSession: false } });
-
-const { error: authErr } = await db.auth.signInWithPassword({
-  email: env.PREP_TEST_FACULTY_EMAIL, password: env.PREP_TEST_FACULTY_PASSWORD });
-check('signed in as the test faculty account', !authErr, authErr?.message);
-if (authErr) process.exit(1);
+// Staging's seeded director directs the one seeded offering; nothing else is in scope for it.
+const { client: db } = await signInAsStaff('director');
+const { data: offs } = await db.from('course_offerings').select('id, course:courses(code)');
+const OFFERING = (offs || []).find(o => o.course?.code === 'phys-215')?.id;
+check('signed in as the staging director and found the seeded offering', !!OFFERING);
+if (!OFFERING) process.exit(1);
 
 const { data: secs } = await db.from('sections').select('id')
-  .eq('course_offering_id', PHYS110_FALL2026).order('code');
+  .eq('course_offering_id', OFFERING).order('code');
 const { data: enr } = await db.from('enrollments').select('id')
   .in('section_id', (secs || []).map(s => s.id)).eq('status', 'active');
 check('the course has a roster to read', (enr || []).length > 0, `${enr?.length} enrollments`);
 
 for (const [table, sel] of [['submissions', SUBMISSION_SELECT], ['grades', GRADE_SELECT]]) {
-  for (const pageSize of [undefined, 250]) {
+  for (const pageSize of [undefined, 250, 1]) {
     let got = 0, truth = 0, dupes = 0;
     for (const ids of chunked((enr || []).map(e => e.id))) {
       const { data, error } = await fetchAll(

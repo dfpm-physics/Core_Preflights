@@ -27,6 +27,7 @@
 //
 //   node tests/browser-harness/claude-artifact.mjs site/gemini/phys-215/__preview__.html
 
+import { NO_PRODUCTION_ARG } from './env.mjs';
 import puppeteer from 'puppeteer-core';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { createServer } from 'node:http';
@@ -74,7 +75,7 @@ const check = (desc, ok, detail = '') => {
 
 const browser = await puppeteer.launch({
   executablePath: CHROME, headless: 'new',
-  args: ['--no-sandbox', '--disable-dev-shm-usage'],
+  args: [NO_PRODUCTION_ARG, '--no-sandbox', '--disable-dev-shm-usage'],
   defaultViewport: { width: 1440, height: 1000 },
 });
 const page = await browser.newPage();

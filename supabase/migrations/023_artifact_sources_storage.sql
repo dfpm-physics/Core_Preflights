@@ -13,7 +13,7 @@
 -- No table, column, policy or function in `app` is touched, so `prep_app_owner` stays NOLOGIN
 -- and CORE.md section 0's coordination event does not apply.
 --
--- Idempotent / re-runnable. Reversal: 023_artifact_sources_storage_ROLLBACK.sql, which returns
+-- Idempotent / re-runnable. Reversal: rollback/023_artifact_sources_storage_ROLLBACK.sql, which returns
 -- the project to having exactly one bucket (lesson-figures). Record application in CHANGELOG.md
 -- per CORE.md section 5.
 -- ============================================================================

@@ -149,7 +149,7 @@ Needed for any lesson with written free-response questions.
 
    **Run this, and read the number.** It is the one setup step whose failure is invisible
    afterwards: `/preflight-analyze` warns once and then grades the entire cohort with no textbook
-   context. Expected as of 2026-08-07: **58 of 58**.
+   context. Expect every manifest entry to resolve: **60 of 60** as of 2026-11-04 (58 on 2026-08-07).
 
 ---
 

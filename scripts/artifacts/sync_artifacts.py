@@ -703,7 +703,7 @@ def cmd_purge(args):
     left = storage_list(key)
     print(f"\nDeleted {len(to_delete)}. Bucket now holds {len(left)} object(s).")
     if not left:
-        print("Empty — 023_artifact_sources_storage_ROLLBACK.sql can now drop the bucket.")
+        print("Empty — supabase/migrations/rollback/023_artifact_sources_storage_ROLLBACK.sql can now drop the bucket.")
     return EXIT_OK
 
 

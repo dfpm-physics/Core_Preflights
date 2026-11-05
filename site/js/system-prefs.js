@@ -120,6 +120,9 @@ export const CURATED_COLUMNS = {
   extensions:            ['enrollment_id', 'assignment_offering_id', 'extended_due_at', 'reason',
                           'revoked_at'],
   review_signoffs:       ['assignment_offering_id', 'section_id', 'reviewed_by', 'reviewed_at'],
+  // Tutor request failures (migration 020 on). The cadet reference and the free-text detail stay
+  // one click away; the page "Tutor errors" is the intended reader.
+  tutor_error_log:       ['logged_at', 'slug', 'kind', 'http_status', 'model', 'mode'],
   // `notes` is deliberately NOT here. It holds an instructor's candid read of a cadet, it is the
   // reason ei_sessions has no student read policy at all (011 header; ROADMAP Q3), and a generic
   // table browser is the wrong place to surface it — the per-student page shows it in the context
@@ -144,6 +147,36 @@ export const CURATED_COLUMNS = {
   // Hidden by default (see below), but curated anyway so that an administrator who opts in
   // gets the two columns that mean anything rather than a uuid beside a jsonb blob.
   user_preferences:      ['user_id', 'updated_at'],
+
+  // Grading model v2 (migrations 026 to 039). Keys, attempts and logs are curated too, because
+  // they are hidden by default and an opted-in administrator should still get a readable view.
+  part_sets:             ['course_offering_id', 'title', 'position'],
+  questions:             ['activity_id', 'qid', 'position', 'format', 'points', 'is_retired'],
+  question_keys:         ['question_id', 'variant_key', 'version', 'written_by', 'checked_at',
+                          'superseded_at'],
+  question_attempts:     ['enrollment_id', 'assignment_offering_id', 'question_id', 'attempt_no',
+                          'is_correct', 'points_awarded', 'answered_at'],
+  submission_receipts:   ['submission_id', 'activity_id', 'committed_at', 'is_late', 'actor'],
+  key_remark_runs:       ['question_id', 'from_key_version', 'to_key_version', 'run_at',
+                          'attempts_changed'],
+  letter_scales:         ['course_offering_id', 'version', 'near_line_width', 'created_at',
+                          'retired_at'],
+  grade_excusals:        ['enrollment_id', 'assignment_offering_id', 'reason', 'set_at',
+                          'revoked_at'],
+  grade_excusal_events:  ['enrollment_id', 'assignment_offering_id', 'action', 'actor', 'at'],
+  column_closures:       ['assignment_offering_id', 'section_id', 'closed_at', 'reopened_at'],
+  course_offering_settings: ['course_offering_id', 'blackboard_export', 'bb_prog_column',
+                          'bb_final_column'],
+  course_grade_history:  ['course_id', 'term_report_code', 'prog_gpa', 'final_gpa', 'source'],
+  grade_checkpoint_runs: ['course_offering_id', 'period', 'run_no', 'status', 'as_of',
+                          'approved_at'],
+  grade_checkpoint_rows: ['run_id', 'student_id', 'earned', 'possible', 'percent_text', 'letter',
+                          'rank'],
+  checkpoint_tie_choices: ['run_id', 'tie_group', 'choice', 'chosen_at'],
+  student_groups:        ['course_offering_id', 'name'],
+  student_group_members: ['group_id', 'enrollment_id', 'joined_at', 'left_at'],
+  student_group_grades:  ['group_id', 'assignment_offering_id', 'points', 'entered_at'],
+  student_group_snapshots: ['group_id', 'assignment_offering_id', 'enrollment_id', 'captured_at'],
 };
 
 /* ══════════════════════════════════════════════════════════════════════════════
@@ -162,6 +195,18 @@ export const DEFAULT_HIDDEN_TABLES = new Set([
   'submission_activities',  // student-owned blobs, read-only to staff
   'grade_events',           // append-only audit log
   'analysis_reports',       // written by /preflight-analyze and /lesson-aggregate
+  // Grading model v2: answer keys, attempt and receipt logs, run logs, frozen checkpoint
+  // children and group bookkeeping are machine-written or read through their parents.
+  'question_keys',
+  'question_attempts',
+  'submission_receipts',
+  'key_remark_runs',
+  'grade_excusal_events',
+  'grade_checkpoint_rows',
+  'checkpoint_tie_choices',
+  'course_grade_history',
+  'student_group_members',
+  'student_group_snapshots',
   // Self-scoped by RLS with no staff read policy (010), so a browser here shows an
   // administrator exactly one row — their own — and would read as an empty or broken table
   // rather than as the privacy boundary it is.

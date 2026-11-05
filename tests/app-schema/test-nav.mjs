@@ -83,19 +83,23 @@ section('user dropdown — who sees what in it');
 
 const menuKeys = (ctx) => userMenuLinks(ctx).map(l => l.key);
 const FACULTY = { role: 'faculty', instructorRow: { name: 'I' } };
-const ADMIN   = { role: 'faculty', instructorRow: { name: 'A', is_global_admin: true } };
+const ADMIN   = { role: 'faculty', instructorRow: { name: 'A', is_global_admin: true },
+                 isDirectorForCurrent: () => true };
 const STUDENT = { role: 'student', studentRow: { name: 'S' } };
 
-eq('the dropdown holds Account, Help, System and Test views', USER_MENU_LINKS.map(l => l.key),
-   ['account', 'help', 'system', 'tests']);
+eq('the dropdown holds Account, Help, Artifacts, Tutor errors, Courses and terms, System, System health and Test views',
+   USER_MENU_LINKS.map(l => l.key),
+   ['account', 'help', 'artifacts', 'tutor-errors', 'terms', 'system', 'health', 'tests']);
 check('System carries the global-admin gate', USER_MENU_LINKS.find(l => l.key === 'system').adminOnly === true);
 check('so does Test views', USER_MENU_LINKS.find(l => l.key === 'tests').adminOnly === true);
-eq('a global admin sees both', menuKeys(ADMIN), ['account', 'help', 'system', 'tests']);
-eq('a plain instructor does NOT', menuKeys(FACULTY), ['account', 'help']);
+eq('a global admin sees System, System health and Test views', menuKeys(ADMIN),
+   ['account', 'help', 'artifacts', 'tutor-errors', 'terms', 'system', 'health', 'tests']);
+const STAFF_ONLY = ['account', 'help', 'artifacts', 'tutor-errors'];  // facultyOnly entries
+eq('a plain instructor does NOT see System or Test views', menuKeys(FACULTY), STAFF_ONLY);
 // A director is the case the split exists for: full authority over one course, none over the
 // system tier. Switching course must never be a way to acquire it.
 eq('nor does a DIRECTOR of the current course',
-   menuKeys({ ...FACULTY, isDirectorForCurrent: () => true }), ['account', 'help']);
+   menuKeys({ ...FACULTY, isDirectorForCurrent: () => true }), [...STAFF_ONLY, 'terms', 'health']);
 eq('a student sees nothing faculty-only', menuKeys(STUDENT), ['account', 'help']);
 
 // Same href check as the bar's, split by where the target lives. Both halves matter: a bare
@@ -174,3 +178,8 @@ const student = courseOptionsHTML({
 });
 check('a student with two enrollments gets a picker', student.includes('course-opt'));
 check('…marking the right one', /course-opt active[\s\S]*?data-course="o-110-f26"/.test(student));
+
+// An inactive offering (a term not yet started) is reachable and says so; an active one carries no tag.
+const inactiveMenu = courseOptionsHTML({ courses: [OFF_215, { ...OFF_110, isActive: false }], currentOffering: 'o-215-f26' });
+check('an inactive offering is in the picker and marked Inactive', /data-course="o-110-f26"[\s\S]*?Inactive/.test(inactiveMenu));
+check('an offering with no flag, or an active one, is not marked', !courseOptionsHTML({ courses: [OFF_215, OFF_110], currentOffering: 'o-215-f26' }).includes('Inactive'));

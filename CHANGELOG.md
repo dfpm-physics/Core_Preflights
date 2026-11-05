@@ -8,6 +8,142 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-11-05 — Matthew Recker via Claude (v2 Stage C staff pages, on staging, `v2` branch)
+
+- **Rough Items page for directors, `site/faculty/items.html`, on staging only.** It enters work of all seven
+  kinds and always leaves it unpublished. It has one date for all sections, per-section exceptions, or no date.
+  The older Assignments page links to it. The publish refusal for an inactive term is now a plain sentence.
+  Roster import for a new term is a separate bullet below.
+- **Courses and terms page, `site/faculty/terms.html`, on staging only.** A global admin creates a course, a
+  term, and an offering, which is inactive unless the person says active. A director rolls an offering over to
+  another offering of the same course: a dry-run list comes first, then one click copies items, questions,
+  current keys as unchecked, and the letter scale, with lineage in `origin_assignment_id`. A fingerprint of the
+  source showed no change, and nothing is published. No students, sections, or grades are copied. No executable
+  course list needed removal: the three that remain are display fallbacks, and a test pins them. An admin can
+  set an offering active or inactive there; that deletes nothing.
+- **Roster import for a new, inactive term, on staging only.** Courses and terms links to each offering's Students
+  tab. The tab has a paste box, and its preview states what each new section starts with. Section names are
+  free-form, with a plain refusal for a bad name. A section name now reads a day letter only when a digit follows
+  it, so `MECH-1` is not an M-day section. The browser proof covers a cadet in two terms, a move, a departure that
+  keeps work, and an earlier term that does not change. Example file: `docs/examples/roster-example.csv`.
+- **Name scan allow-list: one entry added.** A sentence on physics history in a PHYS 110 lesson page matched a cadet
+  by chance. The entry is keyed on that file and that ID, so another cadet's name in the file still fires.
+- **Migration `app/041` and review fixes, on staging only.** Set helpers replace the per-row policy calls, so an
+  unfiltered read of 1,854 questions went from up to 4.5 s to at most 143 ms. A scale save and a key-with-question
+  save are now single database steps that refuse a stale save, and the database stamps who wrote a scale.
+  Removing an item states the questions and key versions it deletes. A two-track course asks for an M date and a
+  T date. Imports refuse a non-UTF-8 file, and Write uses only the text that was checked. The step 1 precheck now
+  reports table ownership and row-security settings. The deadline proof refuses to pass on zero rows.
+- **Question and key entry, `site/faculty/questions.html`, on staging only.** A director reaches it from Items.
+  It has versioned keys and a student preview that never reads the key. CSV import does a dry run, refuses the
+  whole file on any bad row, and then writes with one click (example: `docs/examples/questions-example.csv`).
+  Not built: re-marking after a key edit, marking an AI-written key as checked, `figure_url` editing, per-student
+  variants, overwrite on import, and publishing. A bulk key insert must name its NOT NULL defaults.
+- **Migration `app/040`, applied to staging only.** A director's key edit took 13 to 27 s and passed the 8 s API
+  limit. As the table owner the same edit took 15 ms, so row-level security was the cause. The four policies on
+  `questions` and `question_keys` now call helper functions with the same rule. The edit now takes about 50 ms.
+  The rollback and re-apply are proven. Production has not received this file.
+- **Letter scale page for directors, `site/faculty/scale.html`, on staging only.** A director reaches it from
+  Items. Its validator agrees with the database on 17 shared cases. On an active course, Save stays off until
+  the page shows who would change. A save makes a new version, and the page never touches grades or totals.
+  Not built: a retire-to-default button, editing past versions, and checkpoint copies of the scale.
+- **Migration `app/042`, on staging only.** The two save functions now refuse what the pages refuse: a wrong type, more
+  decimals than a column allows, and an over-long letter. They no longer round a value or turn it into NULL.
+- **Migration `app/043`, on staging only.** Through the API, only a global admin changes whether an offering is active,
+  creates an active offering, or deletes one. A director still edits other columns. The only page that writes these
+  values is `site/js/faculty-terms.js`, and scripts use database roles, which the guard does not affect.
+- **Rollover and roster fixes.** Rollover reports what an undo left, follows the whole lineage chain, refuses a shift of
+  0 or a non-integer, and leaves dates blank when the source has an empty per-day map. A tutor with no link and no
+  student use can take a new id on Items. The Students link on Courses and terms waits for the saved course choice
+  before it navigates, because the next page read the older choice.
+- **Test fixes.** The roster harness and `docs/examples/roster-example.csv` removed and enrolled seeded cadets, because
+  they shared a cadet ID range; they now have their own range. `seed_staging.py --verify` counts only the seed's own
+  courses. A regular expression in `tests/browser-harness/v2-terms.mjs` held a literal backspace and is corrected.
+  Invented test URLs and one synthetic test key now carry the `allowlist-secret` marker, because the secret scans read
+  only tracked or staged files and first saw these files at staging. None matches a real secret.
+
+**Proof, final state, staging:** offline 39 of 39 suites and 2647 checks; browser harnesses items 185/0, questions 124/0,
+scale 71/0, terms 95/0, roster 44/0; signed-in 114/0; live suites 0 failed, 2 skipped; `seed_staging.py --verify` passes;
+secret scan clean; `scratch_migration_proof.py` applies 024, 025, and 026 to 043 without 023, with no differences.
+
+**Known and left:** `v2_total_vectors.py` can fail on a chance email clash in its trial cadets, and it passed 107/0 when
+re-run alone. A tutor-id browser case failed once in an overlapping run and did not fail again; the cause is not proven.
+
+**Deliberately not done:** nothing here touched production, and nothing is published. Migrations `026` to `043` and these
+pages have not reached production. Stage C's own gate, a person entering a mock course by hand, has not run.
+
+---
+
+## 2026-11-04 — Matthew Recker via Claude (v2 safety work, Stage A, `v2` branch)
+
+**Tests, tools and migrations can now be changed on staging with a machine check behind them.**
+Production was not read or written.
+
+- **Tests target staging only.** `tests/app-schema/` and the browser harness refuse any other target,
+  and an offline test proves each refusal. The seed gained a test cadet, a second course with its own
+  director, and interactive lessons. Account edge-function checks were added. Three stale checks were
+  updated to match current site behaviour. A suite that records no checks now fails.
+- **Edge functions on staging.** `scripts/staging/deploy_functions.py` deploys the account functions
+  and the error log through the Management API. It is a dry run by default, accepts only the staging
+  project, and refuses the AI proxies. They are deployed.
+- **One URL reader.** Staging tools read every database URL through `scripts/staging/db_target.py`,
+  with a matching rule for the Node suites, and accept only the staging project.
+- **CI.** `.github/workflows/ci.yml` runs offline suites with the network blocked, a syntax check, a
+  secret scan (`scripts/checks/secret_scan.py`), and the doc check as report-only. It holds no
+  credential, and it is report-only on `main`. **The name scan needs the live roster, so CI reports it
+  as skipped.** Run it locally before a push. CI has not run on GitHub yet.
+- **Migrations.** `app.migration_ledger` (`app/024`) with `scripts/staging/migration_ledger.py`, a
+  fingerprint diff, and `scripts/staging/step1_precheck.sql`. Rollback files moved to `rollback/`
+  folders. `009_analysis_runs.sql` runs alone, with the same resulting schema. `app/025` pins the
+  search path on seven functions. `024` and `025` are applied on staging only. A from-scratch build
+  in a scratch database gives a fingerprint identical to staging's.
+- **Restore.** `scripts/staging/restore_drill.py` and `docs/operations/RESTORE-DRILL.md`. A rehearsal on
+  a small invented dataset took 7 s to dump and 23 s to restore. **The production-size run has not been
+  done,** so this is not a recovery time.
+- **Docs.** `docs/decisions/GRADE-RULES.md` and `V2-SCOPE.md` record the rules, dates and two-step
+  cutover. `ROADMAP.md` §9 closes the gradebook question. Corrected the database tier, the
+  student-data citation note, and the test-target wording. The schema catalogue was regenerated.
+- **Browser proof.** `tests/browser-harness/pages-smoke.mjs` signs in as each seeded staging role and
+  loads every top-level student and faculty page. On staging through `app/025`, the data reads
+  succeed on every page but one. The artifact index is not seeded on staging, so that page's read
+  fails, and the suite reports it by name. Four stale browser checks were updated. A menu item in
+  `site/js/nav.js` now names an icon that exists.
+- **Stage B migrations `026` to `039` written and applied to staging only.** Each has a rollback file. The
+  chain builds in the order each database receives it, and rolls back to a matching schema. The live and
+  offline suites pass. The deadline functions matched the shipped site on 160 trial cases. Not yet run on
+  production.
+- **First review round on `026` to `039` fixed.** The newer-page marker can no longer be cleared. Items with
+  in-person or online paths cannot publish until step 2. Stale zeros follow the rule the grade page uses.
+  Rollbacks refuse when real rows exist, unless the operator sets an explicit flag after a snapshot. Old
+  grading pages refuse items entered on the newer page.
+- **Second review round on `026` to `039` fixed.** The stale-zero rule now matches the site's own code on 440
+  test cases. An active extension holds a closed column open until its date passes. A stored day value needs a
+  time zone. Each rollback needs its own flag. At production size (22,899 invented grades, on a scratch
+  database) the slowest total takes 0.75 s, and no old write is more than 1.6 times slower.
+- **Inactive training offering proven on staging.** A new seed builds a course with an inactive training offering
+  beside its active real offering. Director pages, cadet sign-in, the publish refusal, an edit save, the job
+  scripts' choice of the active offering, the one-active refusal and the step 1 precheck all behave.
+- **Stage B proof tools, staging only.** Added the path backfill (dry run first), a grades fingerprint with
+  three controls, a gate seed, repo checks for totals and signed-in access, a browser walkthrough for items
+  entered on the newer page, and live proofs of the step 1 script guards. Added a repeatable deadline proof
+  (485 rows, 0 differences, with planted controls), a browser pass over old-page writes, and a scratch-database
+  proof that `026` to `039` and the backfill leave Fall-shaped rows unchanged. All 8 gate items pass on staging.
+  Not run on production. `name_scan.py` was not run, because it needs the live roster.
+- **Step 1 guards for the v2 data model, written and tested offline.** The lesson editor refuses to save,
+  remove, delete or swap the interaction of an item entered on the newer page, and links to that page. The
+  Grade picker, Report list and Health page leave such items out. The job worklist offers only published work
+  with a typed or tutor path, and stops if any path has no delivery. `register_lesson.py` needs `--term`.
+  `create_course_offering.py` needs `--active` or `--inactive`. `--term` on the aggregate lookup finds
+  inactive offerings. These guards stop honest mistakes on old pages. They are not access control.
+- **Staging seed widened.** 20 more invented cadets, sections with unusual meeting days, a course with
+  no day tracks, interactive reports at several effort values, one active and one revoked extension,
+  and mixed grades. The live suites pass on it. Staging only.
+- **Design accepted by the course director, after two adversarial reviews:**
+  `docs/decisions/V2-DATA-MODEL.md`. All six decisions and the marked defaults stand. His note on decision 2:
+  one active offering of a course, which may hold several sections. Migrations go to staging first.
+- **Not done:** no commit or push. `site/help/DOC-STATUS.json` is refreshed after the commit. The
+  production backup terms are not checked.
+
 ## 2026-11-04 — Matthew Recker via Claude (staging database, `v2` branch)
 
 **A second Supabase project now holds a staging copy of the `app` schema, built only from the
@@ -114,6 +250,7 @@ users, no storage buckets, no edge functions. Production was not written to.
 - **Signed-in pages checked by Matthew Recker in a browser**, through the local server, on 2026-11-04.
   He reported that they work. An agent does not type a password into a login page, so this check
   was his.
+- **`docs/ROADMAP.md` §9 is new.** It holds the v2 requests and open choices, for a fresh session.
 - **Not done:** no edge functions in staging, so any page that calls one will fail (creating staff,
   password resets, the AI proxies, the error log). Real content (real lessons, real `phys-110`) is
   not copied. No commit or push.

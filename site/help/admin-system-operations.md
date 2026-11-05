@@ -3,9 +3,11 @@
 
 ## Start of semester
 
-**Unpause Supabase first.** The project sits on the free tier and pauses after roughly a week
-of inactivity — a paused database looks exactly like a broken site. Unpause it from the Supabase
-dashboard before students arrive.
+**Check that Supabase is running first.** The production project is on a paid tier, which does
+not pause for inactivity. If the site looks broken, still look at the project in the Supabase
+dashboard before anything else: a stopped or paused database looks exactly like a broken site. The
+staging project is not on a recorded tier, and a free-tier project pauses after roughly a week
+idle; unpause it from the dashboard.
 
 Then, in order: **roster import** and **section→instructor assignment**. **Student account
 provisioning runs by itself** as of 2026-07-27 — the import creates a login for every new cadet and

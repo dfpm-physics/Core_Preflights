@@ -20,6 +20,7 @@
 //
 // Usage:  node tests/browser-harness/modal.mjs [--chrome <path>]
 
+import { NO_PRODUCTION_ARG } from './env.mjs';
 import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
@@ -98,7 +99,7 @@ window.openState = () => ({
 </script></body></html>`;
 
 let passed = 0, failed = 0;
-const browser = await puppeteer.launch({ executablePath: CHROME, headless: 'new' });
+const browser = await puppeteer.launch({ executablePath: CHROME, headless: 'new', args: [NO_PRODUCTION_ARG] });
 
 /** @param want {{outer:boolean, inner?:boolean}} */
 async function run(label, drive, want) {

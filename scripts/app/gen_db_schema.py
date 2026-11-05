@@ -13,28 +13,37 @@ WHY THIS EXISTS AT ALL
   information_schema/pg_catalog and committed as a plain ES module. The site keeps its no-build,
   no-Node deploy path (CORE.md §2) — db-schema.js is a normal source file the browser imports.
 
+WHERE IT READS FROM
+  The STAGING database only. The connection string comes from the environment variable
+  STAGING_DB_URL and is refused unless it names exactly the staging project
+  (scripts/staging/db_target.py reads it). Staging is built from the repo's migration files, so
+  the catalogue describes the schema those files produce. Two things follow:
+    * A table that a later migration adds appears here once staging has it. Tables that no
+      browser session can reach by design (listed in EXCLUDED_TABLES) are left out.
+    * Functions and triggers (for example the one migration 023 adds) are not part of the
+      catalogue at all, so they cannot make it differ between databases.
+
 WHAT IT DOES NOT DO
-  This is READ-ONLY. It connects as PREP_APP_READ_ROLE (SELECT + EXECUTE only), runs five catalogue
-  queries, and writes one file in the working tree. It performs no DDL and no DML, so it is not a
-  coordination event under CORE.md §0 and needs no unseal of prep_app_owner.
+  This is READ-ONLY. The session is opened read-only, runs five catalogue queries, and writes one
+  file in the working tree. It performs no DDL and no DML, so it is not a coordination event
+  under CORE.md §0.
 
 DRIFT
   A committed catalogue can fall behind the database. tests/app-schema/test-db-schema.mjs re-runs
-  this generator with --check and fails when the committed file no longer matches live, so drift is
+  this generator with --check and fails when the committed file no longer matches staging, so drift is
   caught by the test suite rather than by a confusing empty column in the UI. Re-run this script
   (without --check) after any migration in supabase/migrations/app/ and commit the result.
 
-USAGE (from the repo root, via the project venv)
+USAGE (from the repo root, via the project venv, with STAGING_DB_URL set in the environment)
   .venv/Scripts/python scripts/app/gen_db_schema.py            # write the file
   .venv/Scripts/python scripts/app/gen_db_schema.py --check    # exit 1 if the file is stale
   .venv/Scripts/python scripts/app/gen_db_schema.py --stdout   # print, write nothing
 
-Credentials come from supabase/admin/.env (gitignored), same keys and same parser convention as
-supabase/admin/app_tier_check.py. Nothing is read from supabase/admin/config.json — that credential
-belongs to the legacy `public` tooling and is untouched here.
+No credential file is read.
 """
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -44,49 +53,30 @@ except ImportError:
     sys.exit("psycopg2 not found — use the project .venv (.venv/Scripts/python).")
 
 REPO = Path(__file__).resolve().parents[2]
-ENV_FILE = REPO / "supabase" / "admin" / ".env"
 OUT_FILE = REPO / "site" / "js" / "db-schema.js"
 SCHEMA = "app"
+
+sys.path.insert(0, str(REPO / "scripts" / "staging"))
+import db_target  # noqa: E402
+
+# Tables no browser session can read or write by design (row level security on, no policy, every
+# grant to the browser roles withdrawn). The data browser would list them and fail on open.
+EXCLUDED_TABLES = {"migration_ledger"}
 
 # Columns a human reads a row by, best first. Used to label foreign keys as "phys-215" rather
 # than "8f3c…"; falls back to the primary key when a table has none of these.
 LABEL_PREFERENCE = ("code", "slug", "title", "name", "label", "event", "kind", "scope")
 
 
-def read_env(path):
-    """Minimal KEY=VALUE parser — stdlib only, mirrors app_tier_check.py."""
-    out = {}
-    for raw in path.read_text(encoding="utf-8").splitlines():
-        line = raw.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, _, val = line.partition("=")
-        val = val.strip()
-        if len(val) >= 2 and val[0] == val[-1] and val[0] in "\"'":
-            val = val[1:-1]
-        out[key.strip()] = val
-    return out
-
-
 def connect():
-    if not ENV_FILE.is_file():
-        sys.exit(f"No credentials at {ENV_FILE} — see supabase/admin/app_schema_bootstrap.sql.")
-    env = read_env(ENV_FILE)
-    role, password = env.get("PREP_APP_READ_ROLE"), env.get("PREP_APP_READ_PASSWORD")
-    if not role or not password:
-        sys.exit(f"{ENV_FILE} is missing PREP_APP_READ_ROLE / PREP_APP_READ_PASSWORD.")
-    ref = env.get("PREP_PROJECT_REF", "")
-    # Supabase's session pooler wants the project ref folded into the user name.
-    user = f"{role}.{ref}" if ref and "." not in role else role
-    return psycopg2.connect(
-        host=env["PREP_DB_HOST"],
-        port=env.get("PREP_DB_PORT", "5432"),
-        dbname=env.get("PREP_DB_NAME", "postgres"),
-        sslmode=env.get("PREP_DB_SSLMODE", "require"),
-        user=user,
-        password=password,
-        connect_timeout=20,
-    )
+    url = os.environ.get("STAGING_DB_URL", "").strip()
+    try:
+        db_target.require_staging(url)
+    except db_target.DbTargetError as exc:
+        sys.exit(str(exc))
+    conn = psycopg2.connect(url, connect_timeout=20)
+    conn.set_session(readonly=True, autocommit=True)
+    return conn
 
 
 # ── Catalogue queries ─────────────────────────────────────────────────────────────────────────
@@ -203,7 +193,7 @@ def build(conn):
 
     cur.execute(Q_TABLES, (SCHEMA,))
     tables = {name: {"name": name, "comment": comment, "rls": rls, "columns": []}
-              for name, comment, rls in cur.fetchall()}
+              for name, comment, rls in cur.fetchall() if name not in EXCLUDED_TABLES}
 
     cur.execute(Q_PRIMARY_KEYS, (SCHEMA,))
     pks = {name: list(cols or []) for name, cols in cur.fetchall()}
@@ -293,7 +283,7 @@ def render(catalog):
 // Regenerate after any migration in supabase/migrations/app/ and commit the result:
 //   .venv/Scripts/python scripts/app/gen_db_schema.py
 //
-// tests/app-schema/test-db-schema.mjs fails when this file drifts from live.
+// tests/app-schema/test-db-schema.mjs fails when this file drifts from staging.
 //
 // Source: scripts/app/gen_db_schema.py · schema `app` · {len(catalog)} tables
 // Shape per table: {{ name, comment, rls, primaryKey[], labelColumn, columns[], foreignKeys[],
@@ -328,7 +318,7 @@ export function referrers(name) {{
 def main():
     ap = argparse.ArgumentParser(description="Generate site/js/db-schema.js from schema `app`.")
     ap.add_argument("--check", action="store_true",
-                    help="exit 1 if the committed file differs from live (writes nothing)")
+                    help="exit 1 if the committed file differs from staging (writes nothing)")
     ap.add_argument("--stdout", action="store_true", help="print the module, write nothing")
     args = ap.parse_args()
 
@@ -350,10 +340,10 @@ def main():
             return 1
         current = OUT_FILE.read_text(encoding="utf-8")
         if current != text:
-            print(f"[STALE] {OUT_FILE.relative_to(REPO)} differs from live schema `app`.")
+            print(f"[STALE] {OUT_FILE.relative_to(REPO)} differs from staging schema `app`.")
             print("        Re-run: .venv/Scripts/python scripts/app/gen_db_schema.py")
             return 1
-        print(f"[ok] {OUT_FILE.relative_to(REPO)} matches live schema `app` "
+        print(f"[ok] {OUT_FILE.relative_to(REPO)} matches staging schema `app` "
               f"({len(catalog)} tables).")
         return 0
 

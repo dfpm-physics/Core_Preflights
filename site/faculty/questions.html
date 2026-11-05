@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Questions · PREP</title>
+  <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
+  <link rel="stylesheet" href="../css/styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../js/config.js"></script>
+</head>
+<body>
+  <header id="topnav"></header>
+  <main class="page-wide" id="main">
+    <div class="center-load"><span class="spinner"></span><span>Loading questions…</span></div>
+  </main>
+
+  <!-- One question and its answer key. The key is staff-only and versioned; students never read it. -->
+  <div class="modal-backdrop" id="q-modal">
+    <div class="modal" style="max-width:780px">
+      <div class="modal-head"><h2 id="qm-title">Add a question</h2><button class="modal-close" data-close>×</button></div>
+      <div class="alert alert-error" id="qm-error" style="display:none"></div>
+      <div class="row wrap" style="gap:14px">
+        <div class="field" style="min-width:150px;flex:0 0 170px"><label for="q-qid">Question id</label><input id="q-qid" type="text" maxlength="64">
+          <div class="field-hint" id="q-qid-note">Never reused, even after the question is retired.</div></div>
+        <div class="field grow" style="min-width:220px"><label for="q-format">Format</label><select id="q-format"></select>
+          <div class="field-hint" id="q-format-note"></div></div>
+        <div class="field" style="min-width:110px;flex:0 0 120px"><label for="q-points">Points</label><input id="q-points" type="text" inputmode="decimal">
+          <div class="field-hint">Two decimals at most.</div></div>
+      </div>
+      <div class="field"><label for="q-prompt">Question</label><textarea id="q-prompt" maxlength="5000" style="min-height:90px"></textarea></div>
+
+      <div id="q-choice-part" style="display:none">
+        <div class="field"><label>Choices</label>
+          <div class="field-hint" style="margin-bottom:6px" id="q-choice-hint"></div>
+          <div id="q-choices"></div>
+          <button class="btn btn-ghost btn-sm" type="button" id="q-add-choice">+ Add a choice</button></div>
+      </div>
+
+      <div id="q-numeric-part" style="display:none">
+        <div class="row wrap" style="gap:14px">
+          <div class="field" style="min-width:130px"><label for="q-value">Correct value</label><input id="q-value" type="text" inputmode="decimal">
+            <div class="field-hint">0 is a real value.</div></div>
+          <div class="field" style="min-width:130px"><label for="q-tolabs">Tolerance (absolute)</label><input id="q-tolabs" type="text" inputmode="decimal">
+            <div class="field-hint">Required when the value is 0.</div></div>
+          <div class="field" style="min-width:130px"><label for="q-tolpct">Tolerance (percent)</label><input id="q-tolpct" type="text" inputmode="decimal">
+            <div class="field-hint">Either tolerance counts; the edge is included.</div></div>
+        </div>
+        <div class="row wrap" style="gap:14px">
+          <div class="field" style="min-width:130px"><label for="q-sigfigs">Significant figures</label><input id="q-sigfigs" type="text" inputmode="numeric"></div>
+          <div class="field" style="min-width:130px"><label for="q-sigmode">Significant figures rule</label><select id="q-sigmode"></select></div>
+          <div class="field" style="min-width:130px"><label for="q-unit">Unit</label><input id="q-unit" type="text" maxlength="60"></div>
+          <div class="field" style="min-width:130px"><label for="q-unitmode">Unit rule</label><select id="q-unitmode"></select></div>
+        </div>
+        <div class="row wrap" style="gap:14px">
+          <div class="field grow" style="min-width:220px"><label for="q-aliases">Other ways to write the unit</label><input id="q-aliases" type="text" placeholder="m/s2, m s^-2">
+            <div class="field-hint">Separate with commas.</div></div>
+          <div class="field grow" style="min-width:180px"><label for="q-unithint">Unit hint shown to the student</label><input id="q-unithint" type="text" maxlength="60"></div>
+        </div>
+      </div>
+
+      <div id="q-prose-part" style="display:none">
+        <div class="field"><label for="q-reference">Guidance for the person who marks it</label><textarea id="q-reference" maxlength="5000"></textarea>
+          <div class="field-hint">Prose is never marked by a machine. This is only a note for a human marker.</div></div>
+      </div>
+
+      <div class="field-hint" id="q-version-note" style="margin-bottom:10px"></div>
+      <div class="row" style="justify-content:space-between;gap:10px;margin-top:6px;flex-wrap:wrap">
+        <button class="btn btn-ghost" type="button" id="q-preview-btn">Preview as a student</button>
+        <div class="row" style="gap:10px">
+          <button class="btn btn-ghost" data-close>Cancel</button>
+          <button class="btn btn-primary" id="qm-save">Save question</button>
+        </div>
+      </div>
+      <div id="q-preview-one" style="display:none;margin-top:14px;padding:12px;border:1px solid var(--border,#ccc);border-radius:8px"></div>
+    </div>
+  </div>
+
+  <!-- Bulk import. Dry run first: every row and every refusal. One click writes, and only when every row is good. -->
+  <div class="modal-backdrop" id="imp-modal">
+    <div class="modal" style="max-width:920px">
+      <div class="modal-head"><h2>Import questions from a CSV</h2><button class="modal-close" data-close>×</button></div>
+      <div class="alert alert-error" id="imp-error" style="display:none"></div>
+      <p class="muted" style="margin-top:0">Paste rows from a spreadsheet, or choose a file. The first row names the columns.
+        Required: <code>format</code>, <code>prompt</code>, <code>points</code>. The import only adds questions.
+        If any row is wrong, nothing is written.</p>
+      <details style="margin-bottom:10px"><summary>Columns and an example file</summary>
+        <div class="field-hint" style="margin:8px 0">
+          <code>qid</code> (optional, kept if given), <code>format</code> (multiple_choice, multiple_select, numeric, prose),
+          <code>prompt</code>, <code>points</code>, <code>choices</code> (separated by <code>|</code>; they get the letters a, b, c ...),
+          <code>correct</code> (letters or exact text, separated by <code>|</code>), <code>value</code>, <code>tol_abs</code>, <code>tol_pct</code>,
+          <code>sig_figs</code>, <code>sig_fig_mode</code>, <code>unit</code>, <code>unit_aliases</code>, <code>unit_mode</code>, <code>unit_hint</code>, <code>reference</code>.
+          A cell with a comma needs quotes around it. A correct value of 0 needs <code>tol_abs</code>.</div>
+        <pre id="imp-example" style="white-space:pre-wrap;font-size:0.8em;max-height:180px;overflow:auto"></pre>
+        <button class="btn btn-ghost btn-sm" type="button" id="imp-use-example">Put the example in the box</button>
+        <button class="btn btn-ghost btn-sm" type="button" id="imp-download-example">Download the example</button>
+      </details>
+      <div class="row wrap" style="gap:10px;align-items:center;margin-bottom:8px">
+        <input type="file" id="imp-file" accept=".csv,.tsv,.txt,text/csv">
+      </div>
+      <textarea id="imp-text" style="width:100%;min-height:150px;font-family:monospace;font-size:0.85em" spellcheck="false"></textarea>
+      <div class="row" style="gap:10px;margin:10px 0">
+        <button class="btn btn-primary" type="button" id="imp-check">Check the file (dry run)</button>
+        <button class="btn btn-primary" type="button" id="imp-write" disabled>Write these questions</button>
+        <button class="btn btn-ghost" data-close>Close</button>
+      </div>
+      <div id="imp-report"></div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { bootstrap } from '../js/auth.js';
+    import { renderNav } from '../js/nav.js';
+    import { initTheme } from '../js/theme.js';
+    import { db } from '../js/supabase.js';
+    import { esc, runPage, wireModalDismiss, triggerDownload } from '../js/util.js';
+    import * as Q from '../js/faculty-questions.js';
+
+    const ctx = await bootstrap({ require: 'faculty' });
+    runPage(ctx, init);
+
+    let item = null;            // from loadItem
+    let questions = [];         // current list, retired included
+    let editing = null;         // the question being edited, or null for a new one
+    let plan = null;            // the last dry run
+    let planText = null;        // the exact text that dry run read; Write only ever uses a plan for the text now in the box
+    let busy = false;
+
+    const $ = (id) => document.getElementById(id);
+    const offeringId = () => new URLSearchParams(location.search).get('a');
+
+    function init() {
+      initTheme();
+      renderNav(ctx, { active: 'items', onCourseChange: () => { location.href = 'items.html'; } });
+      wireModals();
+      return load();
+    }
+
+    function head(extra = '', sub = '') {
+      return `<div class="page-head"><div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:10px">
+        <div><h1>Questions</h1><div class="sub">${sub}</div></div>${extra}</div></div>`;
+    }
+    const back = `<a class="btn btn-ghost btn-sm" href="items.html">Back to Items</a>`;
+
+    async function load() {
+      const root = $('main');
+      if (!ctx.currentOffering) { root.innerHTML = head(back) + `<div class="alert alert-warn">No course access found.</div>`; return; }
+      if (!ctx.isDirectorForCurrent()) {
+        root.innerHTML = head(back) + `<div class="empty-state"><div class="es-ic">🔒</div><h3>Directors only</h3>
+          <p>Only a director of this course can enter questions and answer keys.</p></div>`;
+        return;
+      }
+      const id = offeringId();
+      if (!id) { root.innerHTML = head(back) + `<div class="alert alert-warn">Open this page from an item on the Items page.</div>`; return; }
+      const r = await Q.loadItem(db, id);
+      if (r.error) { console.error('question page load failed', r.error); root.innerHTML = head(back) + `<div class="alert alert-error">${esc(Q.questionError(r.error))}</div>`; return; }
+      if (!r.item || r.item.courseOfferingId !== ctx.currentOffering) {
+        root.innerHTML = head(back) + `<div class="alert alert-warn">That item is not in the course offering you have selected. Choose its course from the menu at the top.</div>`;
+        return;
+      }
+      item = r.item;
+      if (item.reason) {
+        root.innerHTML = head(back, esc(item.title)) + `<div class="alert alert-warn" id="no-questions">${esc(item.reason)}</div>`;
+        return;
+      }
+      const qr = await Q.loadQuestions(db, item.activityId);
+      if (qr.error) { console.error('questions load failed', qr.error); root.innerHTML = head(back, esc(item.title)) + `<div class="alert alert-error">${esc(Q.questionError(qr.error))}</div>`; return; }
+      questions = qr.questions;
+      await draw();
+    }
+
+    async function draw() {
+      const root = $('main');
+      const points = await Q.loadPoints(db, item.offeringId);
+      if (points !== null) item.points = points;
+      const auto = item.grading === 'auto_checked';
+      const actions = `<div class="row" style="gap:8px;flex-wrap:wrap">${back}
+        <button class="btn btn-ghost" id="imp-btn">Import from CSV</button>
+        <button class="btn btn-ghost" id="pv-btn">Preview as a student</button>
+        <button class="btn btn-primary" id="add-btn">+ Add a question</button></div>`;
+      const live = questions.filter(q => !q.isRetired);
+      const sub = `${esc(item.title)} · ${esc(auto ? 'auto-checked' : 'human graded')}`;
+      const pointsNote = auto
+        ? `<div class="alert alert-info" id="points-note">This item is worth <strong id="item-points">${esc(String(item.points))}</strong> points, the sum of its ${live.length} question${live.length === 1 ? '' : 's'}. The database keeps the two equal; you do not enter the item's points.</div>`
+        : `<div class="alert alert-info" id="points-note">This item is human graded, so its points (<strong id="item-points">${esc(String(item.points))}</strong>) are set on the Items page. The questions add up to <strong>${esc(String(Q.sumPoints(questions)))}</strong>.</div>`;
+      const unpub = `<div class="alert alert-info" id="unpublished-note">This item stays unpublished. Students cannot see its questions, and no student can read an answer key at any time.</div>`;
+      const rows = questions.map((q, i) => rowHtml(q, i)).join('');
+      root.innerHTML = head(actions, sub) + pointsNote + unpub + (questions.length
+        ? `<div class="table-wrap"><table id="q-table"><thead><tr><th>#</th><th>Id</th><th>Format</th><th>Question</th><th>Points</th><th>Key</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`
+        : `<div class="empty-state"><div class="es-ic">❓</div><h3>No questions yet</h3><p>Click <strong>+ Add a question</strong>, or <strong>Import from CSV</strong> to add many at once.</p></div>`)
+        + `<div id="pv-all" style="display:none;margin-top:18px"></div>`;
+      root.dataset.drawn = String((Number(root.dataset.drawn) || 0) + 1);   // a test waits on this changing
+      $('add-btn').addEventListener('click', () => openQuestion(null));
+      $('imp-btn').addEventListener('click', openImport);
+      $('pv-btn').addEventListener('click', togglePreviewAll);
+      root.querySelectorAll('[data-qedit]').forEach(b => b.addEventListener('click', () => openQuestion(questions.find(q => q.id === b.dataset.qedit))));
+      root.querySelectorAll('[data-qmove]').forEach(b => b.addEventListener('click', () => move(b.dataset.qmove, b.dataset.dir)));
+      root.querySelectorAll('[data-qretire]').forEach(b => b.addEventListener('click', () => retire(b.dataset.qretire, b.dataset.on === '1')));
+      root.querySelectorAll('[data-qremove]').forEach(b => b.addEventListener('click', () => remove(b.dataset.qremove)));
+    }
+
+    function keyText(q) {
+      if (!q.keyId) return q.format === 'prose' ? '<span class="muted">no note</span>' : '<span class="score-badge zero">missing</span>';
+      return `<span class="score-badge full">v${esc(String(q.keyVersion))}</span>`;
+    }
+    function rowHtml(q, i) {
+      const gist = (q.prompt || '').length > 90 ? q.prompt.slice(0, 90) + '…' : q.prompt;
+      return `<tr data-qid="${esc(q.qid)}" data-retired="${q.isRetired ? '1' : '0'}"${q.isRetired ? ' style="opacity:0.6"' : ''}>
+        <td>${i + 1}</td><td><code>${esc(q.qid)}</code></td><td>${esc(Q.FORMAT_LABEL[q.format] || q.format)}</td>
+        <td>${esc(gist)}${q.isRetired ? ' <span class="score-badge pending">Retired</span>' : ''}</td>
+        <td>${esc(q.points)}</td><td>${keyText(q)}</td>
+        <td style="white-space:nowrap">
+          <button class="btn btn-ghost btn-sm" data-qmove="${esc(q.id)}" data-dir="up" ${i === 0 ? 'disabled' : ''} title="Move up">↑</button>
+          <button class="btn btn-ghost btn-sm" data-qmove="${esc(q.id)}" data-dir="down" ${i === questions.length - 1 ? 'disabled' : ''} title="Move down">↓</button>
+          <button class="btn btn-ghost btn-sm" data-qedit="${esc(q.id)}">Edit</button>
+          <button class="btn btn-ghost btn-sm" data-qretire="${esc(q.id)}" data-on="${q.isRetired ? '0' : '1'}">${q.isRetired ? 'Restore' : 'Retire'}</button>
+          <button class="btn btn-ghost btn-sm" style="color:var(--red)" data-qremove="${esc(q.id)}">Remove</button></td></tr>`;
+    }
+
+    async function refresh() {
+      const qr = await Q.loadQuestions(db, item.activityId);
+      if (qr.error) { window.alert('Could not reload: ' + Q.questionError(qr.error)); return; }
+      questions = qr.questions;
+      await draw();
+    }
+    async function move(id, dir) {
+      if (busy) return; busy = true;
+      try {
+        const r = await Q.moveQuestion(db, questions, id, dir);
+        if (r.error) { console.error(r.error); window.alert(Q.questionError(r.error)); }
+        await refresh();
+      } finally { busy = false; }
+    }
+    async function retire(id, on) {
+      const r = await Q.setRetired(db, id, on);
+      if (r.error) { console.error(r.error); window.alert(Q.questionError(r.error)); return; }
+      await refresh();
+    }
+    async function remove(id) {
+      const q = questions.find(x => x.id === id); if (!q) return;
+      if (!window.confirm('Remove question ' + q.qid + '? Its answer key goes with it. If a student has already answered it, it is retired instead.')) return;
+      const r = await Q.removeQuestion(db, id);
+      if (r.error) { console.error(r.error); window.alert(Q.questionError(r.error)); return; }
+      if (r.retired) window.alert('A student has answered this question, so it was retired instead of removed.');
+      await refresh();
+    }
+
+    function togglePreviewAll() {
+      const box = $('pv-all');
+      if (box.style.display !== 'none') { box.style.display = 'none'; return; }
+      const live = questions.filter(q => !q.isRetired);
+      box.innerHTML = `<h3>How the questions read to a student</h3><div class="field-hint">No answer key is shown or loaded into this view.</div>` +
+        (live.length ? live.map((q, i) => Q.previewHtml(q, i + 1)).join('<hr>') : '<p class="muted">No questions yet.</p>');
+      box.style.display = 'block';
+    }
+
+    /* ── The question form ──────────────────────────────────────────────── */
+    function wireModals() {
+      wireModalDismiss(document.getElementById('q-modal'), closeQuestion);
+      wireModalDismiss(document.getElementById('imp-modal'), () => $('imp-modal').classList.remove('open'));
+      $('q-format').addEventListener('change', () => { if (!editing) { const cur = readQuestion(); resetFor($('q-format').value, cur); } });
+      $('q-add-choice').addEventListener('click', () => addChoiceRow());
+      $('qm-save').addEventListener('click', saveQ);
+      $('q-preview-btn').addEventListener('click', () => {
+        const box = $('q-preview-one'); box.innerHTML = Q.previewHtml(readQuestion(), 1); box.style.display = 'block';
+      });
+      $('imp-check').addEventListener('click', dryRun);
+      $('imp-write').addEventListener('click', doWrite);
+      $('imp-file').addEventListener('change', readFile);
+      // Any edit to the box makes the last dry run stale: it described other text.
+      $('imp-text').addEventListener('input', () => { plan = null; planText = null; $('imp-write').disabled = true; if ($('imp-report').innerHTML) $('imp-report').innerHTML = '<div class="alert alert-warn" id="imp-stale">You changed the text after it was checked. Check it again before writing.</div>'; });
+      $('imp-example').textContent = Q.EXAMPLE_CSV;
+      $('imp-use-example').addEventListener('click', () => { $('imp-text').value = Q.EXAMPLE_CSV; plan = null; planText = null; $('imp-write').disabled = true; $('imp-report').innerHTML = ''; });
+      $('imp-download-example').addEventListener('click', () => triggerDownload(Q.EXAMPLE_CSV, 'questions-example.csv', 'text/csv'));
+    }
+
+    const optionList = (values, labels) => values.map(v => `<option value="${esc(v)}">${esc(labels?.[v] || v)}</option>`).join('');
+
+    function choiceRow(c, correct, type) {
+      return `<div class="row" style="gap:8px;margin-bottom:6px;align-items:center" data-choice="${esc(c.id)}">
+        <label class="check-inline" title="This is a correct answer"><input type="${type}" name="q-correct" data-correct ${correct ? 'checked' : ''}> <span>Correct</span></label>
+        <span class="muted" style="width:24px">${esc(c.id)}</span>
+        <input type="text" class="grow" data-text maxlength="400" value="${esc(c.text)}" style="flex:1">
+        <button class="btn btn-ghost btn-sm" type="button" data-drop title="Remove this choice">×</button></div>`;
+    }
+    function currentChoiceType() { return $('q-format').value === 'multiple_select' ? 'checkbox' : 'radio'; }
+    function addChoiceRow(c) {
+      const rows = [...$('q-choices').querySelectorAll('[data-choice]')].map(r => ({ id: r.dataset.choice }));
+      const choice = c || { id: Q.nextChoiceId(rows), text: '' };
+      $('q-choices').insertAdjacentHTML('beforeend', choiceRow(choice, false, currentChoiceType()));
+      const last = $('q-choices').lastElementChild;
+      last.querySelector('[data-drop]').addEventListener('click', () => last.remove());
+    }
+    function fillChoices(choices, correct) {
+      $('q-choices').innerHTML = choices.map(c => choiceRow(c, (correct || []).includes(c.id), currentChoiceType())).join('');
+      $('q-choices').querySelectorAll('[data-choice]').forEach(r => r.querySelector('[data-drop]').addEventListener('click', () => r.remove()));
+    }
+
+    function showParts(format) {
+      const choice = format === 'multiple_choice' || format === 'multiple_select';
+      $('q-choice-part').style.display = choice ? 'block' : 'none';
+      $('q-numeric-part').style.display = format === 'numeric' ? 'block' : 'none';
+      $('q-prose-part').style.display = format === 'prose' ? 'block' : 'none';
+      $('q-choice-hint').textContent = format === 'multiple_select'
+        ? 'Tick every correct choice. A student must pick exactly those to earn the points.'
+        : 'Tick the one correct choice.';
+    }
+    function resetFor(format, keep) {
+      const fresh = Q.emptyQuestion(format);
+      fillChoices(fresh.choices, []);
+      showParts(format);
+      // Keep what the person already typed in the fields every format shares.
+      if (keep) { $('q-prompt').value = keep.prompt; $('q-points').value = keep.points; }
+    }
+
+    function openQuestion(q) {
+      editing = q;
+      $('qm-error').style.display = 'none'; $('qm-error').textContent = '';
+      $('q-preview-one').style.display = 'none';
+      $('qm-title').textContent = q ? `Edit question ${q.qid}` : 'Add a question';
+      const formats = Q.formatsFor(item.grading);
+      $('q-format').innerHTML = optionList(formats, Q.FORMAT_LABEL);
+      $('q-sigmode').innerHTML = optionList(Q.MODES); $('q-unitmode').innerHTML = optionList(Q.MODES);
+      $('q-format-note').textContent = item.grading === 'auto_checked'
+        ? 'Prose is not offered: a machine never marks prose, and an auto-checked item is marked by machine.' : '';
+      const src = q || Q.emptyQuestion(formats[0]);
+      $('q-qid').value = q ? q.qid : Q.nextQid(questions);
+      $('q-qid').disabled = !!q;
+      $('q-qid-note').textContent = q ? 'The id cannot change. Retire this question and add another to replace it.' : 'Never reused, even after the question is retired.';
+      $('q-format').value = src.format; $('q-format').disabled = !!q;
+      $('q-points').value = src.points;
+      $('q-prompt').value = src.prompt;
+      fillChoices(src.choices, src.key.correct);
+      $('q-value').value = src.key.value; $('q-tolabs').value = src.key.tolAbs; $('q-tolpct').value = src.key.tolPct;
+      $('q-sigfigs').value = src.key.sigFigs; $('q-sigmode').value = src.key.sigFigMode;
+      $('q-unit').value = src.key.unit; $('q-unitmode').value = src.key.unitMode;
+      $('q-aliases').value = (src.key.unitAliases || []).join(', '); $('q-unithint').value = src.unitHint || '';
+      $('q-reference').value = src.key.reference || '';
+      $('q-version-note').textContent = q
+        ? (q.keyVersion ? `The answer key is at version ${q.keyVersion}. Changing the key saves a new version and keeps the old one.` : 'This question has no key yet.')
+        : '';
+      showParts(src.format);
+      $('q-modal').classList.add('open');
+      $('q-prompt').focus();
+    }
+    function closeQuestion() { $('q-modal').classList.remove('open'); editing = null; }
+
+    function readQuestion() {
+      const format = $('q-format').value;
+      const choices = [...$('q-choices').querySelectorAll('[data-choice]')].map(r => ({ id: r.dataset.choice, text: r.querySelector('[data-text]').value }));
+      const correct = [...$('q-choices').querySelectorAll('[data-choice]')].filter(r => r.querySelector('[data-correct]').checked).map(r => r.dataset.choice);
+      const isChoice = format === 'multiple_choice' || format === 'multiple_select';
+      return {
+        qid: $('q-qid').value.trim(), format, prompt: $('q-prompt').value, points: $('q-points').value.trim(),
+        unitHint: format === 'numeric' ? $('q-unithint').value : '',
+        choices: isChoice ? choices : [],
+        key: {
+          correct: isChoice ? correct : [],
+          value: format === 'numeric' ? $('q-value').value : '', tolAbs: format === 'numeric' ? $('q-tolabs').value : '',
+          tolPct: format === 'numeric' ? $('q-tolpct').value : '', sigFigs: format === 'numeric' ? $('q-sigfigs').value : '',
+          sigFigMode: format === 'numeric' ? $('q-sigmode').value : 'ignore', unit: format === 'numeric' ? $('q-unit').value : '',
+          unitAliases: format === 'numeric' ? $('q-aliases').value.split(',').map(s => s.trim()).filter(Boolean) : [],
+          unitMode: format === 'numeric' ? $('q-unitmode').value : 'ignore',
+          reference: format === 'prose' ? $('q-reference').value : '',
+        },
+      };
+    }
+    function showQError(t) { const e = $('qm-error'); e.textContent = t; e.style.display = 'block'; }
+
+    async function saveQ() {
+      if (busy) return;
+      const q = readQuestion();
+      const problems = Q.checkQuestion(q, { grading: item.grading, takenQids: questions.map(x => x.qid), isNew: !editing });
+      if (problems.length) { showQError(problems.join(' ')); return; }
+      busy = true; $('qm-save').disabled = true;
+      try {
+        const res = editing ? await Q.saveQuestion(db, q, editing) : await Q.addQuestion(db, item.activityId, q, questions);
+        if (res.error) {
+          console.error('question save failed', res.error);
+          // An edit is one database call: a coded refusal rolled it back whole. A new question says what was checked.
+          showQError(Q.questionError(res.error) + (res.outcome ? ' ' + res.outcome : ''));
+          if (!editing) await refresh();
+          return;
+        }
+        closeQuestion();
+        await refresh();
+      } finally { busy = false; $('qm-save').disabled = false; }
+    }
+
+    /* ── Import ────────────────────────────────────────────────────────── */
+    function openImport() {
+      plan = null; planText = null;
+      $('imp-error').style.display = 'none'; $('imp-report').innerHTML = ''; $('imp-write').disabled = true;
+      $('imp-modal').classList.add('open');
+      $('imp-text').focus();
+    }
+    function readFile() {
+      const f = $('imp-file').files[0]; if (!f) return;
+      const stop = (t) => { $('imp-error').textContent = t; $('imp-error').style.display = 'block'; };
+      $('imp-error').style.display = 'none';
+      // From the moment a file is chosen the old plan is void: until the new file has been read there is nothing to write.
+      plan = null; planText = null; $('imp-write').disabled = true; $('imp-report').innerHTML = '';
+      if (f.size > Q.MAX_IMPORT_CHARS * 4) { stop('That file is too large.'); return; }
+      const reader = new FileReader();
+      reader.onerror = () => { $('imp-text').value = ''; stop('That file could not be read. Nothing was changed. Choose it again, or paste the text.'); };
+      reader.onload = () => {
+        // Decode the raw bytes strictly as UTF-8. A file saved as Excel's plain "CSV" is not, and would otherwise
+        // arrive with replacement marks in place of its degree signs and micro signs.
+        const d = Q.decodeUtf8Strict(reader.result);
+        plan = null; planText = null; $('imp-write').disabled = true; $('imp-report').innerHTML = '';
+        if (d.error) { $('imp-text').value = ''; stop(d.error); return; }
+        $('imp-text').value = d.text;
+      };
+      reader.readAsArrayBuffer(f);
+    }
+    function dryRun() {
+      planText = $('imp-text').value;
+      plan = Q.planImport(planText, { grading: item.grading, existing: questions });
+      $('imp-error').style.display = 'none';
+      const rows = plan.rows.map(r => `<tr data-line="${r.line}" data-ok="${r.ok ? '1' : '0'}"><td>${r.line}</td>
+        <td><code>${esc(r.question?.qid || '')}</code></td><td>${esc(Q.FORMAT_LABEL[r.question?.format] || r.question?.format || '')}</td>
+        <td>${esc((r.question?.prompt || '').slice(0, 70))}</td><td>${esc(r.question?.points || '')}</td>
+        <td>${r.ok ? '<span class="score-badge full">Will be added</span>' : '<span class="score-badge zero">Refused</span>'}
+          ${r.problems.map(p => `<div style="color:var(--red);font-size:0.85em">${esc(p)}</div>`).join('')}</td></tr>`).join('');
+      const fileErrs = plan.fileErrors.map(e => `<div class="alert alert-error">${esc(e)}</div>`).join('');
+      const bad = plan.rows.filter(r => !r.ok).length;
+      const verdict = plan.fileErrors.length ? ''
+        : plan.ok ? `<div class="alert alert-info" id="imp-verdict">Every row is good. ${plan.rows.length} question${plan.rows.length === 1 ? '' : 's'} will be added. Nothing has been written yet.</div>`
+        : `<div class="alert alert-error" id="imp-verdict">${bad} row${bad === 1 ? ' is' : 's are'} refused, so the whole file is refused and nothing will be written. Fix the file and check it again.</div>`;
+      $('imp-report').innerHTML = fileErrs + verdict + (plan.rows.length
+        ? `<div class="table-wrap" style="max-height:340px;overflow:auto"><table id="imp-table"><thead><tr><th>Row</th><th>Id</th><th>Format</th><th>Question</th><th>Points</th><th>Result</th></tr></thead><tbody>${rows}</tbody></table></div>` : '');
+      $('imp-write').disabled = !plan.ok;
+    }
+    async function doWrite() {
+      if (busy || !plan || !plan.ok) return;
+      if (planText !== $('imp-text').value) {   // belt and braces: the input handler already clears the plan
+        plan = null; planText = null; $('imp-write').disabled = true;
+        $('imp-error').textContent = 'The text changed after it was checked. Check it again before writing.'; $('imp-error').style.display = 'block';
+        return;
+      }
+      busy = true; $('imp-write').disabled = true;
+      try {
+        const res = await Q.writeImport(db, item.activityId, plan);
+        if (res.error) {
+          console.error('import failed', res.error);
+          $('imp-error').textContent = Q.questionError(res.error) + ' ' + (res.outcome || '');
+          $('imp-error').style.display = 'block';
+          await refresh();                       // the list behind this window must show what is really there
+          plan = null; planText = null;          // the list changed under the plan: check the file again to write again
+          return;
+        }
+        $('imp-modal').classList.remove('open');
+        await refresh();
+      } finally { busy = false; }
+    }
+  </script>
+</body>
+</html>

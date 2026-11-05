@@ -1,7 +1,7 @@
 // release-window.mjs — browser verification for the release window (CORE.md §2).
 //
 // Two things no Node-only check can see, and no signed-in walkthrough is available for on this
-// machine (supabase/admin/.env carries no PREP_TEST_FACULTY_* here):
+// machine (there is no env-file login any more):
 //
 //   PART 1  Every page edited for this change still PARSES as a module. Four of the five edits are
 //           inside `<script type="module">` blocks in HTML, where a syntax error is invisible to
@@ -13,6 +13,7 @@
 //
 // Usage: node release-window.mjs [--chrome <path>]
 
+import { NO_PRODUCTION_ARG } from './env.mjs';
 import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
@@ -42,7 +43,7 @@ const check = (name, ok, detail = '') => {
 const server = spawn('python', ['-m', 'http.server', String(PORT)], { cwd: REPO, stdio: 'ignore' });
 await new Promise(r => setTimeout(r, 1500));
 
-const browser = await puppeteer.launch({ executablePath: CHROME, headless: 'new' });
+const browser = await puppeteer.launch({ executablePath: CHROME, headless: 'new', args: [NO_PRODUCTION_ARG] });
 
 /* ── PART 1 — every edited page parses and loads clean ────────────────────────────────── */
 console.log('\n=== edited pages parse and load ===');

@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Prove the staff self-promotion hole, then prove migration 023 closes it -- on STAGING only.
+"""Check what migration 023 enforces on the global-admin flag, before and after it -- on STAGING only.
 
 Everything runs inside ONE transaction that is always rolled back, so staging is left exactly as
 it was: the fake auth users and instructor rows vanish, and whatever state of 023 staging held
 before the test is what it holds after.
 
 WHAT IT CHECKS
-  before 023   a plain staff member CAN set their own is_global_admin = true   (the hole)
+  before 023   a plain staff member can set their own is_global_admin = true   (baseline)
   after 023    a plain staff member CANNOT set their own is_global_admin       (refused)
                a plain staff member CAN still change their own name            (not broken)
                a plain staff member CANNOT create a global admin               (refused)
@@ -32,7 +32,8 @@ import uuid
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from install_staging import PROD_REF, REPO, target_ref  # noqa: E402
+import db_target  # noqa: E402
+from install_staging import REPO  # noqa: E402
 
 MIGRATION = REPO / "supabase" / "migrations" / "app" / "023_instructors_admin_flag_guard.sql"
 
@@ -79,9 +80,7 @@ def main():
     url = os.environ.get("STAGING_DB_URL", "").strip()
     if not url:
         sys.exit("REFUSED  STAGING_DB_URL is not set.")
-    ref = target_ref(url)
-    if PROD_REF in url or ref == PROD_REF or args.expect_ref == PROD_REF:
-        sys.exit("REFUSED  target is the PRODUCTION project. This test runs on staging only.")
+    ref = db_target.exit_unless_staging(url, args.expect_ref).ref
     if ref != args.expect_ref:
         sys.exit(f"REFUSED  STAGING_DB_URL names project {ref}, not {args.expect_ref}.")
 
@@ -115,7 +114,7 @@ def main():
 
         # ---- before the fix --------------------------------------------------------------
         ok, n = attempt(cur, "pre", promote, (str(staff),), staff)
-        check("before 023: staff self-promotion succeeds (the hole is real)",
+        check("before 023: a staff member can set their own flag (baseline)",
               ok and n == 1 and flag(cur, staff) is True, f"ok={ok}, rows={n}")
         cur.execute("UPDATE app.instructors SET is_global_admin = false WHERE id = %s;", (str(staff),))
 
@@ -129,7 +128,7 @@ def main():
 
         # ---- after the fix ---------------------------------------------------------------
         ok, msg = attempt(cur, "t1", promote, (str(staff),), staff)
-        check("after 023: staff self-promotion is refused",
+        check("after 023: a staff member setting their own flag is refused",
               not ok and "is_global_admin" in str(msg) and flag(cur, staff) is False, str(msg))
 
         ok, n = attempt(cur, "t2", "UPDATE app.instructors SET name = 'Testperson Renamed' WHERE id = %s;",

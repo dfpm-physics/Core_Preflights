@@ -10,7 +10,7 @@ Eight CHANGELOG entries record the same gap: surfaces that are logic-verified an
 **have never been looked at** by a signed-in human. Roadmap P0.5 is the session that closes it.
 
 This harness makes that session repeatable instead of a one-off. It drives real Chrome against a
-local server pointed at the **live** Supabase project, signs in, walks a list of pages in light and
+local server that can reach the **staging** Supabase project and not production, signs in, walks a list of pages in light and
 dark, and records every console error, page error, and failed request along the way.
 
 ## What it does not do
@@ -24,35 +24,35 @@ point of P0.5.
 
 - Node (optional per CORE.md §2 — this whole folder is why that rule says "optional")
 - Chrome or Edge installed at a standard Windows path (auto-detected; override with `--chrome`)
-- Python, for the static server
-- A faculty account. Creating one is **not** something the tooling can do — no role available
-  here has any privilege on schema `auth`. See roadmap P0.5.
+- Python, for the local server (`scripts/staging/serve_local.py`)
+- A seeded staging database: `scripts/staging/seed_staging.py` creates the director and cadet
+  logins these scripts use (its header lists them). Run it first, and again to move deadlines back
+  around today.
 
-## Credentials live in the env, not on the command line
+## Logins: seeded staging accounts, no credential file
 
-The faculty account's email, password and UID are in the gitignored `supabase/admin/.env` as
-`PREP_TEST_FACULTY_EMAIL` / `_PASSWORD` / `_UID`, beside the DB role credentials. `env.mjs` reads
-them, and both harness scripts fall back to them — so the normal invocation carries **no secret**.
-`scripts/test_faculty_account.py` reads the same UID.
-
-The auth user is recreated in the Supabase dashboard whenever it is rebuilt, and that mints a new
-UID every time. When it does, update the three `PREP_TEST_FACULTY_*` lines in the `.env` — that one
-edit re-points every script. `--email` / `--password` still override for a one-off.
+`env.mjs` supplies the seeded staging director (an invented person) by default, so no credential
+file is opened and the normal invocation carries **no secret**. A different staging login can be
+given through the environment (`PREP_TEST_FACULTY_EMAIL` / `_PASSWORD` / `_UID`), and `--email` /
+`--password` still override for a one-off. Chrome is launched with the production API host
+unresolvable, so a page that carries its own copy of that address cannot reach it.
 
 ## Use
 
 ```bash
 # from the repo root
-python -m http.server 8000            # in one terminal
+python scripts/staging/serve_local.py   # in one terminal (not http.server)
 
-# credentials read from supabase/admin/.env — nothing secret on the line
+# default staging login from env.mjs — nothing secret on the line
 node tests/browser-harness/pass.mjs
 node tests/browser-harness/pass.mjs --theme dark
 node tests/browser-harness/pass.mjs --lesson <assignment-offering-uuid>   # also walk the rollup
 
 node tests/browser-harness/pass.mjs --student        # the test cadet instead of faculty
 
-# the targeted P0.5 assertions, one run per tier (flip tiers with test_faculty_account.py)
+# the targeted P0.5 assertions, one run per tier. Flipping the account's tier with
+# test_faculty_account.py acts on the project in supabase/admin/.env (production), not on staging,
+# so do not use it for these runs; seed the tier you need on staging instead.
 node tests/browser-harness/checks.mjs --tier director --lesson <uuid>
 
 # the Assignments page and its editor, signed in — read-only, never saves (see its header)

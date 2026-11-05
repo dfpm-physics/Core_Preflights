@@ -140,8 +140,11 @@ path, and export filenames stay `Core_Preflights` — renaming breaks deployed a
 bookmarks, and Blackboard imports.
 
 - **Repo / Pages:** `github.com/dfpm-physics/Core_Preflights` → `https://dfpm-physics.github.io/Core_Preflights/site/`
-- **Supabase:** project `shzvpmlnqfmzfmuxkowi`. **Free tier pauses after ~1 week idle** — unpause in
-  the dashboard at the start of each semester.
+- **Supabase:** production project `shzvpmlnqfmzfmuxkowi` is on a **paid tier** (decided
+  2026-11-04), so the free-tier idle pause does not apply to it. What the paid tier actually gives
+  for backups and retention has **not been verified**: do not claim either until the dashboard has
+  been checked. The staging project (`wkibeptktbnaddfynrwr`) has no recorded tier; if it is on the
+  free tier it can pause after about a week idle, and the fix is to unpause it in the dashboard.
 - **Local path:** the repo currently sits inside OneDrive (synced + versioned; edits sync on save).
 
 Full architecture, hosting details, roles, and the data model are in `.ai/instructions/PROJECT.md`.
@@ -159,8 +162,8 @@ Read these repo docs before deep work: `docs/operations/SYSTEM_GUIDE.md`,
 - **Node may be available locally. Never assume it is.** It is installed on the course director's
   machine (`C:\Program Files\nodejs`, v24.18.0 as of 2026-07-21) and is **not guaranteed on any
   other machine** — a teammate's clone, a fresh container, or CI may have none. Treat it as
-  *optional developer tooling*, exactly the way `tests/app-schema/` already does: useful for running
-  the shipped modules under test, a `node --check` syntax pass, or driving a headless browser to
+  *optional developer tooling*, exactly the way `tests/app-schema/` already does (that suite now
+  targets staging only; see its README): useful for running the shipped modules under test, a `node --check` syntax pass, or driving a headless browser to
   verify UI that would otherwise go unverified. Three rules keep it optional:
   - **Nothing on the deploy path may require it.** Delete every Node artifact and the site must be
     unchanged.
@@ -356,7 +359,7 @@ from the committed `.template`:
 |---|---|---|
 | `~/.claude/skills/preflight-analyze/config.json` | `supabase_url`, `supabase_service_key` (service_role — bypasses RLS), `textbook_base_path`, `default_course_id` | `.ai/skills/preflight-analyze/config.json.template` |
 | `supabase/admin/config.json` | `claude_code_recker` DB role creds (Session pooler host) | `supabase/admin/config.json.template` |
-| `supabase/admin/.env` | The three `prep_app_*` role credentials for schema `app` (same pooler host), plus the temporary `PREP_TEST_FACULTY_*` login for the P0.5 browser walkthrough | — generated when `app_schema_bootstrap.sql` is run |
+| `supabase/admin/.env` | The three `prep_app_*` role credentials for schema `app` (same pooler host), plus the production test-faculty login `PREP_TEST_FACULTY_*`. **No test suite reads it any more** (2026-11-04): the Node suites and the browser harness run against staging with seeded logins, and `tests/app-schema/` refuses any other project | — generated when `app_schema_bootstrap.sql` is run |
 
 Notes:
 - **`PREP_TEST_FACULTY_*` is a WRITE credential, not an AUDIT one, and the difference is invisible.**
@@ -391,9 +394,14 @@ Notes:
 - **Never write a student's NAME where the cadet ID would carry the same meaning** — in a committed
   file, a URL/query string, or the CHANGELOG. **Cadet IDs and scores are permitted.** *(Determined
   2026-08-17: name + cadet ID + score are **not** treated as PII in this system, per institutional
-  guidance received — citation to be added by Casey, who had the conversation. This reversed a blanket no-PII
-  rule that stood here until that date. Reasoning, what it supersedes, and the accept-as-is ruling
-  on git history: [`docs/decisions/STUDENT-DATA-CLASSIFICATION.md`](../../docs/decisions/STUDENT-DATA-CLASSIFICATION.md).)*
+  guidance received by the course director. **As of 2026-11-04 the course director states that
+  grade storage in PREP is cleared with the registrar, and that he has no specific source to cite.**
+  The determination stands as decided; it rests on that clearance, so treat it as revisable on any
+  written contrary guidance. This reversed a
+  blanket no-PII rule that stood here until that date. Reasoning, what it supersedes, and the
+  accept-as-is ruling on git history:
+  [`docs/decisions/STUDENT-DATA-CLASSIFICATION.md`](../../docs/decisions/STUDENT-DATA-CLASSIFICATION.md);
+  the 2026-11-04 note on the citation is in that file's last section.)*
   The ID is also the better engineering choice — it is the join key, it is unambiguous when two
   cadets share a surname, and it does not go stale when a name changes. **Test and example fixtures
   take synthetic names**, because a file that looks synthetic and is not survives every redaction
@@ -409,7 +417,7 @@ Notes:
 | `lesson-figures` | **yes** | question/lesson images, referenced by `questions[].figure_url` | anyone | any authenticated instructor |
 | `artifact-sources` | **no** | every built artifact's `.jsx`, its parsed build record, the per-course index, and the review sidecar the Artifacts page writes | `app.is_staff()` | a director of any offering, or a global admin |
 
-Migration `023_artifact_sources_storage.sql`, applied 2026-08-07, with a `_ROLLBACK.sql` beside it.
+Migration `023_artifact_sources_storage.sql`, applied 2026-08-07, with its `_ROLLBACK.sql` in `supabase/migrations/rollback/`.
 **A private bucket needs a policy on `storage.buckets` as well as on `storage.objects`** — that
 table has RLS on with no policies, so the bucket row is otherwise invisible and reads fail as
 `NoSuchBucket`. Note that error is ambiguous: **a wrong request path produces it too**, and the
@@ -471,6 +479,14 @@ agents cannot drift.
   it; see `.ai/skills/docs-author/`.
   *Not indexed on purpose:* `docs/decisions/` and `docs/contracts/`. Those are point-in-time records
   and frozen interfaces — they are superseded, never refreshed.
+- **CI exists (2026-11-04): `.github/workflows/ci.yml`.** It runs the offline Node suites with
+  network access blocked, a syntax check, the secret-scan self-tests and a secret scan over tracked
+  files, and the doc-sources check (report only). It runs on pushes and pull requests for `v2`,
+  `v2-step2` and `main`. On `main` every job is **report-only**: a red check never blocks a push,
+  and no branch protection is configured. It holds **no credential and contacts no database
+  project**, and it never runs the live path of `tests/app-schema/`. **CI skips the name scan**
+  (it needs the live roster) and reports it as SKIPPED, which is not a pass: run
+  `python scripts/checks/name_scan.py` locally before a push.
 - **Always update `CHANGELOG.md`** for any shipped feature, fix, schema/data change, or doc edit.
   Newest first. Attribute to the requesting human **and the agent**:
   `## YYYY-MM-DD — <Human> via <Agent>` (e.g. `via Claude`, `via Codex`). State **what** and **why**.
@@ -479,6 +495,12 @@ agents cannot drift.
   and must not be interleaved. Adding a migration file ≠ applying it — coordinate application
   (see §0, no concurrent DDL) and record it in the CHANGELOG. Applying anything in the `app` chain
   additionally requires unsealing `prep_app_owner` first.
+  **Rollback files are not part of a chain.** Each chain keeps its `*_ROLLBACK.sql` files in a
+  `rollback/` folder beside it (`supabase/migrations/app/rollback/`, `supabase/migrations/rollback/`),
+  so a glob over the numbered files can never run one. **`app.migration_ledger`** (migration 024)
+  records each applied file with a checksum; `scripts/staging/migration_ledger.py` reads and
+  writes it, and prints SQL for any database it will not connect to. Compare two databases with
+  `scripts/staging/fingerprint_diff.py` over two `schema_fingerprint.py` outputs.
 - **`021_lesson_finalize_and_extensions.sql` is deliberately unapplied. Do not apply it.** It looks
   like a pending migration; it is not. It implements the lesson-unification model that the `app`
   redesign replaced. Applying it would add columns and triggers to `public` that nothing wants.

@@ -1,0 +1,35 @@
+{
+  "note": "One list of scales and whether letter_scale_is_valid (migration 032) accepts them. test-faculty-scale.mjs checks the page's own validator against it; tests/browser-harness/v2_scale_readback.py asks the database the same question, so the page and the database cannot drift apart. Each line is [letter, cutoff, gpa].",
+  "cases": [
+    { "name": "the default scale", "width": 0.1, "valid": true,
+      "lines": [["A",93,4.0],["A-",90,3.7],["B+",87,3.3],["B",83,3.0],["B-",80,2.7],["C+",77,2.3],["C",73,2.0],["C-",70,1.7],["D",60,1.0],["F",0,0.0]] },
+    { "name": "one line that starts at 0", "width": 5, "valid": true, "lines": [["P",0,1.0]] },
+    { "name": "width 0 means no near-line flag", "width": 0, "valid": true, "lines": [["A",90,4.0],["F",0,0.0]] },
+    { "name": "width just below the smallest gap", "width": 2.999, "valid": true,
+      "lines": [["A",93,4.0],["A-",90,3.7],["F",0,0.0]] },
+    { "name": "width equal to the smallest gap", "width": 3, "valid": false,
+      "lines": [["A",93,4.0],["A-",90,3.7],["F",0,0.0]] },
+    { "name": "width larger than the smallest gap", "width": 4, "valid": false,
+      "lines": [["A",93,4.0],["A-",90,3.7],["F",0,0.0]] },
+    { "name": "a negative width", "width": -0.1, "valid": false, "lines": [["A",90,4.0],["F",0,0.0]] },
+    { "name": "no lines at all", "width": 0.1, "valid": false, "lines": [] },
+    { "name": "the last cutoff is not 0", "width": 0.1, "valid": false, "lines": [["A",90,4.0],["F",10,0.0]] },
+    { "name": "two lines with the same cutoff", "width": 0, "valid": false, "lines": [["A",90,4.0],["B",90,3.0],["F",0,0.0]] },
+    { "name": "cutoffs that rise", "width": 0, "valid": false, "lines": [["F",0,0.0],["A",90,4.0]] },
+    { "name": "a letter used twice", "width": 0.1, "valid": false, "lines": [["A",90,4.0],["A",80,3.0],["F",0,0.0]] },
+    { "name": "a GPA that rises as the cutoff falls", "width": 0.1, "valid": false, "lines": [["A",90,3.0],["B",80,4.0],["F",0,0.0]] },
+    { "name": "equal GPAs are allowed", "width": 0.1, "valid": true, "lines": [["A",90,4.0],["B",80,4.0],["F",0,0.0]] },
+    { "name": "a blank letter", "width": 0.1, "valid": false, "lines": [["A",90,4.0],[" ",80,3.0],["F",0,0.0]] },
+    { "name": "a negative GPA", "width": 0.1, "valid": false, "lines": [["A",90,4.0],["F",0,-1.0]] },
+    { "name": "a negative cutoff after a valid zero is impossible, so a negative last cutoff", "width": 0.1, "valid": false, "lines": [["A",90,4.0],["F",-5,0.0]] }
+  ],
+  "letters": [
+    { "name": "just inside the width (design vector 4)", "earned": "8990.01", "possible": "10000", "width": 0.1, "letter": "B+", "near": "A-" },
+    { "name": "just outside the width (design vector 5)", "earned": "8989.99", "possible": "10000", "width": 0.1, "letter": "B+", "near": null },
+    { "name": "exactly on a line is at the line, not near it", "earned": "90", "possible": "100", "width": 0.1, "letter": "A-", "near": null },
+    { "name": "exactly width below a line is near it (the edge is included)", "earned": "89.9", "possible": "100", "width": 0.1, "letter": "B+", "near": "A-" },
+    { "name": "top of the scale", "earned": "100", "possible": "100", "width": 0.1, "letter": "A", "near": null },
+    { "name": "zero earned", "earned": "0", "possible": "100", "width": 0.1, "letter": "F", "near": null },
+    { "name": "nothing possible yet", "earned": "0", "possible": "0", "width": 0.1, "letter": null, "near": null }
+  ]
+}

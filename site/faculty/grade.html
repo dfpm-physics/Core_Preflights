@@ -238,7 +238,7 @@
 
       const data = await G.loadGradingData(ctx, asgnId, resolveSectionIds());
       if (!data.offering) {
-        container().innerHTML = `<div class="alert alert-error">Assignment not found.</div>`;
+        container().innerHTML = `<div class="alert alert-error">${data.refusal ? esc(data.refusal.message) : 'Assignment not found.'}</div>`;
         actions.style.display = 'none';
         gradeData = {}; updateDirtyBanner();
         return;

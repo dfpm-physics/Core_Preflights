@@ -80,7 +80,7 @@ PREP_DB_HOST  PREP_DB_PORT  PREP_DB_NAME  PREP_DB_SSLMODE  PREP_PROJECT_REF
 PREP_APP_OWNER_ROLE / _PASSWORD      <- sealed tier, see below
 PREP_APP_DML_ROLE   / _PASSWORD      <- everyday tier
 PREP_APP_READ_ROLE  / _PASSWORD      <- analysis tier
-PREP_TEST_FACULTY_EMAIL / _PASSWORD / _UID
+PREP_TEST_FACULTY_EMAIL / _PASSWORD / _UID   <- production test login; no test suite reads it now
 ```
 
 **About the owner pair.** `prep_app_owner` is the only role with DDL on schema `app`. The design
@@ -153,7 +153,7 @@ python scripts/grounding/check_grounding.py
 Read-only, exits non-zero on any miss, prints `k of N` per course. **Run it and report the
 numbers** — this is the one setup step whose failure is completely invisible afterwards, because
 `/preflight-analyze` warns once and then grades the entire cohort without textbook context.
-Reference machine as of 2026-08-07: **58 of 58**, 30 under 215 and 28 under 110.
+Expect every manifest entry to resolve. The manifest holds **60** entries as of 2026-11-04, 30 under 215 and 30 under 110 (it held 58 on 2026-08-07, when 110 had 28). Add `--course 215` to fail only on that course's folder.
 
 *Before 2026-08-07 this section said the reference machine held "31 files under phys-215 and 0
 under phys-110, so phys-110 grading there already runs without RAG." The files were present; the
@@ -168,16 +168,18 @@ path may require one. Node exists purely for two test harnesses. Reference machi
 If Node is not installed here, everything except §4 still works — tell me and move on.
 
 ```
-cd tests/app-schema      && npm install     # @supabase/supabase-js — runs the shipped modules against live DB
-cd tests/browser-harness && npm install     # puppeteer-core — drives real Chrome
+cd tests/app-schema      && npm ci          # @supabase/supabase-js — runs the shipped modules against the STAGING project only
+cd tests/browser-harness && npm install     # puppeteer-core — drives real Chrome against the local staging-only server
 ```
 
 Both `node_modules/` are gitignored and must stay inside their own folder. **No root-level
 `package.json`, ever.**
 
 The browser harness additionally needs Chrome or Edge at a standard Windows path (auto-detected;
-`--chrome` overrides) and reads the `PREP_TEST_FACULTY_*` values from the `.env`, so no secret ever
-appears on a command line. Its README is `tests/browser-harness/README.md`.
+`--chrome` overrides) and signs in with the seeded staging director (made by
+`scripts/staging/seed_staging.py`), so no credential file is opened and no secret appears on a
+command line. Its README is `tests/browser-harness/README.md`. Both harnesses can reach staging and
+not production; the staging setup is described in `scripts/staging/seed_staging.py`'s header.
 
 A caveat you must honor when reporting results: a Node-only check is **never** the sole verification
 of a change. If it is all you ran, say so explicitly in the CHANGELOG entry.
@@ -187,7 +189,7 @@ of a change. If it is all you ran, say so explicitly in the CHANGELOG entry.
 ## 5. Access I need to have granted you (not files — accounts)
 
 - **Supabase dashboard** for project `shzvpmlnqfmzfmuxkowi` — to read the service key and to
-  **unpause the project**, which the free tier does after ~1 week idle.
+  **check the project is running** (production is on a paid tier and does not idle-pause; a free-tier staging project can).
 - **GitHub push** to `dfpm-physics/Core_Preflights` over HTTPS, with a working credential helper.
   `main` is live: pushing rebuilds GitHub Pages in 1–2 minutes.
 - **Course Director / System Admin** in PREP itself — both analysis skills require it.
@@ -213,7 +215,7 @@ Expected:
   `prep_app_read` reads but cannot write; and **no tier can touch `public`**. `prep_app_owner`
   **currently connects and can do DDL** — see §2a. The design is that it fails at connect; that
   is not today's state and a successful owner probe is not a fault to report.
-- **`check_grounding.py`** — `58 of 58`. Anything less means grading will silently run without
+- **`check_grounding.py`** — every manifest entry resolves (`60 of 60` as of 2026-11-04). Anything less means grading will silently run without
   textbook context; fix it before your first run rather than after.
 - **`db_check.py`** — connects as `claude_code_recker`, reads real rows, `ALTER`/`DROP` come back
   **DENIED**.
@@ -238,7 +240,7 @@ python scripts/staging/serve_local.py     # open http://localhost:8000/site/
 And if you installed Node:
 
 ```
-cd tests/app-schema && npm test
+cd tests/app-schema && node test-target-guard.mjs   # offline: proves the suites can only reach staging
 node tests/browser-harness/hold.mjs      # needs no server and no account
 ```
 

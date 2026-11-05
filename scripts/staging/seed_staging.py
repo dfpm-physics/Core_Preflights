@@ -6,20 +6,48 @@ accounts use the site's own guessable default passwords, and staging is on the o
 
 WHAT IT MAKES
   Course phys-215, term fall-2026, sections M1A and T3A.
+  Course phys-110, term fall-2026, section M1A: a second course, so a test can prove that a
+            director of one course sees nothing of the other.
   Staff     admin@     global admin
             director@  director of the offering
             instructor@  instructor of M1A only
+            otherdirector@  director of the phys-110 offering only
   Cadets    cadet101@ to cadet103@ in M1A, cadet104@ to cadet106@ in T3A (all @prep-staging.example)
+            cadet999@  THE TEST CADET (3009999999), in M1A, with no work of their own. The live
+                       test suites in tests/app-schema sign in as this cadet and write to their
+                       own rows only; tests/app-schema/cleanup.py removes the residue.
+            cadet201@  the only cadet in phys-110, with one submitted lesson, as the "other" cadet
   Lessons, with deadlines set around today so the site's 7-day window shows the right ones:
             test-lesson-01  past due. Cadets 101, 102 and 104 submitted. 101 has a final grade,
                             102 has an AI suggestion to review, 104 is ungraded, others none.
             test-lesson-02  due in 2 to 3 days. Cadet 101 has a saved draft.
             test-lesson-03  due in 30 days, so published but outside a cadet's 7-day window.
             test-lesson-04  an unpublished draft.
+            test-lesson-05  due in 3 to 4 days. Written path graded, interactive path practice.
+            test-lesson-06  due in 4 to 5 days. Both paths graded, so the cadet chooses.
+            (05 and 06 carry an interactive path so the suites can exercise the practice and
+            choice rules. The artifact address is a placeholder that opens nothing.)
 
 PASSWORDS follow the site's own rules, and are not stored in this file:
   staff: last name in lower case + 1234.    cadets: last 6 digits of the cadet ID.
   No forced password change is set, so a tester goes straight in.
+
+BREADTH ADDED 2026-11-04, so later proofs run on more than a handful of rows:
+  Sections  W5A meets {F,W} (array order is not date order), MT7A meets {M,T}, both in phys-215.
+            phys-310 (a third course) has one section, L1, with NO meeting days: a course with no
+            day tracks.
+  Cadets    cadet301@ to cadet320@ in phys-215, cadet321@ and cadet322@ in phys-310. All invented.
+  Lessons   test-lesson-07 has an EMPTY due_by_day map and no per-section rows, so every section
+            takes the offering's own date. test-lesson-08 has a map with a JSON null for M and
+            values for T, W and F, so MT7A falls through to T and M1A falls through to the
+            offering date. test-310-lesson-01 is a past-due offering of the no-day-track course.
+  Effort    Cadets 301, 302, 303 and 304 have committed interactive reports on test-lesson-06 at
+            effort 0, 2, 5, and 4 with a non-meaningful reflection (capped to 2). The grade
+            trigger writes those grades; this script never sets their points.
+  Extension Cadet 305: an active extension on test-lesson-01 (past due, no work in).
+            Cadet 306: a revoked extension on the same lesson.
+  Grades    Cadets 307 to 318 on test-lesson-01 and 02: final, AI-suggested, zero, and fractional
+            (1.5 of 2) marks, plus submitted-but-ungraded and draft rows.
 
 RE-RUN IT to move the deadlines back around today. It changes nothing else that already exists.
 
@@ -46,7 +74,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from install_staging import PROD_REF, target_ref  # noqa: E402
+import db_target  # noqa: E402
 from serve_local import read_targets  # noqa: E402
 
 NS = uuid.UUID("6f2b7c1e-58a4-4a0e-9d57-0d3b4c7f1a10")
@@ -57,6 +85,7 @@ STAFF = [  # key, name, global admin
     ("admin", "Pat Admin", True),
     ("director", "Alex Director", False),
     ("instructor", "Sam Instructor", False),
+    ("otherdirector", "Jordan Otherdirector", False),
 ]
 CADETS = [  # cadet id, name, section
     (3000000101, "Avery Testcadet", "M1A"),
@@ -65,13 +94,31 @@ CADETS = [  # cadet id, name, section
     (3000000104, "Dana Testcadet", "T3A"),
     (3000000105, "Emery Testcadet", "T3A"),
     (3000000106, "Finley Testcadet", "T3A"),
+    (3009999999, "Zed Testcadet", "M1A"),
 ]
-LESSONS = [  # slug, title, days until the M deadline, published
-    ("test-lesson-01", "Test Lesson 1: Electric Charge", -8, True),
-    ("test-lesson-02", "Test Lesson 2: Electric Fields", 2, True),
-    ("test-lesson-03", "Test Lesson 3: Gauss's Law", 30, True),
-    ("test-lesson-04", "Test Lesson 4: Electric Potential", 14, False),
+# Twenty more, spread over four sections. Names are invented. Cadet ids are 3000000301 to 3000000320.
+_EXTRA_NAMES = ["Harper", "Indigo", "Jules", "Kai", "Lane", "Marlowe", "Nico", "Oakley", "Parker",
+                "Quinn", "Reese", "Sage", "Tatum", "Uri", "Vale", "Wren", "Xan", "Yael", "Zion", "Arden"]
+_EXTRA_SECTIONS = ["M1A", "T3A", "W5A", "MT7A"]
+CADETS += [(3000000301 + i, f"{name} Testcadet", _EXTRA_SECTIONS[i % 4])
+           for i, name in enumerate(_EXTRA_NAMES)]
+SECTIONS = [  # code, meeting days in array order, period
+    ("M1A", ["M"], 1),
+    ("T3A", ["T"], 3),
+    ("W5A", ["F", "W"], 5),    # array order F then W: the first day with a value wins, not the earliest date
+    ("MT7A", ["M", "T"], 7),
 ]
+NODAY_CADETS = [(3000000321, "Blair Testcadet"), (3000000322, "Corin Testcadet")]  # phys-310, section L1
+OTHER_CADET = (3000000201, "Gray Othercadet", "M1A")  # phys-110
+LESSONS = [  # slug, title, days until the M deadline, published, interactive path
+    ("test-lesson-01", "Test Lesson 1: Electric Charge", -8, True, None),
+    ("test-lesson-02", "Test Lesson 2: Electric Fields", 2, True, None),
+    ("test-lesson-03", "Test Lesson 3: Gauss's Law", 30, True, None),
+    ("test-lesson-04", "Test Lesson 4: Electric Potential", 14, False, None),
+    ("test-lesson-05", "Test Lesson 5: Capacitors", 3, True, "practice"),
+    ("test-lesson-06", "Test Lesson 6: Current", 4, True, "graded"),
+]
+PLACEHOLDER_ARTIFACT = "https://example.org/prep-staging-test-artifact"
 
 
 def uid(kind, key):
@@ -149,11 +196,11 @@ def seed(cur):
     cur.execute("""INSERT INTO app.course_offerings (id, course_id, term_id, is_active)
                    VALUES (%s, %s, %s, true) ON CONFLICT (id) DO NOTHING""", (offering, course, term))
     sections = {}
-    for code, day, period in (("M1A", "M", 1), ("T3A", "T", 3)):
+    for code, days_, period in SECTIONS:
         sections[code] = uid("section", code)
         cur.execute("""INSERT INTO app.sections (id, course_offering_id, code, meeting_days, period)
                        VALUES (%s, %s, %s, %s, %s) ON CONFLICT (id) DO NOTHING""",
-                    (sections[code], offering, code, [day], period))
+                    (sections[code], offering, code, days_, period))
 
     for key, name, is_admin in STAFF:
         user_id = uid("user", key)
@@ -181,10 +228,12 @@ def seed(cur):
                     (enrollments[cadet_id], cadet_id, sections[section]))
 
     offerings, activities = {}, {}
-    for pos, (slug, title, days, published) in enumerate(LESSONS, start=1):
+
+    def add_lesson(pos, slug, title, days, published, interactive, due_by_day, section_rows):
+        """due_by_day: the map to store. section_rows: [(section code, due)] explicit per-section rows."""
         assignment = uid("assignment", slug)
         offerings[slug], activities[slug] = uid("ao", slug), uid("activity", slug)
-        m_due, t_due = deadline(days), deadline(days + 1)
+        m_due = deadline(days)
         cur.execute("""INSERT INTO app.assignments (id, course_id, kind_id, slug, title)
                        VALUES (%s, %s, 'preflight', %s, %s) ON CONFLICT (id) DO NOTHING""",
                     (assignment, course, slug, title))
@@ -196,8 +245,8 @@ def seed(cur):
                        ON CONFLICT (id) DO UPDATE
                          SET due_at = EXCLUDED.due_at, due_by_day = EXCLUDED.due_by_day""",
                     (offerings[slug], assignment, offering, m_due,
-                     json.dumps({"M": iso(m_due), "T": iso(t_due)}), published, pos))
-        for section, due in (("M1A", m_due), ("T3A", t_due)):
+                     json.dumps(due_by_day), published, pos))
+        for section, due in section_rows:
             cur.execute("""INSERT INTO app.assignment_due_dates (assignment_offering_id, section_id, due_at)
                            VALUES (%s, %s, %s)
                            ON CONFLICT (assignment_offering_id, section_id)
@@ -212,12 +261,33 @@ def seed(cur):
                          (assignment_offering_id, activity_id, grading_role, available_after, is_visible, position)
                        VALUES (%s, %s, 'graded', 'always', true, 0) ON CONFLICT DO NOTHING""",
                     (offerings[slug], activities[slug]))
+        if interactive:
+            inter = uid("activity", f"{slug}:interactive")
+            cur.execute("""INSERT INTO app.activities (id, assignment_id, modality, slug, title, content, position)
+                           VALUES (%s, %s, 'interactive', %s, %s, %s, 1) ON CONFLICT (id) DO NOTHING""",
+                        (inter, assignment, f"{slug}-interactive", title,
+                         json.dumps({"artifact_url": PLACEHOLDER_ARTIFACT, "access": "open"})))
+            cur.execute("""INSERT INTO app.offering_activities
+                             (assignment_offering_id, activity_id, grading_role, available_after, is_visible, position)
+                           VALUES (%s, %s, %s, 'always', true, 1) ON CONFLICT DO NOTHING""",
+                        (offerings[slug], inter, interactive))
+
+    for pos, (slug, title, days, published, interactive) in enumerate(LESSONS, start=1):
+        m_due, t_due = deadline(days), deadline(days + 1)
+        add_lesson(pos, slug, title, days, published, interactive,
+                   {"M": iso(m_due), "T": iso(t_due)},
+                   [("M1A", m_due), ("T3A", t_due), ("W5A", deadline(days + 2)), ("MT7A", m_due)])
+    # Shape cases for the deadline rule. Neither carries per-section rows, so the day map (or, with
+    # an empty map, the offering's own date) is what each section resolves to.
+    add_lesson(7, "test-lesson-07", "Test Lesson 7: Magnetism", 5, True, None, {}, [])
+    add_lesson(8, "test-lesson-08", "Test Lesson 8: Induction", 6, True, None,
+               {"M": None, "T": iso(deadline(7)), "W": iso(deadline(8)), "F": iso(deadline(9))}, [])
 
     answers = {"q1": "About 30 minutes.",
                "q2": "TEST ANSWER. I found the sign of the charge confusing at first.",
                "q3": "TEST ANSWER. Like charges repel and unlike charges attract."}
 
-    def submit(cadet_id, slug, committed):
+    def submit(cadet_id, slug, committed, committed_at=None):
         sub = uid("submission", f"{cadet_id}:{slug}")
         cur.execute("""INSERT INTO app.submissions
                          (id, assignment_offering_id, enrollment_id, chosen_activity_id, status, committed_at)
@@ -225,25 +295,28 @@ def seed(cur):
                     (sub, offerings[slug], enrollments[cadet_id],
                      activities[slug] if committed else None,
                      "committed" if committed else "draft",
-                     deadline(-9) if committed else None))
+                     (committed_at or deadline(-9)) if committed else None))
         cur.execute("""INSERT INTO app.submission_activities (id, submission_id, activity_id, content, is_final)
                        VALUES (%s, %s, %s, %s, %s) ON CONFLICT (id) DO NOTHING""",
                     (uid("sub_activity", f"{cadet_id}:{slug}"), sub, activities[slug],
                      json.dumps(answers), committed))
         return sub
 
-    def grade(cadet_id, slug, sub, final):
+    def grade(cadet_id, slug, sub, final, q2=(1, "full"), q3=(1, "full")):
+        """q2, q3: (score, status). A score may be fractional; points_earned is their sum."""
         scores = {
             "q1": {"score": 0, "max": 0, "feedback": "", "status": "full"},
-            "q2": {"score": 1, "max": 1, "feedback": "", "status": "full"},
-            "q3": {"score": 1, "max": 1, "feedback": "TEST FEEDBACK. Good.", "status": "full"},
+            "q2": {"score": q2[0], "max": 1, "feedback": "", "status": q2[1]},
+            "q3": {"score": q3[0], "max": 1,
+                   "feedback": "TEST FEEDBACK. Good." if q3[1] == "full" else "TEST FEEDBACK. Revisit this.",
+                   "status": q3[1]},
         }
         cur.execute("""INSERT INTO app.grades
                          (id, assignment_offering_id, enrollment_id, submission_id, points_earned,
                           points_possible, question_scores, source, is_finalized, graded_by, graded_at)
-                       VALUES (%s, %s, %s, %s, 2, 2, %s, %s, %s, %s, %s) ON CONFLICT (id) DO NOTHING""",
+                       VALUES (%s, %s, %s, %s, %s, 2, %s, %s, %s, %s, %s) ON CONFLICT (id) DO NOTHING""",
                     (uid("grade", f"{cadet_id}:{slug}"), offerings[slug], enrollments[cadet_id], sub,
-                     json.dumps(scores), "instructor" if final else "ai_suggested", final,
+                     q2[0] + q3[0], json.dumps(scores), "instructor" if final else "ai_suggested", final,
                      uid("user", "instructor") if final else None, deadline(-7) if final else None))
 
     grade(3000000101, "test-lesson-01", submit(3000000101, "test-lesson-01", True), final=True)
@@ -251,11 +324,177 @@ def seed(cur):
     submit(3000000104, "test-lesson-01", True)
     submit(3000000101, "test-lesson-02", False)
 
+    # ---- breadth: effort-graded interactive reports --------------------------------------------
+    # test-lesson-06 offers a graded interactive path. The report is stored while the submission is
+    # still a draft and the submission is then committed with that activity chosen, because the
+    # grade trigger reads the report at the moment of commit. The points are the trigger's work.
+    inter06 = uid("activity", "test-lesson-06:interactive")
+
+    def submit_interactive(cadet_id, effort, meaningful=True):
+        sub = uid("submission", f"{cadet_id}:test-lesson-06")
+        cur.execute("""INSERT INTO app.submissions (id, assignment_offering_id, enrollment_id, status)
+                       VALUES (%s, %s, %s, 'draft') ON CONFLICT (id) DO NOTHING""",
+                    (sub, offerings["test-lesson-06"], enrollments[cadet_id]))
+        report = {"schema": 1, "effort": effort, "overall_understanding": min(effort, 4),
+                  "reading_reflection": {"meaningful": meaningful}, "misconceptions": [], "flags": []}
+        cur.execute("""INSERT INTO app.submission_activities
+                         (id, submission_id, activity_id, content, report_markdown, is_final)
+                       VALUES (%s, %s, %s, %s, %s, true) ON CONFLICT (id) DO NOTHING""",
+                    (uid("sub_activity", f"{cadet_id}:test-lesson-06"), sub, inter06, json.dumps(report),
+                     f"TEST REPORT. Effort {effort}."))
+        cur.execute("""UPDATE app.submissions SET status = 'committed', chosen_activity_id = %s,
+                              committed_at = %s
+                        WHERE id = %s AND status = 'draft'""", (inter06, deadline(-1), sub))
+
+    submit_interactive(3000000301, 0)
+    submit_interactive(3000000302, 2)
+    submit_interactive(3000000303, 5)
+    submit_interactive(3000000304, 4, meaningful=False)   # the reflection cap holds it at 2
+
+    # ---- breadth: extensions -------------------------------------------------------------------
+    # 305 has no work in on a past-due lesson and an active extension that reaches into the future.
+    # 306 had one and it was revoked. Neither has submitted: the table refuses to withdraw an
+    # extension under work that is already in.
+    ext_lesson = offerings["test-lesson-01"]
+    cur.execute("""INSERT INTO app.extensions
+                     (id, enrollment_id, assignment_offering_id, extended_due_at, reason, granted_by)
+                   VALUES (%s, %s, %s, %s, 'TEST REASON. Illness; more time agreed.', %s)
+                   ON CONFLICT (id) DO UPDATE SET extended_due_at = EXCLUDED.extended_due_at""",
+                (uid("extension", "305"), enrollments[3000000305], ext_lesson, deadline(2),
+                 uid("user", "director")))
+    cur.execute("""INSERT INTO app.extensions
+                     (id, enrollment_id, assignment_offering_id, extended_due_at, reason, granted_by,
+                      revoked_at, revoked_by, revoked_reason)
+                   VALUES (%s, %s, %s, %s, 'TEST REASON. Travel.', %s, %s, %s,
+                           'TEST REASON. Granted in error.')
+                   ON CONFLICT (id) DO NOTHING""",
+                (uid("extension", "306"), enrollments[3000000306], ext_lesson, deadline(1),
+                 uid("user", "instructor"), deadline(-4), uid("user", "director")))
+
+    # ---- breadth: mixed grades on past-due lesson 01 and open lesson 02 ------------------------
+    # Keep test-lesson-02 free of grades: a test that rescores an offering refuses to run on a graded one.
+    day_ago = datetime.now(timezone.utc) - timedelta(days=1)
+    L1, L2 = "test-lesson-01", "test-lesson-02"
+    grade(3000000307, L1, submit(3000000307, L1, True), final=True)                      # full marks
+    grade(3000000308, L1, submit(3000000308, L1, True), final=True,
+          q2=(0, "zero"), q3=(0, "zero"))                                               # a zero
+    grade(3000000309, L1, submit(3000000309, L1, True), final=True,
+          q2=(1, "full"), q3=(0.5, "warn"))                                             # 1.5 of 2
+    grade(3000000310, L1, submit(3000000310, L1, True), final=False)                     # suggestion, 2
+    grade(3000000311, L1, submit(3000000311, L1, True), final=False, q3=(0, "zero"))     # suggestion, 1
+    grade(3000000312, L1, submit(3000000312, L1, True), final=False, q3=(0.5, "warn"))   # suggestion, 1.5
+    submit(3000000313, L1, True)                                                         # not graded
+    grade(3000000314, L1, submit(3000000314, L1, True), final=True, q3=(0, "zero"))      # final, 1
+    submit(3000000315, L2, False)                                                        # a draft
+    submit(3000000316, L2, True, committed_at=day_ago)                                   # not graded
+    grade(3000000317, L1, submit(3000000317, L1, True), final=False)                     # suggestion, 2
+    grade(3000000318, L1, submit(3000000318, L1, True), final=True,
+          q2=(0.5, "warn"), q3=(1, "full"))                                             # 1.5 of 2
+    submit(3000000319, "test-lesson-07", True, committed_at=day_ago)
+    submit(3000000320, "test-lesson-08", False)
+
+    # A second course with its own director and one cadet, so isolation between courses is testable.
+    course2, offering2 = uid("course", "phys-110"), uid("offering", "phys-110:fall-2026")
+    cur.execute("""INSERT INTO app.courses (id, code, title, department)
+                   VALUES (%s, 'phys-110', 'Physics 110 (STAGING TEST)', 'Physics')
+                   ON CONFLICT (id) DO NOTHING""", (course2,))
+    cur.execute("""INSERT INTO app.course_offerings (id, course_id, term_id, is_active)
+                   VALUES (%s, %s, %s, true) ON CONFLICT (id) DO NOTHING""", (offering2, course2, term))
+    section2 = uid("section", "phys-110:M1A")
+    cur.execute("""INSERT INTO app.sections (id, course_offering_id, code, meeting_days, period)
+                   VALUES (%s, %s, 'M1A', %s, 1) ON CONFLICT (id) DO NOTHING""", (section2, offering2, ["M"]))
+    cur.execute("""INSERT INTO app.staff_assignments
+                     (id, instructor_id, course_offering_id, section_id, role)
+                   VALUES (%s, %s, %s, NULL, 'director') ON CONFLICT (id) DO NOTHING""",
+                (uid("staff", "otherdirector"), uid("user", "otherdirector"), offering2))
+    cadet_id, name, _ = OTHER_CADET
+    user_id = uid("user", cadet_id)
+    email = f"cadet{str(cadet_id)[-3:]}@{DOMAIN}"
+    add_auth_user(cur, user_id, email, cadet_password(cadet_id))
+    cur.execute("""INSERT INTO app.students (student_id, name, email, auth_user_id)
+                   VALUES (%s, %s, %s, %s) ON CONFLICT (student_id) DO NOTHING""",
+                (cadet_id, name, email, user_id))
+    enrollments[cadet_id] = uid("enrollment", cadet_id)
+    cur.execute("""INSERT INTO app.enrollments (id, student_id, section_id)
+                   VALUES (%s, %s, %s) ON CONFLICT (id) DO NOTHING""",
+                (enrollments[cadet_id], cadet_id, section2))
+    slug2 = "test-110-lesson-01"
+    assignment2 = uid("assignment", slug2)
+    offerings[slug2], activities[slug2] = uid("ao", slug2), uid("activity", slug2)
+    due2 = deadline(-8)
+    cur.execute("""INSERT INTO app.assignments (id, course_id, kind_id, slug, title)
+                   VALUES (%s, %s, 'preflight', %s, 'Test 110 Lesson 1') ON CONFLICT (id) DO NOTHING""",
+                (assignment2, course2, slug2))
+    cur.execute("""INSERT INTO app.assignment_offerings
+                     (id, assignment_id, course_offering_id, due_at, due_by_day, grading_mode,
+                      points_possible, is_published, position)
+                   VALUES (%s, %s, %s, %s, %s, 'points', 2, true, 1) ON CONFLICT (id) DO NOTHING""",
+                (offerings[slug2], assignment2, offering2, due2,
+                 json.dumps({"M": iso(due2), "T": iso(deadline(-7))})))
+    cur.execute("""INSERT INTO app.activities (id, assignment_id, modality, slug, title, content, position)
+                   VALUES (%s, %s, 'written', %s, 'Test 110 Lesson 1', %s, 0) ON CONFLICT (id) DO NOTHING""",
+                (activities[slug2], assignment2, f"{slug2}-written",
+                 json.dumps({"questions": questions(), "reading_link": None, "reference_pdf": None,
+                             "reference_pages": None, "access": "open"})))
+    cur.execute("""INSERT INTO app.offering_activities
+                     (assignment_offering_id, activity_id, grading_role, available_after, is_visible, position)
+                   VALUES (%s, %s, 'graded', 'always', true, 0) ON CONFLICT DO NOTHING""",
+                (offerings[slug2], activities[slug2]))
+    submit(cadet_id, slug2, True)
+
+    # A third course with no day tracks: its one section has an empty meeting_days array and no
+    # period, and its lesson has an empty day map. Only a global admin sees it.
+    course3, offering3 = uid("course", "phys-310"), uid("offering", "phys-310:fall-2026")
+    cur.execute("""INSERT INTO app.courses (id, code, title, department)
+                   VALUES (%s, 'phys-310', 'Physics 310 (STAGING TEST)', 'Physics')
+                   ON CONFLICT (id) DO NOTHING""", (course3,))
+    cur.execute("""INSERT INTO app.course_offerings (id, course_id, term_id, is_active)
+                   VALUES (%s, %s, %s, true) ON CONFLICT (id) DO NOTHING""", (offering3, course3, term))
+    section3 = uid("section", "phys-310:L1")
+    cur.execute("""INSERT INTO app.sections (id, course_offering_id, code, meeting_days, period)
+                   VALUES (%s, %s, 'L1', '{}', NULL) ON CONFLICT (id) DO NOTHING""", (section3, offering3))
+    for cadet_id, name in NODAY_CADETS:
+        user_id = uid("user", cadet_id)
+        email = f"cadet{str(cadet_id)[-3:]}@{DOMAIN}"
+        add_auth_user(cur, user_id, email, cadet_password(cadet_id))
+        cur.execute("""INSERT INTO app.students (student_id, name, email, auth_user_id)
+                       VALUES (%s, %s, %s, %s) ON CONFLICT (student_id) DO NOTHING""",
+                    (cadet_id, name, email, user_id))
+        enrollments[cadet_id] = uid("enrollment", cadet_id)
+        cur.execute("""INSERT INTO app.enrollments (id, student_id, section_id)
+                       VALUES (%s, %s, %s) ON CONFLICT (id) DO NOTHING""",
+                    (enrollments[cadet_id], cadet_id, section3))
+    slug3 = "test-310-lesson-01"
+    assignment3 = uid("assignment", slug3)
+    offerings[slug3], activities[slug3] = uid("ao", slug3), uid("activity", slug3)
+    due3 = deadline(-6)
+    cur.execute("""INSERT INTO app.assignments (id, course_id, kind_id, slug, title)
+                   VALUES (%s, %s, 'preflight', %s, 'Test 310 Lesson 1') ON CONFLICT (id) DO NOTHING""",
+                (assignment3, course3, slug3))
+    cur.execute("""INSERT INTO app.assignment_offerings
+                     (id, assignment_id, course_offering_id, due_at, due_by_day, grading_mode,
+                      points_possible, is_published, position)
+                   VALUES (%s, %s, %s, %s, '{}', 'points', 2, true, 1)
+                   ON CONFLICT (id) DO UPDATE SET due_at = EXCLUDED.due_at""",
+                (offerings[slug3], assignment3, offering3, due3))
+    cur.execute("""INSERT INTO app.activities (id, assignment_id, modality, slug, title, content, position)
+                   VALUES (%s, %s, 'written', %s, 'Test 310 Lesson 1', %s, 0) ON CONFLICT (id) DO NOTHING""",
+                (activities[slug3], assignment3, f"{slug3}-written",
+                 json.dumps({"questions": questions(), "reading_link": None, "reference_pdf": None,
+                             "reference_pages": None, "access": "open"})))
+    cur.execute("""INSERT INTO app.offering_activities
+                     (assignment_offering_id, activity_id, grading_role, available_after, is_visible, position)
+                   VALUES (%s, %s, 'graded', 'always', true, 0) ON CONFLICT DO NOTHING""",
+                (offerings[slug3], activities[slug3]))
+    grade(3000000321, slug3, submit(3000000321, slug3, True), final=True)
+    submit(3000000322, slug3, True)
+
 
 def counts(cur):
     for table in ("courses", "sections", "instructors", "staff_assignments", "students", "enrollments",
                   "assignments", "assignment_offerings", "assignment_due_dates", "activities",
-                  "offering_activities", "submissions", "submission_activities", "grades"):
+                  "offering_activities", "submissions", "submission_activities", "grades",
+                  "extensions"):
         cur.execute(f"SELECT count(*) FROM app.{table}")  # noqa: S608 -- fixed names above
         print(f"  {table:<24}{cur.fetchone()[0]}")
 
@@ -276,16 +515,35 @@ def rest(url, key, path, token=None, method="GET", body=None):
         return err.code, None
 
 
+# The verify counts only the courses the seeds build. The worked examples the walkthroughs leave on staging
+# (the roster course, the items-without-days course, whatever comes next) are real rows of their own and must
+# neither be counted here nor be removed to make a count come out. A walkthrough keeps its invented cadets in its
+# own id range (the roster one uses 3000000801 to 3000000899), so a reset can never reach a seeded cadet.
+SEED_COURSES = "phys-110,phys-215,phys-310,gate-entry,gate-train,gate-vector"
+_CHAIN = "sections!inner(course_offerings!inner(courses!inner(code)))"
+_FILTER = f"sections.course_offerings.courses.code=in.({SEED_COURSES})"
+SEED_ROWS = {
+    "enrollments": f"select=id,{_CHAIN}&{_FILTER}",
+    "grades": f"select=id,enrollments!inner({_CHAIN})&enrollments.{_FILTER}",
+    "students": f"select=student_id,enrollments!inner({_CHAIN})&enrollments.{_FILTER}",
+}
+
+
 def verify():
     _, staging = read_targets()
     url, key = staging["url"], staging["anon"]
     # who, password, enrollments, grades, students they should see
     expected = [
-        ("admin", staff_password("Pat Admin"), 6, 2, 6),
-        ("director", staff_password("Alex Director"), 6, 2, 6),
-        ("instructor", staff_password("Sam Instructor"), 3, 2, 3),
+        # An admin sees every course. The v2 gate seed (seed_v2_gate.py) adds 21 cadets, 21 enrollments and
+        # 33 grades of its own, so the admin's totals are the base seed's, or the base seed plus the gate seed's.
+        # seed_v2_training.py adds 10 cadets, 10 enrollments and 32 grades more (the third value of each).
+        ("admin", staff_password("Pat Admin"), (30, 51, 61), (16, 49, 81), (30, 51, 61)),
+        ("director", staff_password("Alex Director"), 27, 15, 27),
+        ("instructor", staff_password("Sam Instructor"), 9, 5, 9),
+        ("otherdirector", staff_password("Jordan Otherdirector"), 1, 0, 1),
         ("cadet101", cadet_password(3000000101), 1, 1, 1),
         ("cadet104", cadet_password(3000000104), 1, 0, 1),
+        ("cadet999", cadet_password(3009999999), 1, 0, 1),
     ]
     bad = 0
     tokens = {}
@@ -297,9 +555,11 @@ def verify():
             bad += 1
             continue
         token = tokens[who] = session["access_token"]
-        seen = {t: len(rest(url, key, f"/rest/v1/{t}?select=*", token)[1] or [])
-                for t in ("enrollments", "grades", "students")}
-        ok = (seen["enrollments"], seen["grades"], seen["students"]) == (want_enrol, want_grades, want_students)
+        seen = {t: len(rest(url, key, f"/rest/v1/{t}?{q}", token)[1] or []) for t, q in SEED_ROWS.items()}
+        def _is(got, want):
+            return got in want if isinstance(want, tuple) else got == want
+        ok = (_is(seen["enrollments"], want_enrol) and _is(seen["grades"], want_grades)
+              and _is(seen["students"], want_students))
         bad += not ok
         print(f"{'PASS' if ok else 'FAIL'}  {who}: signed in; sees {seen}"
               + ("" if ok else f"; expected {want_enrol}, {want_grades}, {want_students}"))
@@ -315,6 +575,24 @@ def verify():
         ok = bool(cur_flag) and cur_flag[0]["is_global_admin"] is False
         bad += not ok
         print(f"{'PASS' if ok else 'FAIL'}  {role} cannot make an admin over the real API (HTTP {status})")
+    # The breadth rows: what the grade trigger made of each effort, and the two extensions.
+    if "admin" in tokens:
+        want = {3000000301: (0, 0.0), 3000000302: (2, 1.0), 3000000303: (5, 2.0), 3000000304: (2, 1.0)}
+        _, rows = rest(url, key, "/rest/v1/grades?effort=not.is.null&select=effort,points_earned,"
+                       "is_finalized,enrollments(student_id)", tokens["admin"])
+        got = {r["enrollments"]["student_id"]: (r["effort"], float(r["points_earned"]))
+               for r in rows or [] if r["is_finalized"]}
+        ok = got == want
+        bad += not ok
+        print(f"{'PASS' if ok else 'FAIL'}  effort grades made by the trigger: {got}"
+              + ("" if ok else f"; expected {want}"))
+        _, exts = rest(url, key, "/rest/v1/extensions?select=revoked_at", tokens["admin"])
+        live = sum(1 for e in exts or [] if e["revoked_at"] is None)
+        # The base seed has 2 (1 active). The v2 gate seed adds 4 (3 active, 1 revoked) for the deadline proof.
+        ok = (len(exts or []), live) in ((2, 1), (6, 4))
+        bad += not ok
+        print(f"{'PASS' if ok else 'FAIL'}  extensions: {len(exts or [])} rows, {live} active"
+              + ("" if ok else "; expected 2 rows, 1 active (base) or 6 and 4 (with the gate seed)"))
     print(f"\n{bad} failed" if bad else "\nall passed")
     return 1 if bad else 0
 
@@ -329,9 +607,7 @@ def main():
     url = os.environ.get("STAGING_DB_URL", "").strip()
     if not url:
         sys.exit("REFUSED  STAGING_DB_URL is not set.")
-    ref = target_ref(url)
-    if PROD_REF in url or ref == PROD_REF or args.expect_ref == PROD_REF:
-        sys.exit("REFUSED  target is the PRODUCTION project. This script only seeds staging.")
+    ref = db_target.exit_unless_staging(url, args.expect_ref).ref
     if ref != args.expect_ref:
         sys.exit(f"REFUSED  STAGING_DB_URL names project {ref}, not {args.expect_ref}.")
     if args.verify:

@@ -102,7 +102,7 @@ IMPORT_FOOTPRINT = (
     "site/faculty/artifacts.html",
     "site/js/faculty-artifacts.js",
     "supabase/migrations/023_artifact_sources_storage.sql",
-    "supabase/migrations/023_artifact_sources_storage_ROLLBACK.sql",
+    "supabase/migrations/rollback/023_artifact_sources_storage_ROLLBACK.sql",
 )
 
 

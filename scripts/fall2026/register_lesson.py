@@ -46,8 +46,12 @@ below reflects real writes against real constraints either way.
 ADDING A LESSON IS A NEW ENTRY IN `PLAN` AND NOTHING ELSE — never a fork of this file.
 
 Usage (Windows: .venv\\Scripts\\python):
-  .venv/bin/python scripts/fall2026/register_lesson.py --course phys-310 --lesson 13
-  .venv/bin/python scripts/fall2026/register_lesson.py --course phys-310 --lesson 13 --commit
+  .venv/bin/python scripts/fall2026/register_lesson.py --course phys-310 --term fall-2026 --lesson 13
+  .venv/bin/python scripts/fall2026/register_lesson.py --course phys-310 --term fall-2026 --lesson 13 --commit
+
+--term (a terms.code) is required. The offering is found by course AND term, whether or not it is
+active, so a lesson meant for a later term cannot land on the current one by accident. The script
+registers drafts only; nothing it writes is published.
 """
 
 import argparse
@@ -1004,16 +1008,34 @@ def one(cur, sql, args=()):
     return row
 
 
-def main():
+def find_course_offering(cur, course_id, term_code):
+    """The one offering of this course in the named term, active or not.
+
+    Looked up by course and term and never by the active flag: the active offering is whichever
+    term is running, which is not always the term a lesson is being prepared for.
+    """
+    return one(cur, """select co.id, co.is_active from app.course_offerings co
+                       join app.terms t on t.id = co.term_id
+                      where co.course_id = %s and t.code = %s""",
+               (course_id, term_code))
+
+
+def build_parser():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--course", required=True)
+    ap.add_argument("--term", required=True,
+                    help="terms.code of the offering to register into, e.g. fall-2026 (required)")
     ap.add_argument("--lesson", required=True, type=int)
     ap.add_argument("--commit", action="store_true", help="write (default: dry run, rolled back)")
     ap.add_argument("--allow-earlier", action="store_true",
                     help="permit moving an existing deadline EARLIER (CORE.md section 2: "
                          "that takes time away from cadets and is the human's call)")
-    args = ap.parse_args()
+    return ap
+
+
+def main():
+    args = build_parser().parse_args()
 
     plan = PLAN.get((args.course, args.lesson))
     if plan is None:
@@ -1029,11 +1051,11 @@ def main():
     course = one(cur, "select id from app.courses where code = %s", (args.course,))
     if not course:
         sys.exit(f"No course {args.course}")
-    co = one(cur, "select id from app.course_offerings where course_id = %s and is_active",
-             (course["id"],))
+    co = find_course_offering(cur, course["id"], args.term)
     if not co:
-        sys.exit(f"No active course offering for {args.course}")
-    print(f"=== {args.course} lesson {args.lesson} · course_offering {co['id']} ===")
+        sys.exit(f"No course offering for {args.course} in term {args.term}")
+    print(f"=== {args.course} lesson {args.lesson} · term {args.term} "
+          f"(active={co['is_active']}) · course_offering {co['id']} ===")
 
     # 1. assignment ------------------------------------------------------------------------
     row = one(cur, "select id, title from app.assignments where course_id=%s and slug=%s",

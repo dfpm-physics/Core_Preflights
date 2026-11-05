@@ -6,7 +6,7 @@
 //   2. the app client cannot see `public`, so wiring the portal to `app` genuinely moved it
 //      rather than leaving a foot in both models.
 
-import { check, section, anonClient, signInAsTestStudent, installBrowser } from './harness.mjs';
+import { check, section, anonClient, signInAsTestStudent, signInAsStaff, installBrowser } from './harness.mjs';
 import { createClient } from '@supabase/supabase-js';
 import { SUPABASE_URL, SUPABASE_ANON } from './harness.mjs';
 
@@ -61,6 +61,14 @@ section('the app client cannot reach schema `public`');
   check('student sees only their own enrollment(s)',
         (enroll || []).every(e => e.student_id === 3009999999));
 
+  // Other cadets exist in the same section (seeded), so these prove isolation rather than emptiness.
+  const { data: others } = await client.from('students').select('student_id').neq('student_id', 3009999999);
+  check('student cannot read another cadet, in their section or another course', (others || []).length === 0,
+        `saw ${(others || []).length}`);
+  const { data: subs } = await client.from('submissions').select('id, enrollment_id');
+  check('student sees no submission that is not theirs',
+        (subs || []).every(r => (enroll || []).some(e => e.id === r.enrollment_id)));
+
   const { data: grades } = await client.from('grades').select('id, is_finalized');
   check('student sees no unfinalized grade',
         (grades || []).every(g => g.is_finalized === true));
@@ -89,4 +97,21 @@ section('a client with no schema option defaults to public, not app');
   const { error: appErr } = await defaultClient.from('offering_activities').select('*').limit(1);
   check('a default-schema client CANNOT see an app-only table', !!appErr,
         'offering_activities exists only in `app`; seeing it means the default is not public');
+}
+
+section("staff scope: one course's director sees nothing of another course");
+{
+  const other = (await signInAsStaff('otherDirector')).client;
+  const { data: enr } = await other.from('enrollments').select('student_id');
+  check("the other course's director sees only their own course's cadet",
+        (enr || []).length === 1 && enr[0].student_id === 3000000201, JSON.stringify(enr));
+  const { data: subs } = await other.from('submissions').select('id');
+  check("...and only that cadet's work", (subs || []).length === 1, `saw ${(subs || []).length}`);
+  const { data: grades } = await other.from('grades').select('id');
+  check("...and none of the other course's grades", (grades || []).length === 0);
+
+  const inst = (await signInAsStaff('instructor')).client;
+  const { data: ienr } = await inst.from('enrollments').select('student_id, section:sections(code)');
+  check('an instructor of M1A sees only M1A cadets',
+        (ienr || []).length > 0 && ienr.every(e => e.section?.code === 'M1A'), JSON.stringify(ienr));
 }

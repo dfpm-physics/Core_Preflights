@@ -233,7 +233,8 @@
         <div class="page-head"><h1>Course administration</h1>
           <div class="sub">${esc(ctx.courseTitleOf(ctx.currentOffering))}${
             ctx.currentTermLabel ? ' · ' + esc(ctx.currentTermLabel) : ''} — this offering, the cadets in it,
-            and the people who run it.</div></div>
+            and the people who run it.${ctx.courses?.find(c => c.offeringId === ctx.currentOffering)?.isActive === false
+              ? ' <span class="score-badge pending" id="inactive-badge">Inactive term</span> You can still import its roster: nothing here depends on the term being active.' : ''}</div></div>
         <div class="subtabs">
           <button class="subtab ${tab === 'students' ? 'active' : ''}" data-tab="students">Students</button>
           <button class="subtab ${tab === 'staff' ? 'active' : ''}" data-tab="staff">Staff</button>
@@ -294,6 +295,18 @@
           <div class="dropzone" id="dropzone">
             <div class="dz-ic">📄</div><div><strong>Choose a file</strong> or drag &amp; drop it here</div>
           </div>
+          <details class="paste-box" id="paste-box" style="margin-top:10px">
+            <summary class="muted" style="cursor:pointer;font-size:0.9em">Or paste the rows here</summary>
+            <textarea id="paste-text" rows="6" style="width:100%;margin-top:8px;font-family:monospace"
+                      aria-label="Pasted roster rows, with a header line"
+                      placeholder="Cadet EMPLID,Cadet Name,Email,Section&#10;(first line is the column names)"></textarea>
+            <div style="margin-top:6px"><button class="btn btn-secondary btn-sm" id="paste-check">Check these rows</button></div>
+          </details>
+          <div class="muted" style="font-size:0.85em;margin-top:8px">Nothing is written until you click
+            the import button in the list that follows. A section name can be anything the course
+            uses (<code>M1A</code>, <code>LAB-3</code>, <code>Sec 4</code>); a course with no M and T days
+            can name sections freely. A cadet who already has an account from another term or course
+            is enrolled here with the same account.</div>
           <div id="csv-preview" style="display:none;margin-top:16px"></div>
         </details>
 
@@ -323,6 +336,12 @@
       dz.addEventListener('drop', (e) => {
         e.preventDefault(); dz.classList.remove('drag-over');
         const f = e.dataTransfer.files[0]; if (f) readCsv(f);
+      });
+
+      document.getElementById('paste-check').addEventListener('click', async () => {
+        const t = document.getElementById('paste-text').value;
+        if (!t.trim()) { showImportError(['Paste the rows first: a header line with the column names, then one line per cadet.']); return; }
+        await previewImport(t, 'pasted rows');
       });
 
       renderProvision(total, unprovisioned);
@@ -618,7 +637,9 @@
               <td style="text-align:center"><input type="checkbox" data-idflag="${esc(g.key)}"
                     ${staged.approved.has(g.key) ? 'checked' : ''}></td>
               <td><strong>${esc(g.label)}</strong> "${esc(g.value)}"
-                  <span class="muted">— this course is ${esc(expectedOf(g)) || '—'}</span></td>
+                  <span class="muted">${g.courseCode
+                    ? `— this course's code, ${esc(g.courseCode)}, does not name a subject and a number, so the file cannot be compared with it. Tick this only if these rows belong to this course.`
+                    : `— this course is ${esc(expectedOf(g)) || '—'}`}</span></td>
               <td>${g.rows}</td></tr>`).join('')}</tbody></table></div>
           <div style="margin-top:8px">
             <button class="btn btn-secondary btn-sm" id="id-recheck">Re-check with the ticked rows included</button>
@@ -645,9 +666,10 @@
           <div style="margin-top:8px">
             <button class="btn ${firstImport ? 'btn-primary' : 'btn-secondary'} btn-sm" id="mk-sections">Create these sections and re-check</button>
           </div>
-          <div class="muted" style="font-size:0.85em;margin-top:6px">Meeting days are filled in
-            from each code — <code>M1A</code> becomes an M-day section — and you can correct them
-            on the Staff tab afterwards.</div>
+          <div class="muted" style="font-size:0.85em;margin-top:6px">Each new section starts with:
+            ${parsed.unknownSections.map(c => `<code>${esc(c)}</code> ${esc(RI.describeSectionDefaults(c))}`).join('; ')}.
+            A code that is not a day letter followed by a digit (such as <code>M1A</code>) gets no meeting days, which is
+            right for a course without M and T days. You can correct either on the Staff tab afterwards.</div>
         </div>` : '';
 
       const skippedByCode = {};
@@ -801,7 +823,7 @@
         ${sectionOffer}
         <div class="alert alert-info">
           <strong>${s.matched}</strong> of ${s.inFile} row(s) match this course —
-          <strong>${fresh.length}</strong> new, <strong>${conflicts.length}</strong> already on file${trivialCount ? ` (${trivialCount} unchanged)` : ''}.
+          <strong>${fresh.length}</strong> new, <strong>${conflicts.length}</strong> already have an account from an earlier term or course${trivialCount ? ` (${trivialCount} unchanged)` : ''}; no second account is made for them.
           Sections: ${esc(s.sections.join(', ') || '—')}.
           ${s.overridden ? `<div class="muted" style="margin-top:4px">${s.overridden} of them are
              here only because you approved a course or term mismatch above.</div>` : ''}

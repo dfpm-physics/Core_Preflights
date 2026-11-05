@@ -1,7 +1,7 @@
 # Student names, IDs and scores in a public repository — what may be committed
 
 **Date:** 2026-08-17 · **Decided by:** Matthew Recker (course director) · **Executed by:** Claude
-**Status:** accepted — the citation for the institutional verification is outstanding (§8)
+**Status:** accepted — see §9 for the current position on the citation
 
 *Companion to [`docs/findings/2026-08-13-student-pii-committed-to-public-repo.md`](../findings/2026-08-13-student-pii-committed-to-public-repo.md),
 which this reclassifies. See [`CHANGELOG.md`](../../CHANGELOG.md).*
@@ -163,3 +163,13 @@ and the operator who broke it redacts before committing.
   whether an instructor's name may be committed. Owner: course director.
 - **Whether the repo has ever been forked, cloned or crawler-indexed** is still unknown, as the
   finding's §4 recorded. It does not change this decision, and it would matter to the §7 reopening.
+
+---
+
+## 9. Note of 2026-11-04 on the citation (added; sections above not rewritten)
+
+*Matthew Recker via Claude, 2026-11-04.* The course director states that grade storage in PREP is
+cleared with the registrar, and that he has no specific source to cite for the guidance §5 and §8
+refer to. The determination in §5 therefore stands as a decision that rests on that clearance, and
+§7's falsifier is the test of it: any written guidance to the contrary reopens it. The "Owner: Casey" item in §8 is closed by this
+note. `CORE.md` §3 and `scripts/checks/name_scan.py` now say the same thing.

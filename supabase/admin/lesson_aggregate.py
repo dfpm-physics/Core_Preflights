@@ -634,6 +634,10 @@ def _lesson_meta(conn, slug, term=None):
     slug the ambiguity message suggests resolves to both and cannot separate them. Without this,
     the only remaining remedy was `is_active = false` on a live offering, i.e. taking the real
     course offline to aggregate the training one.
+
+    NAMING A TERM ALSO DROPS THE ACTIVE TEST. With `term` given, the lookup is by term code alone,
+    so a lesson of an offering that is not active (a training run, a term not yet started) can
+    still be found. Without `term`, only active offerings are searched, as before.
     """
     cur = conn.cursor(cursor_factory=RealDictCursor)
     cur.execute("""
@@ -654,7 +658,7 @@ def _lesson_meta(conn, slug, term=None):
           join terms                t  on t.id  = co.term_id
           join offering_activities  oa on oa.assignment_offering_id = ao.id
           join activities           act on act.id = oa.activity_id
-         where co.is_active
+         where (%(term)s is not null or co.is_active)
            and (%(term)s is null or t.code = %(term)s)
            and ao.id in (
                  select oa2.assignment_offering_id
@@ -1115,9 +1119,10 @@ def _existing_payload(conn, offering_id):
 def cmd_pull(args, conn):
     meta = _lesson_meta(conn, args.activity, getattr(args, "term", None))
     if not meta:
-        sys.exit(f"No lesson '{args.activity}' in an active offering "
-                 f"(tried it as both an assignment slug and an activity slug)."
-                 + (f" --term {args.term} may not match any active term." if getattr(args, "term", None) else ""))
+        term = getattr(args, "term", None)
+        sys.exit(f"No lesson '{args.activity}' in " + (f"term {term}" if term else "an active offering")
+                 + " (tried it as both an assignment slug and an activity slug)."
+                 + (f" --term {term} may not match any term." if term else ""))
     refl_qid = _reflection_question_id(meta.get("written_content"))
     response_qs = _graded_response_questions(meta.get("written_content"))
     reports = _load_reports(conn, meta["offering_id"], meta["interactive_id"],
@@ -1349,6 +1354,35 @@ def track_covered_sql(payload_expr, ids_expr):
             f"where not jsonb_exists(coalesce({payload_expr} -> 'scopes', '{{}}'::jsonb), sid))")
 
 
+# Deliveries whose work is submitted online and graded after a deadline: the only paths the
+# readiness jobs may read. A path of any other delivery (in person, elsewhere, online questions)
+# has no submission to wait for, so a deadline passing says nothing about it.
+GRADED_DELIVERIES = ["typed_response", "interactive_tutor"]
+
+
+def _refuse_null_delivery(cur, course):
+    """Stop the worklist when any path of an active offering has no delivery recorded.
+
+    The worklist filters on delivery, and a path with a null one matches no filter. Printing
+    "Nothing past due" in that state would hide a lesson without saying why, so it exits non-zero
+    and names how many rows it found.
+    """
+    cur.execute("""
+        select count(*) as n
+          from offering_activities oa
+          join assignment_offerings ao on ao.id = oa.assignment_offering_id
+          join course_offerings co on co.id = ao.course_offering_id
+          join courses c on c.id = co.course_id
+         where co.is_active and c.code = %(course)s and oa.delivery is null
+    """, {"course": course})
+    row = cur.fetchone()
+    n = row["n"] if isinstance(row, dict) else row[0]
+    if n:
+        sys.exit(f"{n} path row(s) of an active {course} offering have no delivery recorded, so the "
+                 f"worklist cannot tell which lessons it may offer. Nothing is listed. Fill the "
+                 f"delivery column for those rows, then re-run.")
+
+
 def _pick_latest(rows):
     """Which single track --latest reports, given the worklist ordered newest-deadline-first.
 
@@ -1419,6 +1453,7 @@ def cmd_worklist(args, conn):
         print(f"⚠ REHEARSAL — pretending the clock reads {as_of}. Nothing here is a live "
               f"instruction to run.\n")
     cur = conn.cursor(cursor_factory=RealDictCursor)
+    _refuse_null_delivery(cur, args.course)
     cur.execute("""
         with offering as (
           select co.id
@@ -1502,12 +1537,21 @@ def cmd_worklist(args, conn):
                ) d on true
          where d.due_at <= coalesce(%(as_of)s::timestamptz, now())
            and (%(day)s is null or d.track = %(day)s)
+           -- Published work with a graded path that is submitted online. Without this, an item
+           -- due at or after a preflight (or one still a draft) is listed instead of it, and
+           -- --latest reports "no submissions recorded" for the newest deadline forever.
+           and ao.is_published
+           and exists (select 1 from offering_activities oa
+                        where oa.assignment_offering_id = ao.id
+                          and oa.grading_role = 'graded'
+                          and oa.delivery = any(%(deliveries)s))
          -- d.track breaks the tie between tracks sharing one deadline. Without it the order of
          -- two otherwise-identical rows is whatever the plan happens to emit, and --latest picks
          -- from the top.
          order by d.due_at desc, a.slug, d.track
     """.replace("/*TRACK_COVERED*/", track_covered_sql("ar.payload", "d.section_ids")),
-        {"course": args.course, "day": day, "kind": KIND, "as_of": as_of})
+        {"course": args.course, "day": day, "kind": KIND, "as_of": as_of,
+         "deliveries": GRADED_DELIVERIES})
     rows = cur.fetchall()
     if not rows:
         msg = f"Nothing past due in {args.course}" + (f" for day {day}" if day else "") + "."

@@ -6,7 +6,8 @@ WHAT IT LOOKS FOR
     meaning. That is the standing rule as of 2026-08-17:
 
         name + cadet ID + score are NOT PII in this system, per institutional guidance received
-        (citation to be added by the course director) -- so IDs and scores may be committed. A
+        (grade storage is cleared with the registrar and the course director has no specific
+        source to cite, per the 2026-11-04 note in the decision record) -- so IDs and scores may be committed. A
         NAME may not, wherever an ID says the same thing.
 
     Reasoning, what it supersedes, and the accept-as-is ruling on git history:
@@ -102,6 +103,8 @@ SYNTHETIC_BLOCKS = (
 # Known-synthetic placeholders that happen to match a real roster row. Keyed on (path, student_id)
 # rather than on the path alone: a different cadet's name in the same file still fires.
 ALLOW = {
+    ("site/gemini/phys-110/lesson-33-universal-gravitation-d247e5a7.html", 3000141965):
+        "a physics history sentence that names two historical scientists, not a cadet",
     ("docs/operations/SYSTEM_GUIDE.md", 3000138988):
         "the CSV-format example's placeholder row -- the finding lists it so nobody 'fixes' it",
     ("tests/app-schema/test-roster-import.mjs", 3000138988):
@@ -295,7 +298,13 @@ def main():
                     help="machine-readable summary on stdout (masked names only)")
     ap.add_argument("--proximity", type=int, default=PROXIMITY,
                     help=f"characters allowed between the two matched tokens (default {PROXIMITY})")
+    ap.add_argument("--env-file", default=None,
+                    help="read the roster credential from this .env file; for a clone that holds none")
     args = ap.parse_args()
+
+    if args.env_file:
+        global ENV_FILE
+        ENV_FILE = pathlib.Path(args.env_file)
 
     rows = roster_via_db()
     source = "prep_app_read (session pooler)"

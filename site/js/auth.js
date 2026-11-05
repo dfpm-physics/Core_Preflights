@@ -198,6 +198,7 @@ async function resolveFacultyOfferings(ctx) {
       termCode: o.terms?.code,
       termLabel: o.terms?.label,
       termStarts: o.terms?.starts_on,
+      isActive: o.is_active,
       role: 'director',
     }));
     // A global admin's AUTHORITY comes from the flag, not from staff rows — that is what the
@@ -232,6 +233,7 @@ async function resolveFacultyOfferings(ctx) {
         termCode: o.terms?.code,
         termLabel: o.terms?.label,
         termStarts: o.terms?.starts_on,
+        isActive: o.is_active,
         role: isDirector ? 'director' : (prev?.role || sa.role),
       });
     });

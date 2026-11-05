@@ -1,6 +1,11 @@
 #!/usr/bin/env python
 """Migrate `public` content and roster into schema `app` (PREP v2).
 
+NOTE (2026-11-04, migration 026-039 review): the course_offerings upsert below sets is_active = true.
+    `course_offerings_one_active` (one ACTIVE offering per course) now refuses that when the course already has
+    a different active offering, so a rerun fails cleanly on the unique index with nothing written (one
+    transaction). The migration it records has already run; do not rerun it against a live schema.
+
 DRY RUN BY DEFAULT, per CORE.md: prints the full plan and writes nothing unless --commit
 is passed. Idempotent — every insert is keyed on a natural key and re-running changes
 nothing. The whole run is one transaction.

@@ -23,6 +23,7 @@
 //
 // Usage:  node tests/browser-harness/hold.mjs [--chrome <path>]
 
+import { NO_PRODUCTION_ARG } from './env.mjs';
 import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
@@ -78,7 +79,7 @@ window.CTL = wireHoldButton({
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 let passed = 0, failed = 0;
 
-const browser = await puppeteer.launch({ executablePath: CHROME, headless: 'new' });
+const browser = await puppeteer.launch({ executablePath: CHROME, headless: 'new', args: [NO_PRODUCTION_ARG] });
 
 async function run(label, drive, want) {
   const page = await browser.newPage();

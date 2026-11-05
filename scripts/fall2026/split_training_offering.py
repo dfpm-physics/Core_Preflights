@@ -1,6 +1,11 @@
 #!/usr/bin/env python
 """Split the phys-215 course offering into a TRAINING sandbox and a clean Fall 2026 offering.
 
+NOTE (2026-11-04, migration 026-039 review): this script has run and is kept as a record. It would now
+    stop at step 3. `course_offerings_one_active` allows one ACTIVE offering per course, and step 2 moves
+    the training offering to a new term without clearing its is_active flag, so the insert of the clean
+    offering is refused and the single transaction rolls back with nothing written. Do not rerun it as is.
+
 WHY
     The live phys-215 offering holds 81 seeded students, 72 submissions and 72 grades — training
     data, not a real roster (every one of those students has `email IS NULL`, so none of them can

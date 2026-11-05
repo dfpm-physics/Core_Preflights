@@ -8,9 +8,9 @@
 // Regenerate after any migration in supabase/migrations/app/ and commit the result:
 //   .venv/Scripts/python scripts/app/gen_db_schema.py
 //
-// tests/app-schema/test-db-schema.mjs fails when this file drifts from live.
+// tests/app-schema/test-db-schema.mjs fails when this file drifts from staging.
 //
-// Source: scripts/app/gen_db_schema.py · schema `app` · 26 tables
+// Source: scripts/app/gen_db_schema.py · schema `app` · 46 tables
 // Shape per table: { name, comment, rls, primaryKey[], labelColumn, columns[], foreignKeys[],
 //                    enums{col:[values]}, policyCommands[], writable }
 //
@@ -57,7 +57,7 @@ export const DB_SCHEMA = {
           "default": null,
           "maxLength": null,
           "generated": false,
-          "comment": null,
+          "comment": "written and interactive are the original two. questions (online question set marked by the system) and external (in person, or worked elsewhere and entered or imported) carry no artifact and no typed response.",
           "pk": false
         },
         {
@@ -143,7 +143,9 @@ export const DB_SCHEMA = {
       "enums": {
         "modality": [
           "written",
-          "interactive"
+          "interactive",
+          "questions",
+          "external"
         ]
       },
       "policyCommands": [
@@ -586,10 +588,58 @@ export const DB_SCHEMA = {
           "generated": false,
           "comment": null,
           "pk": false
+        },
+        {
+          "name": "report_code",
+          "type": "text",
+          "udt": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": "The heading and group a report prints for this kind. A label, never a switch for behaviour.",
+          "pk": false
+        },
+        {
+          "name": "default_delivery",
+          "type": "text",
+          "udt": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": "Prefill for the entry form only. No code branches on it; the path row (offering_activities) is what counts.",
+          "pk": false
+        },
+        {
+          "name": "default_grading",
+          "type": "text",
+          "udt": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": "Prefill for the entry form only. No code branches on it; the path row (offering_activities) is what counts.",
+          "pk": false
         }
       ],
       "foreignKeys": [],
-      "enums": {},
+      "enums": {
+        "default_delivery": [
+          "online_questions",
+          "typed_response",
+          "interactive_tutor",
+          "in_person",
+          "elsewhere"
+        ],
+        "default_grading": [
+          "auto_checked",
+          "human_graded",
+          "effort",
+          "hand_entered",
+          "imported"
+        ]
+      },
       "policyCommands": [
         "ALL",
         "SELECT"
@@ -769,6 +819,116 @@ export const DB_SCHEMA = {
           "generated": false,
           "comment": "Per-meeting-day deadlines for this scheduled assignment, keyed by the day letters used in sections.meeting_days: {\"M\": timestamptz, \"T\": timestamptz}. The DEFAULT deadline source for a section, resolved as due_by_day[day] for each day in that section's meeting_days. A section added after scheduling is therefore correct with no lesson re-save. Precedence: student extension > assignment_due_dates (explicit per-section override) > due_by_day > due_at. `{}` means no per-day schedule and due_at applies to everyone.",
           "pk": false
+        },
+        {
+          "name": "late_allowed",
+          "type": "boolean",
+          "udt": "bool",
+          "nullable": false,
+          "default": "false",
+          "maxLength": null,
+          "generated": false,
+          "comment": "Whether late work is accepted. The DEFAULT stays false so current preflights keep refusing late work; the new entry page starts it checked, as GRADE-RULES.md says.",
+          "pk": false
+        },
+        {
+          "name": "is_bonus",
+          "type": "boolean",
+          "udt": "bool",
+          "nullable": false,
+          "default": "false",
+          "maxLength": null,
+          "generated": false,
+          "comment": "Adds to earned only; contributes 0 to possible.",
+          "pk": false
+        },
+        {
+          "name": "allow_over_max",
+          "type": "boolean",
+          "udt": "bool",
+          "nullable": false,
+          "default": "false",
+          "maxLength": null,
+          "generated": false,
+          "comment": "An ordinary item (an exam with an extra-credit question) may score above its maximum.",
+          "pk": false
+        },
+        {
+          "name": "prog_included",
+          "type": "boolean",
+          "udt": "bool",
+          "nullable": false,
+          "default": "false",
+          "maxLength": null,
+          "generated": false,
+          "comment": "Counts at Prog. An instructor sets it, through set_prog_flag().",
+          "pk": false
+        },
+        {
+          "name": "grades_release_at",
+          "type": "timestamp with time zone",
+          "udt": "timestamptz",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": "NULL means a grade shows when it is finalized.",
+          "pk": false
+        },
+        {
+          "name": "attempt_limit",
+          "type": "smallint",
+          "udt": "int2",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": "Per question, auto-checked paths only. NULL means no limit.",
+          "pk": false
+        },
+        {
+          "name": "attempt_rule",
+          "type": "text",
+          "udt": "text",
+          "nullable": false,
+          "default": "'best'::text",
+          "maxLength": null,
+          "generated": false,
+          "comment": "Which attempt counts, per question: best, last or first.",
+          "pk": false
+        },
+        {
+          "name": "part_set_id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": "Joins required parts for display. See part_sets.",
+          "pk": false
+        },
+        {
+          "name": "entered_on_new_page",
+          "type": "boolean",
+          "udt": "bool",
+          "nullable": false,
+          "default": "false",
+          "maxLength": null,
+          "generated": false,
+          "comment": "Says which page owns a row: true means entered on a v2 page. TEMPORARY, removed at step 2 with the three step 1 rules. It says who owns the row, never what kind of work it is.",
+          "pk": false
+        },
+        {
+          "name": "is_group_work",
+          "type": "boolean",
+          "udt": "bool",
+          "nullable": false,
+          "default": "false",
+          "maxLength": null,
+          "generated": false,
+          "comment": "Group work: scores are spread to members through app.apply_group_score.",
+          "pk": false
         }
       ],
       "foreignKeys": [
@@ -793,9 +953,27 @@ export const DB_SCHEMA = {
             "id"
           ],
           "onDelete": "cascade"
+        },
+        {
+          "name": "assignment_offerings_part_set_fk",
+          "columns": [
+            "part_set_id",
+            "course_offering_id"
+          ],
+          "refTable": "part_sets",
+          "refColumns": [
+            "id",
+            "course_offering_id"
+          ],
+          "onDelete": "set null"
         }
       ],
       "enums": {
+        "attempt_rule": [
+          "best",
+          "last",
+          "first"
+        ],
         "grading_mode": [
           "effort",
           "points"
@@ -931,6 +1109,17 @@ export const DB_SCHEMA = {
           "generated": false,
           "comment": null,
           "pk": false
+        },
+        {
+          "name": "origin_assignment_id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": "Lineage for rollover. Rollover still makes new assignment and activity rows with new slugs; this only records where a copy came from. SET NULL, so deleting a source lesson still works.",
+          "pk": false
         }
       ],
       "foreignKeys": [
@@ -955,6 +1144,484 @@ export const DB_SCHEMA = {
             "id"
           ],
           "onDelete": "no action"
+        },
+        {
+          "name": "assignments_origin_assignment_id_fkey",
+          "columns": [
+            "origin_assignment_id"
+          ],
+          "refTable": "assignments",
+          "refColumns": [
+            "id"
+          ],
+          "onDelete": "set null"
+        }
+      ],
+      "enums": {},
+      "policyCommands": [
+        "ALL",
+        "SELECT"
+      ],
+      "writable": true
+    },
+    "checkpoint_tie_choices": {
+      "name": "checkpoint_tie_choices",
+      "comment": null,
+      "rls": true,
+      "primaryKey": [
+        "run_id",
+        "tie_group"
+      ],
+      "labelColumn": "run_id",
+      "columns": [
+        {
+          "name": "run_id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": true
+        },
+        {
+          "name": "tie_group",
+          "type": "text",
+          "udt": "text",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": true
+        },
+        {
+          "name": "choice",
+          "type": "text",
+          "udt": "text",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "chosen_by",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "chosen_at",
+          "type": "timestamp with time zone",
+          "udt": "timestamptz",
+          "nullable": false,
+          "default": "now()",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        }
+      ],
+      "foreignKeys": [
+        {
+          "name": "checkpoint_tie_choices_run_id_fkey",
+          "columns": [
+            "run_id"
+          ],
+          "refTable": "grade_checkpoint_runs",
+          "refColumns": [
+            "id"
+          ],
+          "onDelete": "restrict"
+        }
+      ],
+      "enums": {
+        "choice": [
+          "same_rank",
+          "alphabetical"
+        ]
+      },
+      "policyCommands": [
+        "SELECT"
+      ],
+      "writable": false
+    },
+    "column_closures": {
+      "name": "column_closures",
+      "comment": "An instructor closes the column of a no-submission item for one section. Before that a blank is awaiting entry and leaves the total; after it a blank counts 0. Nothing closes by itself. Reopening stamps reopened_at; the row stays as the record.",
+      "rls": true,
+      "primaryKey": [
+        "id"
+      ],
+      "labelColumn": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": true
+        },
+        {
+          "name": "assignment_offering_id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "section_id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "closed_by",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "closed_at",
+          "type": "timestamp with time zone",
+          "udt": "timestamptz",
+          "nullable": false,
+          "default": "now()",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "reopened_by",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "reopened_at",
+          "type": "timestamp with time zone",
+          "udt": "timestamptz",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        }
+      ],
+      "foreignKeys": [
+        {
+          "name": "column_closures_assignment_offering_id_fkey",
+          "columns": [
+            "assignment_offering_id"
+          ],
+          "refTable": "assignment_offerings",
+          "refColumns": [
+            "id"
+          ],
+          "onDelete": "cascade"
+        },
+        {
+          "name": "column_closures_closed_by_fkey",
+          "columns": [
+            "closed_by"
+          ],
+          "refTable": "instructors",
+          "refColumns": [
+            "id"
+          ],
+          "onDelete": "set null"
+        },
+        {
+          "name": "column_closures_reopened_by_fkey",
+          "columns": [
+            "reopened_by"
+          ],
+          "refTable": "instructors",
+          "refColumns": [
+            "id"
+          ],
+          "onDelete": "set null"
+        },
+        {
+          "name": "column_closures_section_id_fkey",
+          "columns": [
+            "section_id"
+          ],
+          "refTable": "sections",
+          "refColumns": [
+            "id"
+          ],
+          "onDelete": "cascade"
+        }
+      ],
+      "enums": {},
+      "policyCommands": [
+        "INSERT",
+        "SELECT",
+        "UPDATE"
+      ],
+      "writable": true
+    },
+    "course_grade_history": {
+      "name": "course_grade_history",
+      "comment": "Prior terms' averages and GPAs, entered by hand; later terms fill from approved checkpoints. The comparison report prints two prior terms. Staff of the course read, Directors write, no student policy.",
+      "rls": true,
+      "primaryKey": [
+        "id"
+      ],
+      "labelColumn": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": true
+        },
+        {
+          "name": "course_id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "term_report_code",
+          "type": "text",
+          "udt": "text",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "prog_gpa",
+          "type": "numeric",
+          "udt": "numeric",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "final_gpa",
+          "type": "numeric",
+          "udt": "numeric",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "prog_avg",
+          "type": "numeric",
+          "udt": "numeric",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "final_avg",
+          "type": "numeric",
+          "udt": "numeric",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "source",
+          "type": "text",
+          "udt": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "udt": "timestamptz",
+          "nullable": false,
+          "default": "now()",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        }
+      ],
+      "foreignKeys": [
+        {
+          "name": "course_grade_history_course_id_fkey",
+          "columns": [
+            "course_id"
+          ],
+          "refTable": "courses",
+          "refColumns": [
+            "id"
+          ],
+          "onDelete": "cascade"
+        }
+      ],
+      "enums": {},
+      "policyCommands": [
+        "ALL",
+        "SELECT"
+      ],
+      "writable": true
+    },
+    "course_offering_settings": {
+      "name": "course_offering_settings",
+      "comment": "Staff-only settings of one course offering. A row is optional. Kept apart from course_offerings because every cadet of an offering can read every column of their course_offerings row.",
+      "rls": true,
+      "primaryKey": [
+        "course_offering_id"
+      ],
+      "labelColumn": "course_offering_id",
+      "columns": [
+        {
+          "name": "course_offering_id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": true
+        },
+        {
+          "name": "incoming_gpa",
+          "type": "numeric",
+          "udt": "numeric",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "blackboard_export",
+          "type": "boolean",
+          "udt": "bool",
+          "nullable": false,
+          "default": "false",
+          "maxLength": null,
+          "generated": false,
+          "comment": "Whether this course uses the one-overall-grade Blackboard export.",
+          "pk": false
+        },
+        {
+          "name": "bb_prog_column",
+          "type": "text",
+          "udt": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "bb_final_column",
+          "type": "text",
+          "udt": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "udt": "timestamptz",
+          "nullable": false,
+          "default": "now()",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "udt": "timestamptz",
+          "nullable": false,
+          "default": "now()",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        }
+      ],
+      "foreignKeys": [
+        {
+          "name": "course_offering_settings_course_offering_id_fkey",
+          "columns": [
+            "course_offering_id"
+          ],
+          "refTable": "course_offerings",
+          "refColumns": [
+            "id"
+          ],
+          "onDelete": "cascade"
         }
       ],
       "enums": {},
@@ -1011,10 +1678,10 @@ export const DB_SCHEMA = {
           "type": "boolean",
           "udt": "bool",
           "nullable": false,
-          "default": "true",
+          "default": "false",
           "maxLength": null,
           "generated": false,
-          "comment": null,
+          "comment": "Steers tools, not people: it decides what jobs and the Health page look at. It hides a course from nobody. DEFAULT false; at most one active offering per course (course_offerings_one_active).",
           "pk": false
         },
         {
@@ -1133,6 +1800,28 @@ export const DB_SCHEMA = {
           "maxLength": null,
           "generated": false,
           "comment": null,
+          "pk": false
+        },
+        {
+          "name": "subject",
+          "type": "text",
+          "udt": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": "Report heading, for example PHYS. Provisional until the report copies arrive.",
+          "pk": false
+        },
+        {
+          "name": "course_number",
+          "type": "text",
+          "udt": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": "Report heading, for example 215. Provisional until the report copies arrive.",
           "pk": false
         }
       ],
@@ -1840,6 +2529,438 @@ export const DB_SCHEMA = {
       ],
       "writable": true
     },
+    "grade_checkpoint_rows": {
+      "name": "grade_checkpoint_rows",
+      "comment": "A frozen record. enrollment_id, student_id and section_id are plain values with no foreign key, so removing a person or a section never touches an approved record.",
+      "rls": true,
+      "primaryKey": [
+        "run_id",
+        "enrollment_id"
+      ],
+      "labelColumn": "run_id",
+      "columns": [
+        {
+          "name": "run_id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": true
+        },
+        {
+          "name": "enrollment_id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": true
+        },
+        {
+          "name": "student_id",
+          "type": "bigint",
+          "udt": "int8",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "section_id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "earned",
+          "type": "numeric",
+          "udt": "numeric",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "possible",
+          "type": "numeric",
+          "udt": "numeric",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "percent_text",
+          "type": "text",
+          "udt": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "percent_key",
+          "type": "text",
+          "udt": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "letter",
+          "type": "text",
+          "udt": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "gpa",
+          "type": "numeric",
+          "udt": "numeric",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "rank",
+          "type": "integer",
+          "udt": "int4",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "tie_group",
+          "type": "text",
+          "udt": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "near_line_letter",
+          "type": "text",
+          "udt": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "missing_count",
+          "type": "integer",
+          "udt": "int4",
+          "nullable": false,
+          "default": "0",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "ungraded_count",
+          "type": "integer",
+          "udt": "int4",
+          "nullable": false,
+          "default": "0",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "unreleased_count",
+          "type": "integer",
+          "udt": "int4",
+          "nullable": false,
+          "default": "0",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "excused_count",
+          "type": "integer",
+          "udt": "int4",
+          "nullable": false,
+          "default": "0",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        }
+      ],
+      "foreignKeys": [
+        {
+          "name": "grade_checkpoint_rows_run_id_fkey",
+          "columns": [
+            "run_id"
+          ],
+          "refTable": "grade_checkpoint_runs",
+          "refColumns": [
+            "id"
+          ],
+          "onDelete": "restrict"
+        }
+      ],
+      "enums": {},
+      "policyCommands": [
+        "SELECT"
+      ],
+      "writable": false
+    },
+    "grade_checkpoint_runs": {
+      "name": "grade_checkpoint_runs",
+      "comment": "One run of a Prog or Final checkpoint. Every run is kept. Once approved the header refuses every change except approved -> superseded; the rows and tie choices refuse every write.",
+      "rls": true,
+      "primaryKey": [
+        "id"
+      ],
+      "labelColumn": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": true
+        },
+        {
+          "name": "course_offering_id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "period",
+          "type": "text",
+          "udt": "text",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "run_no",
+          "type": "integer",
+          "udt": "int4",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "status",
+          "type": "text",
+          "udt": "text",
+          "nullable": false,
+          "default": "'draft'::text",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "scale_snapshot",
+          "type": "jsonb",
+          "udt": "jsonb",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "rule_version",
+          "type": "text",
+          "udt": "text",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "as_of",
+          "type": "timestamp with time zone",
+          "udt": "timestamptz",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "source_fingerprint",
+          "type": "text",
+          "udt": "text",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "exceptions",
+          "type": "jsonb",
+          "udt": "jsonb",
+          "nullable": false,
+          "default": "'[]'::jsonb",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "created_by",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "udt": "timestamptz",
+          "nullable": false,
+          "default": "now()",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "approved_by",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "approved_at",
+          "type": "timestamp with time zone",
+          "udt": "timestamptz",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "revises_run_id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        }
+      ],
+      "foreignKeys": [
+        {
+          "name": "grade_checkpoint_runs_course_offering_id_fkey",
+          "columns": [
+            "course_offering_id"
+          ],
+          "refTable": "course_offerings",
+          "refColumns": [
+            "id"
+          ],
+          "onDelete": "restrict"
+        },
+        {
+          "name": "grade_checkpoint_runs_revises_run_id_fkey",
+          "columns": [
+            "revises_run_id"
+          ],
+          "refTable": "grade_checkpoint_runs",
+          "refColumns": [
+            "id"
+          ],
+          "onDelete": "restrict"
+        }
+      ],
+      "enums": {
+        "period": [
+          "prog",
+          "final"
+        ],
+        "status": [
+          "draft",
+          "approved",
+          "superseded"
+        ]
+      },
+      "policyCommands": [
+        "SELECT"
+      ],
+      "writable": false
+    },
     "grade_events": {
       "name": "grade_events",
       "comment": "Append-only audit. Cheap insurance: a retroactive rescore silently corrupted totals in the old system once already.",
@@ -1944,6 +3065,280 @@ export const DB_SCHEMA = {
       "policyCommands": [
         "INSERT",
         "SELECT"
+      ],
+      "writable": true
+    },
+    "grade_excusal_events": {
+      "name": "grade_excusal_events",
+      "comment": "Append-only. Written only by the SECURITY DEFINER trigger on grade_excusals; no foreign keys, so the log outlives the excusal, the enrollment and the lesson it describes.",
+      "rls": true,
+      "primaryKey": [
+        "id"
+      ],
+      "labelColumn": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": true
+        },
+        {
+          "name": "excusal_id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "enrollment_id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "assignment_offering_id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "action",
+          "type": "text",
+          "udt": "text",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "actor",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "at",
+          "type": "timestamp with time zone",
+          "udt": "timestamptz",
+          "nullable": false,
+          "default": "now()",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "reason",
+          "type": "text",
+          "udt": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        }
+      ],
+      "foreignKeys": [],
+      "enums": {
+        "action": [
+          "excused",
+          "revoked",
+          "removed"
+        ]
+      },
+      "policyCommands": [
+        "SELECT"
+      ],
+      "writable": false
+    },
+    "grade_excusals": {
+      "name": "grade_excusals",
+      "comment": "An excusal removes an item from a student's total. Only a Director can set one (RLS), every change is logged (grade_excusal_events), and the grade row is never touched. Removal is a revoke, never a delete.",
+      "rls": true,
+      "primaryKey": [
+        "id"
+      ],
+      "labelColumn": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": true
+        },
+        {
+          "name": "enrollment_id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "assignment_offering_id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "reason",
+          "type": "text",
+          "udt": "text",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "set_by",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "set_at",
+          "type": "timestamp with time zone",
+          "udt": "timestamptz",
+          "nullable": false,
+          "default": "now()",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "revoked_at",
+          "type": "timestamp with time zone",
+          "udt": "timestamptz",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "revoked_by",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "revoked_reason",
+          "type": "text",
+          "udt": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        }
+      ],
+      "foreignKeys": [
+        {
+          "name": "grade_excusals_assignment_offering_id_fkey",
+          "columns": [
+            "assignment_offering_id"
+          ],
+          "refTable": "assignment_offerings",
+          "refColumns": [
+            "id"
+          ],
+          "onDelete": "cascade"
+        },
+        {
+          "name": "grade_excusals_enrollment_id_fkey",
+          "columns": [
+            "enrollment_id"
+          ],
+          "refTable": "enrollments",
+          "refColumns": [
+            "id"
+          ],
+          "onDelete": "cascade"
+        },
+        {
+          "name": "grade_excusals_revoked_by_fkey",
+          "columns": [
+            "revoked_by"
+          ],
+          "refTable": "instructors",
+          "refColumns": [
+            "id"
+          ],
+          "onDelete": "set null"
+        },
+        {
+          "name": "grade_excusals_set_by_fkey",
+          "columns": [
+            "set_by"
+          ],
+          "refTable": "instructors",
+          "refColumns": [
+            "id"
+          ],
+          "onDelete": "set null"
+        }
+      ],
+      "enums": {},
+      "policyCommands": [
+        "INSERT",
+        "SELECT",
+        "UPDATE"
       ],
       "writable": true
     },
@@ -2120,6 +3515,39 @@ export const DB_SCHEMA = {
           "generated": false,
           "comment": null,
           "pk": false
+        },
+        {
+          "name": "over_max_allowed",
+          "type": "boolean",
+          "udt": "bool",
+          "nullable": false,
+          "default": "false",
+          "maxLength": null,
+          "generated": false,
+          "comment": "True only when a trigger found the offering is_bonus or allow_over_max. A client cannot set it: grades_over_max_guard overwrites whatever was sent.",
+          "pk": false
+        },
+        {
+          "name": "student_group_id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": "The group this grade was written from, if any. The grade outlives the group.",
+          "pk": false
+        },
+        {
+          "name": "student_group_adjusted",
+          "type": "boolean",
+          "udt": "bool",
+          "nullable": false,
+          "default": "false",
+          "maxLength": null,
+          "generated": false,
+          "comment": "True once one member's score was changed by hand. apply_group_score skips such rows unless a Director names them.",
+          "pk": false
         }
       ],
       "foreignKeys": [
@@ -2157,6 +3585,17 @@ export const DB_SCHEMA = {
           "onDelete": "set null"
         },
         {
+          "name": "grades_student_group_id_fkey",
+          "columns": [
+            "student_group_id"
+          ],
+          "refTable": "student_groups",
+          "refColumns": [
+            "id"
+          ],
+          "onDelete": "set null"
+        },
+        {
           "name": "grades_submission_id_fkey",
           "columns": [
             "submission_id"
@@ -2173,7 +3612,8 @@ export const DB_SCHEMA = {
           "instructor",
           "ai_suggested",
           "derived",
-          "imported"
+          "imported",
+          "auto_checked"
         ]
       },
       "policyCommands": [
@@ -2242,6 +3682,263 @@ export const DB_SCHEMA = {
         "ALL",
         "SELECT",
         "UPDATE"
+      ],
+      "writable": true
+    },
+    "key_remark_runs": {
+      "name": "key_remark_runs",
+      "comment": "One row per re-mark of a question against a corrected key: who, when, from and to which version, how many attempts changed, and how many instructor-corrected grades were listed rather than changed. Written by app.remark_question (Stage E).",
+      "rls": true,
+      "primaryKey": [
+        "id"
+      ],
+      "labelColumn": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": true
+        },
+        {
+          "name": "question_id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "from_key_version",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "to_key_version",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "run_by",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "run_at",
+          "type": "timestamp with time zone",
+          "udt": "timestamptz",
+          "nullable": false,
+          "default": "now()",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "attempts_changed",
+          "type": "integer",
+          "udt": "int4",
+          "nullable": false,
+          "default": "0",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "grades_recomputed",
+          "type": "integer",
+          "udt": "int4",
+          "nullable": false,
+          "default": "0",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "grades_listed",
+          "type": "integer",
+          "udt": "int4",
+          "nullable": false,
+          "default": "0",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        }
+      ],
+      "foreignKeys": [
+        {
+          "name": "key_remark_runs_question_id_fkey",
+          "columns": [
+            "question_id"
+          ],
+          "refTable": "questions",
+          "refColumns": [
+            "id"
+          ],
+          "onDelete": "cascade"
+        }
+      ],
+      "enums": {},
+      "policyCommands": [
+        "SELECT"
+      ],
+      "writable": false
+    },
+    "letter_scales": {
+      "name": "letter_scales",
+      "comment": "Versioned letter scale per course offering. Editing makes a new version and retires the old one; checkpoints keep a copy of the scale they used. An offering with no row uses default_letter_scale().",
+      "rls": true,
+      "primaryKey": [
+        "id"
+      ],
+      "labelColumn": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": true
+        },
+        {
+          "name": "course_offering_id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "version",
+          "type": "integer",
+          "udt": "int4",
+          "nullable": false,
+          "default": "1",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "lines",
+          "type": "jsonb",
+          "udt": "jsonb",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "near_line_width",
+          "type": "numeric",
+          "udt": "numeric",
+          "nullable": false,
+          "default": "0.1",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "created_by",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "udt": "timestamptz",
+          "nullable": false,
+          "default": "now()",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "retired_at",
+          "type": "timestamp with time zone",
+          "udt": "timestamptz",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        }
+      ],
+      "foreignKeys": [
+        {
+          "name": "letter_scales_course_offering_id_fkey",
+          "columns": [
+            "course_offering_id"
+          ],
+          "refTable": "course_offerings",
+          "refColumns": [
+            "id"
+          ],
+          "onDelete": "cascade"
+        },
+        {
+          "name": "letter_scales_created_by_fkey",
+          "columns": [
+            "created_by"
+          ],
+          "refTable": "instructors",
+          "refColumns": [
+            "id"
+          ],
+          "onDelete": "set null"
+        }
+      ],
+      "enums": {},
+      "policyCommands": [
+        "ALL",
+        "SELECT"
       ],
       "writable": true
     },
@@ -2320,6 +4017,39 @@ export const DB_SCHEMA = {
           "generated": false,
           "comment": null,
           "pk": false
+        },
+        {
+          "name": "delivery",
+          "type": "text",
+          "udt": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": "How the student does the work. Nullable until step 2 (NOT NULL after the backfill); the fill trigger supplies it for written and interactive paths.",
+          "pk": false
+        },
+        {
+          "name": "grading",
+          "type": "text",
+          "udt": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": "How the work is graded. See offering_activities_delivery_grading_ck for the allowed pairs.",
+          "pk": false
+        },
+        {
+          "name": "warn_earns_full",
+          "type": "boolean",
+          "udt": "bool",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": "Whether a yellow (warn) mark earns full credit. True only with human_graded. New items write false; backfilled preflights write true.",
+          "pk": false
         }
       ],
       "foreignKeys": [
@@ -2355,6 +4085,763 @@ export const DB_SCHEMA = {
         "grading_role": [
           "graded",
           "practice"
+        ]
+      },
+      "policyCommands": [
+        "ALL",
+        "SELECT"
+      ],
+      "writable": true
+    },
+    "part_sets": {
+      "name": "part_sets",
+      "comment": "Required parts of one piece of work (a lab: prelab online, report elsewhere). Each part is its own assignment_offerings row with its own column, points, deadline and grade; this row only joins them for display. Alternatives (do one of these) are NOT parts: those stay as several graded paths on one offering.",
+      "rls": true,
+      "primaryKey": [
+        "id"
+      ],
+      "labelColumn": "title",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": true
+        },
+        {
+          "name": "course_offering_id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "title",
+          "type": "text",
+          "udt": "text",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "position",
+          "type": "integer",
+          "udt": "int4",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "udt": "timestamptz",
+          "nullable": false,
+          "default": "now()",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        }
+      ],
+      "foreignKeys": [
+        {
+          "name": "part_sets_course_offering_id_fkey",
+          "columns": [
+            "course_offering_id"
+          ],
+          "refTable": "course_offerings",
+          "refColumns": [
+            "id"
+          ],
+          "onDelete": "cascade"
+        }
+      ],
+      "enums": {},
+      "policyCommands": [
+        "ALL",
+        "SELECT"
+      ],
+      "writable": true
+    },
+    "question_attempts": {
+      "name": "question_attempts",
+      "comment": "Every answer is a row, written only by a server function. The grade is recomputed from these rows and written to grades (source auto_checked); the total reads grades, never attempts. answer holds the raw text and parsed_value the number read from it. key_version_id records which key version marked it.",
+      "rls": true,
+      "primaryKey": [
+        "id"
+      ],
+      "labelColumn": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": true
+        },
+        {
+          "name": "enrollment_id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "assignment_offering_id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "question_id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "attempt_no",
+          "type": "integer",
+          "udt": "int4",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "answer",
+          "type": "jsonb",
+          "udt": "jsonb",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "parsed_value",
+          "type": "numeric",
+          "udt": "numeric",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "is_correct",
+          "type": "boolean",
+          "udt": "bool",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "points_awarded",
+          "type": "numeric",
+          "udt": "numeric",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "key_version_id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "answered_at",
+          "type": "timestamp with time zone",
+          "udt": "timestamptz",
+          "nullable": false,
+          "default": "now()",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "is_late",
+          "type": "boolean",
+          "udt": "bool",
+          "nullable": false,
+          "default": "false",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        }
+      ],
+      "foreignKeys": [
+        {
+          "name": "question_attempts_assignment_offering_id_fkey",
+          "columns": [
+            "assignment_offering_id"
+          ],
+          "refTable": "assignment_offerings",
+          "refColumns": [
+            "id"
+          ],
+          "onDelete": "cascade"
+        },
+        {
+          "name": "question_attempts_enrollment_id_fkey",
+          "columns": [
+            "enrollment_id"
+          ],
+          "refTable": "enrollments",
+          "refColumns": [
+            "id"
+          ],
+          "onDelete": "cascade"
+        },
+        {
+          "name": "question_attempts_key_version_id_fkey",
+          "columns": [
+            "key_version_id"
+          ],
+          "refTable": "question_keys",
+          "refColumns": [
+            "id"
+          ],
+          "onDelete": "restrict"
+        },
+        {
+          "name": "question_attempts_question_id_fkey",
+          "columns": [
+            "question_id"
+          ],
+          "refTable": "questions",
+          "refColumns": [
+            "id"
+          ],
+          "onDelete": "restrict"
+        }
+      ],
+      "enums": {},
+      "policyCommands": [
+        "SELECT"
+      ],
+      "writable": false
+    },
+    "question_keys": {
+      "name": "question_keys",
+      "comment": "Answer keys. Staff-only and versioned; a corrected key is a new version and the old one gets superseded_at. variant_key is empty today, so per-student values can be added later with no change here. A correct value of 0 must carry tol_abs, because a percentage tolerance is useless there. NO student policy, ever.",
+      "rls": true,
+      "primaryKey": [
+        "id"
+      ],
+      "labelColumn": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": true
+        },
+        {
+          "name": "question_id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "variant_key",
+          "type": "text",
+          "udt": "text",
+          "nullable": false,
+          "default": "''::text",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "version",
+          "type": "integer",
+          "udt": "int4",
+          "nullable": false,
+          "default": "1",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "correct_choice_ids",
+          "type": "ARRAY",
+          "udt": "_text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "select_rule",
+          "type": "text",
+          "udt": "text",
+          "nullable": false,
+          "default": "'all_or_nothing'::text",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "value",
+          "type": "numeric",
+          "udt": "numeric",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "tol_abs",
+          "type": "numeric",
+          "udt": "numeric",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "tol_pct",
+          "type": "numeric",
+          "udt": "numeric",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "sig_figs",
+          "type": "smallint",
+          "udt": "int2",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "sig_fig_mode",
+          "type": "text",
+          "udt": "text",
+          "nullable": false,
+          "default": "'ignore'::text",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "unit",
+          "type": "text",
+          "udt": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "unit_aliases",
+          "type": "ARRAY",
+          "udt": "_text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "unit_mode",
+          "type": "text",
+          "udt": "text",
+          "nullable": false,
+          "default": "'ignore'::text",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "reference_text",
+          "type": "text",
+          "udt": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "written_by",
+          "type": "text",
+          "udt": "text",
+          "nullable": false,
+          "default": "'human'::text",
+          "maxLength": null,
+          "generated": false,
+          "comment": "human or ai. Publishing is refused while an ai-written key has no checked_by.",
+          "pk": false
+        },
+        {
+          "name": "checked_by",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "checked_at",
+          "type": "timestamp with time zone",
+          "udt": "timestamptz",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "created_by",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "udt": "timestamptz",
+          "nullable": false,
+          "default": "now()",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "superseded_at",
+          "type": "timestamp with time zone",
+          "udt": "timestamptz",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        }
+      ],
+      "foreignKeys": [
+        {
+          "name": "question_keys_checked_by_fkey",
+          "columns": [
+            "checked_by"
+          ],
+          "refTable": "instructors",
+          "refColumns": [
+            "id"
+          ],
+          "onDelete": "set null"
+        },
+        {
+          "name": "question_keys_created_by_fkey",
+          "columns": [
+            "created_by"
+          ],
+          "refTable": "instructors",
+          "refColumns": [
+            "id"
+          ],
+          "onDelete": "set null"
+        },
+        {
+          "name": "question_keys_question_id_fkey",
+          "columns": [
+            "question_id"
+          ],
+          "refTable": "questions",
+          "refColumns": [
+            "id"
+          ],
+          "onDelete": "cascade"
+        }
+      ],
+      "enums": {
+        "sig_fig_mode": [
+          "ignore",
+          "warn",
+          "require"
+        ],
+        "unit_mode": [
+          "ignore",
+          "warn",
+          "require"
+        ],
+        "written_by": [
+          "human",
+          "ai"
+        ]
+      },
+      "policyCommands": [
+        "ALL",
+        "SELECT"
+      ],
+      "writable": true
+    },
+    "questions": {
+      "name": "questions",
+      "comment": "One row per question of an activity. qid is the stable id (the key in grades.question_scores) and is never reused. A retired question stays, so old attempts still resolve. Answer keys are NOT here; see question_keys.",
+      "rls": true,
+      "primaryKey": [
+        "id"
+      ],
+      "labelColumn": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": true
+        },
+        {
+          "name": "activity_id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "qid",
+          "type": "text",
+          "udt": "text",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "position",
+          "type": "smallint",
+          "udt": "int2",
+          "nullable": false,
+          "default": "0",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "prompt_md",
+          "type": "text",
+          "udt": "text",
+          "nullable": false,
+          "default": "''::text",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "figure_url",
+          "type": "text",
+          "udt": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "unit_hint",
+          "type": "text",
+          "udt": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "is_retired",
+          "type": "boolean",
+          "udt": "bool",
+          "nullable": false,
+          "default": "false",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "format",
+          "type": "text",
+          "udt": "text",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "choices",
+          "type": "jsonb",
+          "udt": "jsonb",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": "[{\"id\",\"text\"}] for multiple choice and select. Which choice is correct is not stored here.",
+          "pk": false
+        },
+        {
+          "name": "points",
+          "type": "numeric",
+          "udt": "numeric",
+          "nullable": false,
+          "default": "0",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "udt": "timestamptz",
+          "nullable": false,
+          "default": "now()",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "udt": "timestamptz",
+          "nullable": false,
+          "default": "now()",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        }
+      ],
+      "foreignKeys": [
+        {
+          "name": "questions_activity_id_fkey",
+          "columns": [
+            "activity_id"
+          ],
+          "refTable": "activities",
+          "refColumns": [
+            "id"
+          ],
+          "onDelete": "cascade"
+        }
+      ],
+      "enums": {
+        "format": [
+          "multiple_choice",
+          "multiple_select",
+          "numeric",
+          "prose"
         ]
       },
       "policyCommands": [
@@ -2907,6 +5394,402 @@ export const DB_SCHEMA = {
       ],
       "writable": true
     },
+    "student_group_grades": {
+      "name": "student_group_grades",
+      "comment": "The group's score for an item. Each member still gets a normal grades row written from it.",
+      "rls": true,
+      "primaryKey": [
+        "group_id",
+        "assignment_offering_id"
+      ],
+      "labelColumn": "group_id",
+      "columns": [
+        {
+          "name": "group_id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": true
+        },
+        {
+          "name": "assignment_offering_id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": true
+        },
+        {
+          "name": "points",
+          "type": "numeric",
+          "udt": "numeric",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "entered_by",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "entered_at",
+          "type": "timestamp with time zone",
+          "udt": "timestamptz",
+          "nullable": false,
+          "default": "now()",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        }
+      ],
+      "foreignKeys": [
+        {
+          "name": "student_group_grades_assignment_offering_id_fkey",
+          "columns": [
+            "assignment_offering_id"
+          ],
+          "refTable": "assignment_offerings",
+          "refColumns": [
+            "id"
+          ],
+          "onDelete": "cascade"
+        },
+        {
+          "name": "student_group_grades_group_id_fkey",
+          "columns": [
+            "group_id"
+          ],
+          "refTable": "student_groups",
+          "refColumns": [
+            "id"
+          ],
+          "onDelete": "cascade"
+        }
+      ],
+      "enums": {},
+      "policyCommands": [
+        "ALL",
+        "SELECT"
+      ],
+      "writable": true
+    },
+    "student_group_members": {
+      "name": "student_group_members",
+      "comment": null,
+      "rls": true,
+      "primaryKey": [
+        "id"
+      ],
+      "labelColumn": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": true
+        },
+        {
+          "name": "group_id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "enrollment_id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "joined_at",
+          "type": "timestamp with time zone",
+          "udt": "timestamptz",
+          "nullable": false,
+          "default": "now()",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "left_at",
+          "type": "timestamp with time zone",
+          "udt": "timestamptz",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        }
+      ],
+      "foreignKeys": [
+        {
+          "name": "student_group_members_enrollment_id_fkey",
+          "columns": [
+            "enrollment_id"
+          ],
+          "refTable": "enrollments",
+          "refColumns": [
+            "id"
+          ],
+          "onDelete": "cascade"
+        },
+        {
+          "name": "student_group_members_group_id_fkey",
+          "columns": [
+            "group_id"
+          ],
+          "refTable": "student_groups",
+          "refColumns": [
+            "id"
+          ],
+          "onDelete": "cascade"
+        }
+      ],
+      "enums": {},
+      "policyCommands": [
+        "ALL",
+        "SELECT"
+      ],
+      "writable": true
+    },
+    "student_group_snapshots": {
+      "name": "student_group_snapshots",
+      "comment": "Who was in the group when that work was handed in. Plain who-column, no foreign key.",
+      "rls": true,
+      "primaryKey": [
+        "id"
+      ],
+      "labelColumn": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": true
+        },
+        {
+          "name": "group_id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "assignment_offering_id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "enrollment_id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "captured_at",
+          "type": "timestamp with time zone",
+          "udt": "timestamptz",
+          "nullable": false,
+          "default": "now()",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "captured_by",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "reason",
+          "type": "text",
+          "udt": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        }
+      ],
+      "foreignKeys": [
+        {
+          "name": "student_group_snapshots_assignment_offering_id_fkey",
+          "columns": [
+            "assignment_offering_id"
+          ],
+          "refTable": "assignment_offerings",
+          "refColumns": [
+            "id"
+          ],
+          "onDelete": "cascade"
+        },
+        {
+          "name": "student_group_snapshots_enrollment_id_fkey",
+          "columns": [
+            "enrollment_id"
+          ],
+          "refTable": "enrollments",
+          "refColumns": [
+            "id"
+          ],
+          "onDelete": "cascade"
+        },
+        {
+          "name": "student_group_snapshots_group_id_fkey",
+          "columns": [
+            "group_id"
+          ],
+          "refTable": "student_groups",
+          "refColumns": [
+            "id"
+          ],
+          "onDelete": "cascade"
+        }
+      ],
+      "enums": {},
+      "policyCommands": [
+        "ALL",
+        "SELECT"
+      ],
+      "writable": true
+    },
+    "student_groups": {
+      "name": "student_groups",
+      "comment": "A named group of enrollments within one course offering, for group work.",
+      "rls": true,
+      "primaryKey": [
+        "id"
+      ],
+      "labelColumn": "name",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": true
+        },
+        {
+          "name": "course_offering_id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "udt": "text",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "udt": "timestamptz",
+          "nullable": false,
+          "default": "now()",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        }
+      ],
+      "foreignKeys": [
+        {
+          "name": "student_groups_course_offering_id_fkey",
+          "columns": [
+            "course_offering_id"
+          ],
+          "refTable": "course_offerings",
+          "refColumns": [
+            "id"
+          ],
+          "onDelete": "cascade"
+        }
+      ],
+      "enums": {},
+      "policyCommands": [
+        "ALL",
+        "SELECT"
+      ],
+      "writable": true
+    },
     "students": {
       "name": "students",
       "comment": "The person, independent of any course. Cadet ID kept as a natural PK — it is the one key here that genuinely identifies its subject.",
@@ -3046,6 +5929,17 @@ export const DB_SCHEMA = {
           "maxLength": null,
           "generated": false,
           "comment": null,
+          "pk": false
+        },
+        {
+          "name": "class_year",
+          "type": "smallint",
+          "udt": "int2",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": "Cadet year on approval sheets. Filled by a later roster import. Provisional.",
           "pk": false
         }
       ],
@@ -3196,6 +6090,123 @@ export const DB_SCHEMA = {
         "SELECT"
       ],
       "writable": true
+    },
+    "submission_receipts": {
+      "name": "submission_receipts",
+      "comment": "For typed and tutor work: what was committed (a hash) and when. committed_at is set by the database, never by the client. actor is a plain uuid, with no foreign key, so removing a person never touches a receipt.",
+      "rls": true,
+      "primaryKey": [
+        "id"
+      ],
+      "labelColumn": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": true
+        },
+        {
+          "name": "submission_id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "activity_id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "content_sha256",
+          "type": "text",
+          "udt": "text",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "committed_at",
+          "type": "timestamp with time zone",
+          "udt": "timestamptz",
+          "nullable": false,
+          "default": "now()",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "is_late",
+          "type": "boolean",
+          "udt": "bool",
+          "nullable": false,
+          "default": "false",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "actor",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        }
+      ],
+      "foreignKeys": [
+        {
+          "name": "submission_receipts_activity_id_fkey",
+          "columns": [
+            "activity_id"
+          ],
+          "refTable": "activities",
+          "refColumns": [
+            "id"
+          ],
+          "onDelete": "set null"
+        },
+        {
+          "name": "submission_receipts_submission_id_fkey",
+          "columns": [
+            "submission_id"
+          ],
+          "refTable": "submissions",
+          "refColumns": [
+            "id"
+          ],
+          "onDelete": "cascade"
+        }
+      ],
+      "enums": {},
+      "policyCommands": [
+        "SELECT"
+      ],
+      "writable": false
     },
     "submissions": {
       "name": "submissions",
@@ -3486,6 +6497,17 @@ export const DB_SCHEMA = {
           "generated": false,
           "comment": "Deadline for submitting final grades.",
           "pk": false
+        },
+        {
+          "name": "report_code",
+          "type": "text",
+          "udt": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": "The term as a report prints it, such as 20261. Provisional.",
+          "pk": false
         }
       ],
       "foreignKeys": [],
@@ -3495,6 +6517,232 @@ export const DB_SCHEMA = {
         "SELECT"
       ],
       "writable": true
+    },
+    "tutor_error_log": {
+      "name": "tutor_error_log",
+      "comment": "One row per tutor request failure a cadet actually saw, written by the log-tutor-error edge function. Contains no conversation text by construction (CORE.md section 3).",
+      "rls": true,
+      "primaryKey": [
+        "id"
+      ],
+      "labelColumn": "slug",
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "udt": "int8",
+          "nullable": false,
+          "default": "nextval('app.tutor_error_log_id_seq'::regclass)",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": true
+        },
+        {
+          "name": "logged_at",
+          "type": "timestamp with time zone",
+          "udt": "timestamptz",
+          "nullable": false,
+          "default": "now()",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "slug",
+          "type": "text",
+          "udt": "text",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "cadet_id",
+          "type": "bigint",
+          "udt": "int8",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "kind",
+          "type": "text",
+          "udt": "text",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "http_status",
+          "type": "integer",
+          "udt": "int4",
+          "nullable": false,
+          "default": "0",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "finish_reason",
+          "type": "text",
+          "udt": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "detail",
+          "type": "text",
+          "udt": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "model",
+          "type": "text",
+          "udt": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "mode",
+          "type": "text",
+          "udt": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "phase",
+          "type": "text",
+          "udt": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "turn",
+          "type": "integer",
+          "udt": "int4",
+          "nullable": false,
+          "default": "0",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "session_sec",
+          "type": "integer",
+          "udt": "int4",
+          "nullable": false,
+          "default": "0",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "ladder_resets",
+          "type": "integer",
+          "udt": "int4",
+          "nullable": false,
+          "default": "0",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "max_tokens",
+          "type": "integer",
+          "udt": "int4",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "thinking_budget",
+          "type": "integer",
+          "udt": "int4",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "models",
+          "type": "jsonb",
+          "udt": "jsonb",
+          "nullable": false,
+          "default": "'[]'::jsonb",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "client",
+          "type": "text",
+          "udt": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "cadet_ref",
+          "type": "text",
+          "udt": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": "Whatever the cadet typed into the identity box -- on the backup lessons that is a LAST NAME, not an ID. A claim typed on an unauthenticated page; match by eye, never trust downstream.",
+          "pk": false
+        }
+      ],
+      "foreignKeys": [],
+      "enums": {},
+      "policyCommands": [
+        "SELECT"
+      ],
+      "writable": false
     },
     "user_preferences": {
       "name": "user_preferences",

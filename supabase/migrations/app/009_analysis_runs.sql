@@ -42,6 +42,15 @@
 --   table answers a coarser question and should stay coarse, or it becomes something nobody
 --   reads for the same reason CHANGELOG.md stopped working.
 
+-- RUNS ALONE
+--   This file names its objects without an `app.` prefix, so it needs the search path pinned to `app`.
+--   Added 2026-11-04: it used to rely on the session already pointing at `app`, and failed when run
+--   by itself. The schema it produces is unchanged.
+
+BEGIN;
+
+SET LOCAL search_path = app, public;
+
 CREATE TABLE IF NOT EXISTS analysis_runs (
   id                      uuid PRIMARY KEY DEFAULT gen_random_uuid(),
 
@@ -119,3 +128,5 @@ USING (course_offering_id IN (SELECT app.staff_offerings()));
 -- they bypass RLS. An audit trail a signed-in user can append to is not an audit trail.
 
 GRANT SELECT ON analysis_runs TO authenticated;
+
+COMMIT;

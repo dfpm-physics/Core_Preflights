@@ -1,0 +1,5 @@
+qid,format,prompt,points,choices,correct,value,tol_abs,tol_pct,sig_figs,sig_fig_mode,unit,unit_aliases,unit_mode,unit_hint,reference
+speed,multiple_choice,"Which quantity is a vector?",1,Speed|Velocity|Distance|Time,b,,,,,,,,,,
+forces,multiple_select,"Select every force that acts on a block at rest on a table.",2,Weight|Normal force|Friction|Thrust,a|b,,,,,,,,,,
+accel,numeric,"A 2.0 kg block is pushed by a net force of 6.0 N. What is its acceleration?",2,,,3.0,,2,2,warn,m/s^2,m/s2|m s^-2,warn,m/s^2,
+net,numeric,"What is the net force on an object moving at constant velocity?",1,,,0,0.01,,,,N,,warn,N,

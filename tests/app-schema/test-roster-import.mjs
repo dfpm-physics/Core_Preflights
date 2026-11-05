@@ -4,6 +4,7 @@
 // The fixtures below are deliberately nasty, because the real registrar export is. Every case
 // here is one that the previous three-column parser got wrong or could not express.
 
+import { readFileSync } from 'node:fs';
 import { check, eq, section, installBrowser } from './harness.mjs';
 import {
   parseDelimited, sniffDelimiter, mapHeaders, normalizeName, emailProblem,
@@ -11,7 +12,7 @@ import {
   parseRosterFile, reconcile, summarize,
   departures, returning, sectionMoves,
   REQUIRED_FIELDS,
-  sectionDefaultsFrom,
+  sectionDefaultsFrom, sectionCodeProblem, describeSectionDefaults,
 } from '../../site/js/roster-import.js';
 
 // The display half of the name pipeline lives in util.js, which resolves its icon base from
@@ -182,6 +183,19 @@ eq('…beside what this course actually is', flag.expected, '215');
 eq('…under the registrar column name', flag.label, 'Course Number');
 eq('case and punctuation collapse, so one tick covers both spellings',
    identityFlags({ course_number: '215-s' }, PHYS)[0].key, flag.key);
+
+section('a course code that names no subject and number (B2 roster wording)');
+{
+  const E30 = { courseCode: 'e30-lab' };
+  const f = identityFlags({ subject: 'PHYS', course_number: '215' }, E30);
+  eq('a file that names a subject is still flagged for a code like e30-lab (silence is not agreement, speech is not either)', f.map(x => x.field).join(','), 'subject,course_number');
+  check('...but the flag does not claim this course is "e30"', f.every(x => x.expected === '' && x.courseCode === 'e30-lab'), JSON.stringify(f));
+  eq('a file with no course columns is not flagged', identityFlags({ name: 'x' }, E30).length, 0);
+  eq('the real check for phys-215 is untouched: a wrong subject is flagged against "phys"', identityFlags({ subject: 'CHEM' }, PHYS).map(x => [x.expected, x.courseCode]), [['phys', null]]);
+  eq('...and a wrong number against 215', identityFlags({ course_number: '110' }, PHYS).map(x => [x.expected, x.courseCode]), [['215', null]]);
+  eq('...and the right subject and number pass', identityFlags({ subject: 'PHYS', course_number: '215' }, PHYS).length, 0);
+  check('the page words an uncomparable code plainly', /does not name a subject and a number/.test(readFileSync(new URL('../../site/faculty/admin.html', import.meta.url), 'utf8')));
+}
 
 section('termKey');
 eq('the registrar spelling', termKey('Fall 2026'), 'fall-2026');
@@ -564,6 +578,25 @@ eq('W/R/F are recognised too, so this is not hardcoded to M and T',
 // not follow the convention must not be given an invented meeting day.
 eq('a non-day letter yields no meeting day rather than an invented one',
    sectionDefaultsFrom('A1B'), { meeting_days: [], period: 1 });
-eq('a code with no digit still infers the day', sectionDefaultsFrom('MA'), { meeting_days: ['M'], period: null });
+eq('a code with no digit after the letter infers no day', sectionDefaultsFrom('MA'), { meeting_days: [], period: null });
+eq('a word starting with M is not an M-day section', sectionDefaultsFrom('MECH-1'), { meeting_days: [], period: null });
 eq('an empty code is survivable', sectionDefaultsFrom(''), { meeting_days: [], period: null });
 eq('null is survivable', sectionDefaultsFrom(null), { meeting_days: [], period: null });
+
+section('section names in a course with no M and T days');
+eq('a free-form name is fine', sectionCodeProblem('LAB-3'), '');
+eq('a name with a space is fine', sectionCodeProblem('Sec 4'), '');
+eq('a lettered name is fine', sectionCodeProblem('M1A'), '');
+check('a blank name is refused in a sentence', /blank/.test(sectionCodeProblem('')));
+check('a very long name is refused in a sentence', /longer than 24/.test(sectionCodeProblem('A'.repeat(30))));
+check('a name with odd characters is refused in a sentence', /cannot use/.test(sectionCodeProblem('M1A;DROP')));
+eq('describes a day section', describeSectionDefaults('M1A'), 'meets M, period 1');
+eq('describes a section with no days', describeSectionDefaults('LAB-3'), 'no meeting days');
+{
+  const text = 'Cadet EMPLID,Cadet Name,Email,Section\n'
+    + '3000000901,"Quill, Ada",ada.quill@prep-staging.example,LAB-3\n'
+    + '3000000902,"Quill, Bo",bo.quill@prep-staging.example,M1A;DROP\n';
+  const r = parseRosterFile(text, { knownSections: {} });
+  eq('the free-form section is offered for creation', r.unknownSections, ['LAB-3']);
+  check('the odd one is skipped with the plain reason', r.skipped.some(k => /cannot use/.test(k.reason)));
+}

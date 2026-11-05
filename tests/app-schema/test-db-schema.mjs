@@ -10,14 +10,16 @@
 // Two layers of checking:
 //   1. STRUCTURAL (offline, always runs) — the catalogue is internally coherent, and the facts
 //      system.html depends on are actually present.
-//   2. DRIFT (needs the project .venv) — re-runs scripts/app/gen_db_schema.py --check against the
-//      live database and fails if the committed file differs. Skipped with a warning when there
-//      is no .venv, matching how run.mjs treats cleanup.py.
+//   2. LIVE (runs when STAGING_DB_URL is set) — re-runs scripts/app/gen_db_schema.py --check
+//      against the staging database and fails if the committed file differs, and fails if any
+//      function in schema app has no search_path pinned to app. Skipped, never passed, when there
+//      is no connection string or no Python.
 
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { check, eq, section, REPO } from './harness.mjs';
+import { check, eq, section, skip, REPO } from './harness.mjs';
+import { assertStagingDbUrl } from './target.mjs';
 import { DB_SCHEMA, TABLE_NAMES, tableMeta, referrers } from '../../site/js/db-schema.js';
 
 section('db-schema.js — generated catalogue');
@@ -27,9 +29,10 @@ section('db-schema.js — generated catalogue');
 check('catalogue is non-empty', TABLE_NAMES.length > 0);
 eq('TABLE_NAMES matches DB_SCHEMA keys', TABLE_NAMES.length, Object.keys(DB_SCHEMA).length);
 
-// 26 base tables as of migration 012 (+feedback). A change here is not automatically a
-// failure — it means a migration landed and the catalogue needs regenerating and this count bumping.
-eq('26 base tables (views excluded)', TABLE_NAMES.length, 26);
+// 46 base tables as the migration files build them (views excluded; the migration ledger is left
+// out because no browser session can reach it). A change here is not automatically a failure — it
+// means a migration landed and the catalogue needs regenerating and this count bumping.
+eq('46 base tables (views excluded)', TABLE_NAMES.length, 46);
 
 let missingCols = [], badPk = [], danglingFk = [];
 for (const name of TABLE_NAMES) {
@@ -70,13 +73,13 @@ check('column.pk flags agree with primaryKey[]', !pkFlagMismatch.length, pkFlagM
 // closed set is text + CHECK — so if the generator's parser regressed, these silently become free
 // text boxes and an administrator can write a value the DB will reject.
 const EXPECTED_ENUMS = {
-  'activities.modality': ['written', 'interactive'],
+  'activities.modality': ['written', 'interactive', 'questions', 'external'],
   'enrollments.status': ['active', 'dropped', 'completed'],
   'staff_assignments.role': ['director', 'instructor', 'grader'],
   'submissions.status': ['draft', 'committed', 'superseded'],
   'assignment_offerings.grading_mode': ['effort', 'points'],
   'offering_activities.grading_role': ['graded', 'practice'],
-  'grades.source': ['instructor', 'ai_suggested', 'derived', 'imported'],
+  'grades.source': ['instructor', 'ai_suggested', 'derived', 'imported', 'auto_checked'],
 };
 for (const [path, expected] of Object.entries(EXPECTED_ENUMS)) {
   const [tbl, col] = path.split('.');
@@ -148,19 +151,28 @@ for (const c of ['assignment_offering_id', 'section_id', 'reviewed_by', 'reviewe
 }
 check('review_signoffs has RLS enabled', !!tableMeta('review_signoffs')?.rls);
 
-/* ── 3. Drift against the live database ──────────────────────────────────── */
+/* ── 3. Live checks against staging ─────────────────────────────────────── */
 
-const py = process.platform === 'win32'
-  ? resolve(REPO, '.venv/Scripts/python.exe')
-  : resolve(REPO, '.venv/bin/python');
-const gen = resolve(REPO, 'scripts/app/gen_db_schema.py');
-
-if (!existsSync(py)) {
-  console.log('  [warn] no project .venv — skipping the live drift check.');
-  console.log('         Structural checks above passed, but the catalogue was NOT compared to');
-  console.log('         the database. Run: .venv/Scripts/python scripts/app/gen_db_schema.py --check');
-} else {
-  const r = spawnSync(py, [gen, '--check'], { encoding: 'utf8' });
-  check('db-schema.js matches the live schema `app`', r.status === 0,
-        (r.stdout || r.stderr || '').trim().split('\n').slice(0, 3).join(' | '));
+{
+  let urlOk = true;
+  try { assertStagingDbUrl(process.env.STAGING_DB_URL, 'STAGING_DB_URL'); } catch { urlOk = false; }
+  const venvPy = process.platform === 'win32'
+    ? resolve(REPO, '.venv/Scripts/python.exe') : resolve(REPO, '.venv/bin/python');
+  const py = process.env.PREP_PYTHON || venvPy;
+  if (!urlOk) {
+    skip('db-schema.js matches staging schema `app`', 'STAGING_DB_URL is not set to the staging project');
+    skip('every function in app pins its search_path', 'STAGING_DB_URL is not set to the staging project');
+  } else if (!existsSync(py)) {
+    skip('db-schema.js matches staging schema `app`', 'no Python with psycopg2 (set PREP_PYTHON)');
+    skip('every function in app pins its search_path', 'no Python with psycopg2 (set PREP_PYTHON)');
+  } else {
+    const drift = spawnSync(py, [resolve(REPO, 'scripts/app/gen_db_schema.py'), '--check'],
+                            { encoding: 'utf8', timeout: 90000 });
+    check('db-schema.js matches staging schema `app`', drift.status === 0,
+          (drift.stdout + drift.stderr).trim().slice(-300));
+    const pins = spawnSync(py, [resolve(import.meta.dirname, 'live_checks.py')],
+                           { encoding: 'utf8', timeout: 90000 });
+    check('every function in app pins its search_path', pins.status === 0,
+          (pins.stdout + pins.stderr).trim().slice(-400));
+  }
 }

@@ -25,6 +25,7 @@
 //
 // Usage: node tests/browser-harness/backup-link.mjs [--chrome <path>]
 
+import { NO_PRODUCTION_ARG } from './env.mjs';
 import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
@@ -54,7 +55,7 @@ const check = (name, ok, detail = '') => {
 const server = spawn('python', ['-m', 'http.server', String(PORT)], { cwd: REPO, stdio: 'ignore' });
 await new Promise(r => setTimeout(r, 1500));
 
-const browser = await puppeteer.launch({ executablePath: CHROME, headless: 'new' });
+const browser = await puppeteer.launch({ executablePath: CHROME, headless: 'new', args: [NO_PRODUCTION_ARG] });
 
 /* ── PART 1 — the edited pages parse and load clean ───────────────────────────────────── */
 console.log('\n=== edited pages parse and load ===');
@@ -226,9 +227,15 @@ check('the two buttons are always enabled or disabled together',
   matrix.every(r => !r.backup || r.backupLive === r.liveLaunch));
 check('both buttons carry the same sizing class',
   matrix.every(r => !r.backup || r.sameClass));
-check('Claude is the marked preference, and Gemini never is',
-  matrix.every(r => (!r.backup || !r.geminiPreferred))
-  && matrix.some(r => r.claudePreferred));
+// Ranking since 2026-08-27 (site/student/lessons.html launchRow): with a Gemini build, Gemini is
+// the marked "Start here" and Claude the optional paid route; with no build, Claude is the only
+// button and is marked. Exactly one button is ever marked, and it is never a disabled-less orphan.
+check('exactly one route is marked preferred: Gemini when a build sits beside it, else Claude',
+  matrix.every(r => !r.liveLaunch && !r.backup ? true
+    : r.backup ? (r.geminiPreferred && !r.claudePreferred)
+               : (r.claudePreferred && !r.geminiPreferred))
+  && matrix.some(r => r.backup && r.geminiPreferred)
+  && matrix.some(r => !r.backup && r.claudePreferred));
 
 /* ── the ids the renderers emit are the ids wire() binds ──────────────────────────────── */
 for (const id of ['study-gemini', 'choice-gemini']) {

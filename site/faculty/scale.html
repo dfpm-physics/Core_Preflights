@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Letter scale · PREP</title>
+  <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
+  <link rel="stylesheet" href="../css/styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../js/config.js"></script>
+</head>
+<body>
+  <header id="topnav"></header>
+  <main class="page-wide" id="main">
+    <div class="center-load"><span class="spinner"></span><span>Loading the letter scale…</span></div>
+  </main>
+
+  <script type="module">
+    import { bootstrap } from '../js/auth.js';
+    import { renderNav } from '../js/nav.js';
+    import { initTheme } from '../js/theme.js';
+    import { db } from '../js/supabase.js';
+    import { esc, runPage } from '../js/util.js';
+    import * as S from '../js/faculty-scale.js';
+
+    const ctx = await bootstrap({ require: 'faculty' });
+    runPage(ctx, init);
+
+    let state = null;          // from loadScale
+    let rows = [];             // the editor's rows, text
+    let widthTxt = '';
+    let previewKey = null;     // scaleKey of the scale the preview on screen was run for
+    let previewSum = null;
+    let busy = false;
+    let note = '';             // the last save result, shown above the editor
+    let tryE = '89.9', tryP = '100';   // the 'try a score' box
+
+    const $ = (id) => document.getElementById(id);
+
+    function init() {
+      initTheme();
+      renderNav(ctx, { active: 'items', onCourseChange: () => { location.reload(); } });
+      return load();
+    }
+
+    function head(extra = '', sub = '') {
+      return `<div class="page-head"><div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:10px">
+        <div><h1>Letter scale</h1><div class="sub">${sub}</div></div>${extra}</div></div>`;
+    }
+    const back = `<a class="btn btn-ghost btn-sm" href="items.html">Back to Items</a>`;
+
+    async function load() {
+      const root = $('main');
+      if (!ctx.currentOffering) { root.innerHTML = head(back) + `<div class="alert alert-warn">No course access found.</div>`; return; }
+      if (!ctx.isDirectorForCurrent()) {
+        root.innerHTML = head(back) + `<div class="empty-state"><div class="es-ic">🔒</div><h3>Directors only</h3>
+          <p>Only a director of this course can change its letter scale.</p></div>`;
+        return;
+      }
+      const r = await S.loadScale(db, ctx.currentOffering);
+      if (r.error) { root.innerHTML = head(back) + `<div class="alert alert-error">${esc(S.scaleError(r.error))}</div>`; return; }
+      state = r;
+      rows = S.rowsFromLines(state.current.lines);
+      widthTxt = S.widthText(state.current.width);
+      previewKey = null; previewSum = null;
+      draw();
+    }
+
+    function whereText() {
+      return `${esc(ctx.courseTitleOf(ctx.currentOffering))}${ctx.currentTermLabel ? ' · ' + esc(ctx.currentTermLabel) : ''}`;
+    }
+
+    function draw() {
+      const root = $('main');
+      const v = S.validateScale(rows, widthTxt);
+      const scale = v.errors.length ? null : { lines: v.lines, width: v.width };
+      const plan = S.planSave({ scale, current: { lines: state.current.lines, width: state.current.width }, isActive: state.isActive, previewKey });
+      const inForce = state.current.isDefault ? 'The default scale (no director has changed it)' : `Version ${state.current.version}`;
+      const changes = scale ? S.describeChange({ lines: state.current.lines, width: state.current.width }, scale) : [];
+      root.innerHTML = head(back, `${whereText()} · ${state.isActive ? 'active course: its cadets use this scale now' : 'not the active course: no cadet is using this scale yet'}`) + `
+        ${note ? `<div class="alert alert-success" id="sc-note">${esc(note)}</div>` : ''}
+        <div class="card"><div class="card-body">
+          <p style="margin-top:0"><strong>In force:</strong> ${esc(inForce)}, near-line width ${esc(S.widthText(state.current.width))} points.
+            Saving makes a new version and keeps the old one. A scale changes the letter a cadet sees, never points earned or possible.</p>
+          <table class="table" id="sc-table"><thead><tr><th>Line</th><th>Letter</th><th>Cutoff (percent, at or above)</th><th>GPA</th><th></th></tr></thead><tbody>
+            ${rows.map((r, i) => `<tr data-row="${i}"><td>${i + 1}</td>
+              <td><input class="sc-in" data-f="letter" data-i="${i}" type="text" maxlength="8" value="${esc(r.letter)}" style="width:5em" aria-label="Letter, line ${i + 1}"></td>
+              <td><input class="sc-in" data-f="cutoff" data-i="${i}" type="text" inputmode="decimal" value="${esc(r.cutoff)}" style="width:7em" aria-label="Cutoff, line ${i + 1}"></td>
+              <td><input class="sc-in" data-f="gpa" data-i="${i}" type="text" inputmode="decimal" value="${esc(r.gpa)}" style="width:5em" aria-label="GPA, line ${i + 1}"></td>
+              <td><button class="btn btn-ghost btn-sm" type="button" data-del="${i}">Remove</button></td></tr>`).join('')}
+          </tbody></table>
+          <div class="row wrap" style="gap:10px;margin:10px 0;align-items:flex-end">
+            <button class="btn btn-ghost btn-sm" type="button" id="sc-add">+ Add a line</button>
+            <button class="btn btn-ghost btn-sm" type="button" id="sc-default">Fill in the default scale</button>
+            <button class="btn btn-ghost btn-sm" type="button" id="sc-reset">Undo my edits</button>
+            <div class="field" style="margin:0"><label for="sc-width">Near-line width (percentage points)</label>
+              <input id="sc-width" type="text" inputmode="decimal" value="${esc(widthTxt)}" style="width:6em">
+              <div class="field-hint">A cadet within this many points below a line is marked as near it. Must be below the smallest gap between cutoffs.</div></div>
+          </div>
+          <div id="sc-errors">${v.errors.length ? `<div class="alert alert-error"><ul style="margin:0 0 0 18px">${v.errors.map(e => `<li>${esc(e)}</li>`).join('')}</ul></div>` : ''}</div>
+          ${changes.length ? `<div class="field-hint" id="sc-changes"><strong>Compared with the scale in force:</strong> ${changes.map(esc).join(' ')}</div>` : ''}
+        </div></div>
+
+        <div class="card" style="margin-top:14px"><div class="card-body">
+          <h3 style="margin-top:0">Try a score</h3>
+          <div class="row wrap" style="gap:10px;align-items:flex-end">
+            <div class="field" style="margin:0"><label for="sc-e">Points earned</label><input id="sc-e" type="text" inputmode="decimal" style="width:7em" value="${esc(tryE)}"></div>
+            <div class="field" style="margin:0"><label for="sc-p">Points possible</label><input id="sc-p" type="text" inputmode="decimal" style="width:7em" value="${esc(tryP)}"></div>
+            <div id="sc-try-out" style="padding-bottom:6px">${tryHtml(scale)}</div>
+          </div>
+        </div></div>
+
+        <div class="card" style="margin-top:14px"><div class="card-body">
+          <h3 style="margin-top:0">Who would change</h3>
+          <p class="muted" style="margin-top:0">${state.isActive
+            ? 'This course is active, so the effect of exactly this scale must be shown before it can be saved.'
+            : 'This course is not the active one. Showing the effect is optional, and still worth a look.'}</p>
+          <button class="btn btn-primary" type="button" id="sc-preview" ${scale && !busy ? '' : 'disabled'}>Show who would change</button>
+          <div id="sc-preview-out" style="margin-top:10px">${previewSum && previewKey === (scale ? S.scaleKey(scale) : null) ? S.previewHtml(previewSum)
+            : (previewSum ? '<div class="alert alert-warn">You changed the scale after this was shown. Show it again.</div>' : '')}</div>
+        </div></div>
+
+        <div class="row" style="gap:10px;margin:14px 0;align-items:center">
+          <button class="btn btn-primary" type="button" id="sc-save" ${plan.ok && !busy ? '' : 'disabled'}>Save as a new version</button>
+          <span class="muted" id="sc-why">${plan.ok ? '' : esc(plan.reason)}</span>
+        </div>
+        <div class="alert alert-error" id="sc-save-error" style="display:none"></div>
+
+        <h3>Versions</h3>
+        <table class="table" id="sc-history"><thead><tr><th>Version</th><th>Saved</th><th>Lines</th><th>Width</th><th>State</th></tr></thead><tbody>
+          ${state.history.length ? state.history.map(h => `<tr><td>${h.version}</td><td>${esc(String(h.created_at).slice(0, 10))}</td>
+            <td>${esc(h.lines.map(l => l.letter + ' ' + l.cutoff).join(', '))}</td><td>${esc(S.widthText(h.near_line_width))}</td>
+            <td>${h.retired_at ? 'retired' : 'in force'}</td></tr>`).join('')
+            : '<tr><td colspan="5" class="muted">No version has been saved. This course uses the default scale.</td></tr>'}
+        </tbody></table>`;
+      root.dataset.drawn = String((Number(root.dataset.drawn) || 0) + 1);   // tests wait on this
+      wire();
+    }
+
+    function tryHtml(scale) {
+      if (!scale) return '<span class="muted">Fix the scale to try a score.</span>';
+      const r = S.letterFor(tryE, tryP, scale.lines, scale.width);
+      if (r.error) return `<span class="muted">${esc(r.error)}</span>`;
+      if (r.letter === null) return '<span class="muted">No letter: nothing is possible yet.</span>';
+      return `<strong>${esc(r.letter)}</strong>${r.near ? `, near ${esc(r.near)}` : ''}`;
+    }
+
+    function readRows() {
+      document.querySelectorAll('.sc-in').forEach(el => { rows[+el.dataset.i][el.dataset.f] = el.value; });
+      widthTxt = $('sc-width').value;
+    }
+
+    function wire() {
+      document.querySelectorAll('.sc-in').forEach(el => el.addEventListener('change', () => { readRows(); stale(); draw(); }));
+      $('sc-width').addEventListener('change', () => { readRows(); stale(); draw(); });
+      document.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', () => { readRows(); rows.splice(+b.dataset.del, 1); stale(); draw(); }));
+      $('sc-add').addEventListener('click', () => { readRows(); rows.push({ letter: '', cutoff: '', gpa: '' }); stale(); draw(); });
+      $('sc-default').addEventListener('click', () => { rows = S.rowsFromLines(S.DEFAULT_LINES); widthTxt = S.widthText(S.DEFAULT_WIDTH); stale(); draw(); });
+      $('sc-reset').addEventListener('click', () => { rows = S.rowsFromLines(state.current.lines); widthTxt = S.widthText(state.current.width); stale(); draw(); });
+      ['sc-e', 'sc-p'].forEach(id => $(id).addEventListener('input', () => {
+        tryE = $('sc-e').value; tryP = $('sc-p').value;
+        const v = S.validateScale(rows, widthTxt);
+        $('sc-try-out').innerHTML = tryHtml(v.errors.length ? null : v);
+      }));
+      $('sc-preview').addEventListener('click', onPreview);
+      $('sc-save').addEventListener('click', onSave);
+    }
+
+    function stale() { note = ''; }   // an edit clears the old result; the preview goes stale by its key
+
+    async function onPreview() {
+      readRows();
+      const v = S.validateScale(rows, widthTxt);
+      if (v.errors.length || busy) return;
+      busy = true; $('sc-preview').disabled = true;
+      const r = await S.previewScale(db, ctx.currentOffering, v);
+      busy = false;
+      if (r.error) { draw(); const e = $('sc-save-error'); e.textContent = S.scaleError(r.error); e.style.display = 'block'; return; }
+      previewSum = S.summarizePreview(r.rows); previewKey = S.scaleKey(v);
+      draw();
+    }
+
+    async function onSave() {
+      readRows();
+      const v = S.validateScale(rows, widthTxt);
+      const scale = v.errors.length ? null : { lines: v.lines, width: v.width };
+      const plan = S.planSave({ scale, current: { lines: state.current.lines, width: state.current.width }, isActive: state.isActive, previewKey });
+      if (!plan.ok || busy) return;
+      busy = true; $('sc-save').disabled = true;
+      const r = await S.saveScale(db, ctx.currentOffering, scale, state);
+      busy = false;
+      if (r.error) {
+        console.error('scale save failed', r.error);
+        const e = $('sc-save-error'); e.textContent = S.scaleError(r.error); e.style.display = 'block'; $('sc-save').disabled = false; return;
+      }
+      const saved = r.version;
+      await load();
+      note = `Saved as version ${saved}. The old version is kept in the list below.`;
+      draw();
+    }
+  </script>
+</body>
+</html>

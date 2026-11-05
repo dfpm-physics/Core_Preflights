@@ -15,10 +15,11 @@
 //   node tests/browser-harness/asksage-meter.mjs
 //   node tests/browser-harness/asksage-meter.mjs --base http://localhost:8000
 //
-// Needs the PREP_TEST_FACULTY_* block in supabase/admin/.env — it is a director of two
+// Uses the seeded staging login in env.mjs (PREP_TEST_FACULTY_* overrides) — formerly a director of two
 // offerings, which is what guard.js asks for. Read CORE.md §3 before using that account for
 // anything that COUNTS: it is a write credential, not an audit one.
 
+import { NO_PRODUCTION_ARG } from './env.mjs';
 import puppeteer from 'puppeteer-core';
 import { existsSync } from 'node:fs';
 import { testFaculty } from './env.mjs';
@@ -34,7 +35,7 @@ const BASE = arg('base', 'http://localhost:8000');
 const EMAIL = arg('email', FAC.email || null);
 const PASSWORD = arg('password', FAC.password || null);
 if (!EMAIL || !PASSWORD) {
-  console.error('No faculty credentials. Set PREP_TEST_FACULTY_* in supabase/admin/.env.');
+  console.error('No faculty credentials. Set PREP_TEST_FACULTY_* in the environment.');
   process.exit(2);
 }
 const CHROME = [
@@ -56,7 +57,7 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
 
 const browser = await puppeteer.launch({
   executablePath: CHROME, headless: 'new',
-  args: ['--no-sandbox', '--disable-dev-shm-usage'],
+  args: [NO_PRODUCTION_ARG, '--no-sandbox', '--disable-dev-shm-usage'],
   defaultViewport: { width: 1440, height: 1000 },
 });
 const page = await browser.newPage();

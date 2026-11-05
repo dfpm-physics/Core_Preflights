@@ -146,7 +146,7 @@ with the cohort half-graded.
 | # | Gate | Catches |
 |---|---|---|
 | 1 | `supabase/admin/app_tier_check.py` | dead or rotated DB passwords; `public` leaking into scope |
-| 2 | REST probe on `/rest/v1/courses` with `Accept-Profile: app` | revoked service key; the free tier auto-pausing the project (CORE.md §1) |
+| 2 | REST probe on `/rest/v1/courses` with `Accept-Profile: app` | revoked service key; a stopped or paused project (production is paid-tier and does not idle-pause; see CORE.md §1) |
 | 3 | `scripts/grounding/check_grounding.py --course 215` | **the silent one** — grading runs ungrounded, warns once, and nothing downstream looks different. Scoped to the course being graded since 2026-10-15; re-run as gate 6b if the pull moved `HEAD` |
 | 4 | clean tree | someone's uncommitted edits |
 | 5 | `git fetch`, refuse if ahead of `origin/main` | unpushed human work `--ff-only` cannot resolve |
@@ -277,7 +277,7 @@ a file exists. All four run inside the subagent, before anything is written.
 | # | Gate | Catches |
 |---|---|---|
 | 1 | `supabase/admin/app_tier_check.py` | dead or rotated DB passwords |
-| 2 | REST probe on `/rest/v1/courses` with `Accept-Profile: app` | revoked service key; the free tier auto-pausing the project |
+| 2 | REST probe on `/rest/v1/courses` with `Accept-Profile: app` | revoked service key; a stopped or paused project |
 | 3 | `scripts/grounding/check_grounding.py --course 215` | **the silent one** — grading runs ungrounded, warns once, and nothing downstream looks different. Scoped to the course being graded since 2026-10-15; re-run as gate 6b if the pull moved `HEAD` |
 | 4 | clean tree, and `git fetch` showing neither behind nor ahead of `origin/main` | someone's uncommitted edits; a stale clone |
 

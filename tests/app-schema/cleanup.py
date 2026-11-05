@@ -1,26 +1,32 @@
 #!/usr/bin/env python
-"""Remove every row the wiring tests created for the test cadet (3009999999).
+"""Remove every row the wiring tests created for the test cadet (3009999999) on STAGING.
 
 WHY THIS IS PYTHON AND NOT PART OF THE NODE SUITE
-    RLS grants no DELETE on `app.submissions` to anyone — not students, not staff. That is
+    RLS grants no DELETE on `app.submissions` to anyone -- not students, not staff. That is
     deliberate (a student must not be able to erase their work, and neither should an
     instructor), so the Node suite genuinely cannot clean up after itself. Teardown needs the
     operator tier, which is a direct Postgres connection.
 
-SAFETY: every statement is bounded to enrollments belonging to student 3009999999. It cannot
-touch another cadet's work even if run by accident. Dry run by default, per CORE.md §4.
+TARGET
+    The staging project only. The connection string comes from STAGING_DB_URL and is refused
+    unless it names exactly the staging project (staging_guard.py, fail-closed). Nothing else is
+    read: no admin config file, no production credential.
 
-Usage (from the repo root, via the project venv):
-  .venv/Scripts/python tests/app-schema/cleanup.py
-  .venv/Scripts/python tests/app-schema/cleanup.py --commit
+SAFETY: every statement is bounded to enrollments belonging to student 3009999999. It cannot
+touch another cadet's work even if run by accident. Dry run by default.
+
+Usage (the connection string is supplied in the environment, never on the command line):
+  python tests/app-schema/cleanup.py
+  python tests/app-schema/cleanup.py --commit
+Needs psycopg2 (the project venv has it).
 """
 import argparse
+import os
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "supabase" / "admin"))
-from app_tier_check import load, connect  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from staging_guard import require_staging  # noqa: E402
 
 TEST_STUDENT = 3009999999
 
@@ -30,15 +36,16 @@ def main():
     ap.add_argument("--commit", action="store_true", help="actually delete; otherwise roll back")
     args = ap.parse_args()
 
-    cfg, tiers = load()
-    tier = tiers.get("dml") or tiers.get("owner")
-    if not tier:
-        sys.exit("Need PREP_APP_DML_ROLE (or owner) in supabase/admin/.env.")
+    # The guard runs before anything is imported or opened, so a refused URL never connects.
+    url = os.environ.get("STAGING_DB_URL", "").strip()
+    require_staging(url)
 
-    conn = connect(cfg, tier)
+    import psycopg2  # noqa: E402
+
+    conn = psycopg2.connect(url, connect_timeout=15)
     conn.autocommit = False
     cur = conn.cursor()
-    cur.execute("SET search_path = app, public")
+    cur.execute("SET search_path = app, public, extensions")
 
     scope = """enrollment_id IN (SELECT id FROM app.enrollments WHERE student_id = %s)"""
 

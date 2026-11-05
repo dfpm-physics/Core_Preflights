@@ -30,7 +30,8 @@ Usage, from the repo root via the project venv:
 
   .venv/Scripts/python scripts/app/create_course_offering.py \
       --course-code phys-310 --course-title "Physics 310" \
-      --term fall-2026 --director "Matthew Recker"
+      --term fall-2026 --director "Matthew Recker" --active
+  # --active or --inactive is required; there is no default.
   # ... review the plan, then re-run with --commit
 """
 import argparse
@@ -101,7 +102,24 @@ def resolve_director(cur, who):
     return rows[0]
 
 
-def main():
+def insert_offering(cur, course_id, term_id, is_active):
+    """Insert one course offering with the active flag the caller named.
+
+    The flag is never defaulted here. A new offering used to be written active without anyone
+    saying so, which is the wrong answer for a term that has not started, and a database that
+    allows one active offering per course will refuse the second one anyway. The caller decides.
+    """
+    if not isinstance(is_active, bool):
+        raise TypeError("is_active must be True or False, stated by the caller")
+    cur.execute(
+        "insert into course_offerings (course_id, term_id, is_active) "
+        "values (%s, %s, %s) returning id",
+        (course_id, term_id, is_active),
+    )
+    return cur.fetchone()[0]
+
+
+def build_parser():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--course-code", required=True, help="e.g. phys-310")
@@ -112,8 +130,19 @@ def main():
                     help="instructors.name (exact) or instructors.id uuid")
     ap.add_argument("--role", default="director", choices=("director", "instructor"),
                     help="staff_assignments.role for --director (default: director)")
+    # One of the two must be named. There is no default, because either answer is a decision:
+    # an active offering is what jobs and the Health page look at, and a course may have only one.
+    state = ap.add_mutually_exclusive_group(required=True)
+    state.add_argument("--active", dest="is_active", action="store_const", const=True,
+                       help="create the offering active (only one per course may be)")
+    state.add_argument("--inactive", dest="is_active", action="store_const", const=False,
+                       help="create the offering inactive")
     ap.add_argument("--commit", action="store_true", help="write; otherwise roll back")
-    args = ap.parse_args()
+    return ap
+
+
+def main():
+    args = build_parser().parse_args()
 
     conn = connect()
     conn.autocommit = False
@@ -165,13 +194,9 @@ def main():
         print(f"{KEEP}offering        {args.course_code} / {args.term} already exists "
               f"(is_active={is_active})  {offering_id}")
     else:
-        cur.execute(
-            "insert into course_offerings (course_id, term_id, is_active) "
-            "values (%s, %s, true) returning id",
-            (course_id, term_id),
-        )
-        offering_id = cur.fetchone()[0]
-        print(f"{ADD}offering        {args.course_code} / {args.term}  {offering_id}")
+        offering_id = insert_offering(cur, course_id, term_id, args.is_active)
+        print(f"{ADD}offering        {args.course_code} / {args.term} "
+              f"(is_active={args.is_active})  {offering_id}")
 
     # 3 — staff_assignments, offering-wide (section_id NULL). The offering-wide row is what
     # grants access to the whole course; per-section rows are added later for what they teach.

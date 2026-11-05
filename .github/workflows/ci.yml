@@ -1,0 +1,126 @@
+# CI for the Core_Preflights repository.
+#
+# What this does and does not do
+#   * Runs offline checks only. It holds no credential and contacts no database project: the
+#     suites run with all network access blocked and fail if they try. The only network use is
+#     fetching the actions and `npm ci` for the test harness.
+#   * Never runs tests/app-schema/run.mjs (its live path) or cleanup.py.
+#   * On v2 and v2-step2 a failing job fails the run. On main every job is report-only
+#     (continue-on-error), so a red check can never block a push to main.
+#   * No branch protection is configured by this file.
+#   * The name scan needs the live roster, which CI does not have. It is reported as SKIPPED,
+#     never as a pass. Run `python scripts/checks/name_scan.py` locally before a push.
+#
+# Actions are pinned to full commit SHAs (tag in the trailing comment).
+
+name: CI
+
+on:
+  push:
+    branches: [v2, v2-step2, main]
+  pull_request:
+    branches: [v2, v2-step2, main]
+
+permissions:
+  contents: read
+
+jobs:
+  # continue-on-error below is true for pushes to main and for pull requests aimed at main.
+  offline-suites:
+    name: Offline test suites
+    runs-on: ubuntu-latest
+    continue-on-error: ${{ github.ref_name == 'main' || github.base_ref == 'main' }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - name: Install the test harness dependencies
+        working-directory: tests/app-schema
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Run the listed offline suites (network blocked)
+        run: python .github/ci/run_offline_suites.py
+
+  syntax:
+    name: Syntax check
+    runs-on: ubuntu-latest
+    continue-on-error: ${{ github.ref_name == 'main' || github.base_ref == 'main' }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - name: node --check on site/js, byte-compile scripts/ (never .jsx)
+        run: python .github/ci/syntax_check.py
+
+  secret-scan:
+    name: Secret scan and python checks
+    runs-on: ubuntu-latest
+    continue-on-error: ${{ github.ref_name == 'main' || github.base_ref == 'main' }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - name: Secret scan self-test (plants fake values built at runtime)
+        run: python scripts/checks/secret_scan_test.py
+      - name: Name scan self-test (invented roster, no database)
+        run: python scripts/checks/name_scan_test.py
+      - name: Secret scan over tracked files (values are never printed)
+        run: python scripts/checks/secret_scan.py
+
+  doc-check:
+    name: Doc sources check (report only)
+    runs-on: ubuntu-latest
+    continue-on-error: true   # always report-only: it flags many documents today
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0   # the check compares git history
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - name: python scripts/docs/check_doc_sources.py
+        run: |
+          set +e
+          python scripts/docs/check_doc_sources.py > doc-check.txt 2>&1
+          rc=$?
+          {
+            echo '### Doc sources check: REPORT ONLY'
+            echo "Exit status $rc. It flags documents whose sources changed; this does not fail the run."
+            echo '```'
+            grep -E 'may be stale|^NOTE' doc-check.txt | head -n 5
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit $rc
+
+  name-scan:
+    name: Name scan (SKIPPED - no roster access in CI)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Report that the name scan did not run
+        run: |
+          msg='SKIPPED: no roster access in CI; run it locally before a push (python scripts/checks/name_scan.py)'
+          echo "::warning title=Name scan not run::$msg"
+          {
+            echo '### Name scan: SKIPPED, NOT A PASS'
+            echo "$msg"
+          } >> "$GITHUB_STEP_SUMMARY"

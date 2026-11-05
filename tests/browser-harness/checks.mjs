@@ -5,7 +5,7 @@
 // and absence is exactly what a screenshot review misses, because a missing panel looks like a
 // page that simply does not have one.
 //
-// Credentials come from supabase/admin/.env (PREP_TEST_FACULTY_*) unless overridden. Run once per
+// Credentials are the seeded staging login in env.mjs (PREP_TEST_FACULTY_* overrides) unless overridden. Run once per
 // role tier; flip the account between runs with
 //   scripts/test_faculty_account.py --role instructor --commit
 //
@@ -13,6 +13,7 @@
 //   node tests/browser-harness/checks.mjs --tier director|instructor|admin --lesson <offering-uuid>
 //   (add --email/--password to override the .env; --multi-course when staffed on 2+ offerings)
 
+import { NO_PRODUCTION_ARG } from './env.mjs';
 import puppeteer from 'puppeteer-core';
 import { existsSync } from 'node:fs';
 import { testFaculty } from './env.mjs';
@@ -34,7 +35,7 @@ const LESSON = arg('lesson');
 const SECTION = arg('section');
 const TIER = arg('tier', 'director');
 if (!EMAIL || !PASSWORD) {
-  console.error('No faculty credentials. Set PREP_TEST_FACULTY_* in supabase/admin/.env, '
+  console.error('No faculty credentials. Set PREP_TEST_FACULTY_* in the environment, '
     + 'or pass --email and --password.');
   process.exit(2);
 }
@@ -56,7 +57,7 @@ const section = t => console.log(`\n=== ${t} ===`);
 
 const browser = await puppeteer.launch({
   executablePath: CHROME, headless: 'new',
-  args: ['--no-sandbox', '--disable-dev-shm-usage'],
+  args: [NO_PRODUCTION_ARG, '--no-sandbox', '--disable-dev-shm-usage'],
   defaultViewport: { width: 1440, height: 1000 },
 });
 const page = await browser.newPage();
@@ -266,7 +267,7 @@ if (LESSON) {
 /* ── Staff table: P0.11 ───────────────────────────────────────────────────── */
 if (TIER !== 'instructor') {
   section('course admin — staff table');
-  await go('/site/faculty/admin.html');
+  await go('/site/faculty/admin.html?tab=staff');   // the staff table is the Staff tab, not the default
   const ownSelect = await count('.staff-tbl select[disabled]');
   const implicit = (await text('.staff-tbl')) || '';
   if (TIER === 'admin') {

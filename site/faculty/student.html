@@ -481,7 +481,7 @@
       const data = await G.loadGradingData(ctx, offeringId, [vm.enrollment.sectionId]);
       if (!data.offering) {
         document.getElementById('sg-body').innerHTML =
-          `<div class="alert alert-error">That assignment could not be loaded.</div>`;
+          `<div class="alert alert-error">${data.refusal ? esc(data.refusal.message) : 'That assignment could not be loaded.'}</div>`;
         return;
       }
       const sid = vm.enrollment.studentId;

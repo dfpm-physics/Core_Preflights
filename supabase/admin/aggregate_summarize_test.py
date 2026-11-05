@@ -401,7 +401,7 @@ has("states plainly that both are live", cross, "BOTH ARE LIVE")
 # deactivate", so a bare `"deactivate" not in text` check fails on correct output. What must be
 # absent is the stale-offering INSTRUCTION, which is a different string.
 has("explicitly forbids deactivating either one", cross, "do not deactivate")
-has("…and omits the stale-offering advice entirely", cross, "is over, deactivate", present=False)
+has("…and omits the stale-offering advice entirely", cross, "course_offering", present=False)
 
 # The other shape: one course, two terms. Here a stale offering genuinely is plausible, so the
 # deactivation advice is correct — but only for this branch.
@@ -409,7 +409,7 @@ terms = _ambiguous_slug_message("preflight-02", [
     offering("phys-215", "2026FA", "phys-215-preflight-02-written"),
     offering("phys-215", "2027SP", "phys-215-preflight-02-written"),
 ])
-has("a cross-TERM match may be a stale offering, and says so", terms, "is over, deactivate")
+has("a cross-TERM match may be a stale offering, and says so", terms, "deactivating its course_offering")
 has("…and does not claim both are live", terms, "BOTH ARE LIVE", present=False)
 
 # Neither modality present → must not render the string "--lesson None".

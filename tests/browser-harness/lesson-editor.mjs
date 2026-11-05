@@ -16,10 +16,11 @@
 // deletes — the account is a live director on the live database (CORE.md §0).
 //
 // Requires a local server:  python -m http.server 8000   (from the repo root)
-// Credentials come from supabase/admin/.env (PREP_TEST_FACULTY_*), as in checks.mjs.
+// Credentials are the seeded staging login in env.mjs, as in checks.mjs.
 //
 // Usage:  node tests/browser-harness/lesson-editor.mjs [--base http://localhost:8000]
 
+import { NO_PRODUCTION_ARG } from './env.mjs';
 import puppeteer from 'puppeteer-core';
 import { existsSync } from 'node:fs';
 import { testFaculty } from './env.mjs';
@@ -35,7 +36,7 @@ const BASE = arg('base', 'http://localhost:8000');
 const EMAIL = arg('email', FAC.email || null);
 const PASSWORD = arg('password', FAC.password || null);
 if (!EMAIL || !PASSWORD) {
-  console.error('No faculty credentials. Set PREP_TEST_FACULTY_* in supabase/admin/.env.');
+  console.error('No faculty credentials. Set PREP_TEST_FACULTY_* in the environment.');
   process.exit(2);
 }
 const CHROME = [
@@ -57,7 +58,7 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
 
 const browser = await puppeteer.launch({
   executablePath: CHROME, headless: 'new',
-  args: ['--no-sandbox', '--disable-dev-shm-usage'],
+  args: [NO_PRODUCTION_ARG, '--no-sandbox', '--disable-dev-shm-usage'],
   defaultViewport: { width: 1440, height: 1000 },
 });
 const page = await browser.newPage();

@@ -49,6 +49,7 @@
 // before the director commits, never after.
 
 import { db } from './supabase.js';
+import { NEW_PAGE_COLUMN, refuseIfNewPage } from './new-page-guard.js';
 import {
   OFFERING_SELECT, shapeOffering, questionsOf, lessonNumber, chunked, policyOf,
   ACCESS_OPEN, ACCESS_BY_PERMISSION, writtenAccessOf,
@@ -275,8 +276,10 @@ export async function loadManager(ctx) {
   if (!ctx.currentOffering || !ctx.currentCourse) return empty;
   const isDirector = ctx.isDirectorForCurrent();
 
+  // The marker is read here, and only here, so the list can show an item entered on the newer page
+  // with a link to it instead of the editing buttons. Every other reader leaves the column out.
   let offeringQ = db.from('assignment_offerings')
-    .select(OFFERING_SELECT)
+    .select(`${OFFERING_SELECT},${NEW_PAGE_COLUMN}`)
     .eq('course_offering_id', ctx.currentOffering)
     .order('position', { ascending: true, nullsFirst: false });
   if (!isDirector) offeringQ = offeringQ.eq('is_published', true);
@@ -612,6 +615,23 @@ export async function saveLesson(ctx, model, editingOfferingId) {
                 copiedFrom: null };
   const courseOfferingId = model.courseOfferingId || ctx.currentOffering;
 
+  /* 0 ── An item entered on the newer page is not this page's to save. A save here would put the
+   * kind back to `preflight` and remove any path this page does not recognise. Refused before the
+   * first write. Scheduling a NEW offering has nothing to check. */
+  if (editingOfferingId) {
+    const refused = await refuseIfNewPage(db, editingOfferingId, 'save changes to');
+    if (refused) return { ...out, error: refused.error };
+  } else if (model.assignmentId) {
+    /* Scheduling a container this course offering already runs is a save over that offering, whatever
+     * the call looks like. If the newer page owns it, stop here for the same reason as above. */
+    const { data: already } = await db.from('assignment_offerings').select('id')
+      .eq('assignment_id', model.assignmentId).eq('course_offering_id', courseOfferingId);
+    for (const row of already || []) {
+      const refused = await refuseIfNewPage(db, row.id, 'save changes to');
+      if (refused) return { ...out, error: refused.error };
+    }
+  }
+
   /* 1 ── the CONTAINER (assignments). Term-free, reusable, carries no grading policy. */
   let assignmentId = model.assignmentId || null;
   let containerSlug = model.slug;
@@ -908,6 +928,8 @@ async function unlockCommittedTo(ctx, offeringId, activityIds) {
  * offering_activities.is_visible — a per-term decision, where it belongs.
  */
 export function togglePublish(offeringId, isPublished) {
+  // No guard on purpose: the database refuses to publish an item entered on the newer page, and
+  // the page shows that error as it stands.
   return db.from('assignment_offerings')
     .update({ is_published: !isPublished }).eq('id', offeringId);
 }
@@ -967,7 +989,9 @@ export async function countActivityReports(activityId) {
  * one that clears it too. What does NOT survive is this term's submissions and grades, which
  * cascade. countLessonWork() first, always.
  */
-export function unscheduleLesson(offeringId) {
+export async function unscheduleLesson(offeringId) {
+  const refused = await refuseIfNewPage(db, offeringId, 'remove');
+  if (refused) return refused;
   return db.from('assignment_offerings').delete().eq('id', offeringId);
 }
 
@@ -983,6 +1007,8 @@ export function unscheduleLesson(offeringId) {
  */
 export async function deleteLessonAndContents(lesson) {
   const { offeringId, assignmentId } = lesson;
+  const refused = await refuseIfNewPage(db, offeringId, 'delete', lesson);
+  if (refused) return refused;
   const { data: others } = await db.from('assignment_offerings')
     .select('id').eq('assignment_id', assignmentId).neq('id', offeringId);
   if (others?.length) {
@@ -1058,6 +1084,8 @@ async function otherOfferingsUsing(activityId, keepOfferingId) {
  * @param {object} next            { slug, title, artifact_url, description }
  */
 export async function replaceInteractive(ctx, assignmentId, oldActivityId, offeringId, next) {
+  const refused = await refuseIfNewPage(db, offeringId, 'change the interaction of');
+  if (refused) return refused;
   if (oldActivityId) {
     const others = await otherOfferingsUsing(oldActivityId, offeringId);
     if (others.length) {

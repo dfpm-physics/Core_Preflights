@@ -9,6 +9,7 @@
 //
 //   node tests/browser-harness/genai-build.mjs site/genai/phys-215/<slug>.html [...]
 
+import { NO_PRODUCTION_ARG } from './env.mjs';
 import puppeteer from 'puppeteer-core';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { createServer } from 'node:http';
@@ -42,7 +43,7 @@ const base = `http://127.0.0.1:${server.address().port}/`;
 
 const browser = await puppeteer.launch({
   executablePath: CHROME, headless: 'new',
-  args: ['--no-sandbox', '--disable-dev-shm-usage'],
+  args: [NO_PRODUCTION_ARG, '--no-sandbox', '--disable-dev-shm-usage'],
   defaultViewport: { width: 1440, height: 1000 },
 });
 

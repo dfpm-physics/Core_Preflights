@@ -199,10 +199,22 @@ re-reads the same file against them; nothing is written to the roster until you 
 import itself.
 
 A section created this way has its meeting days filled in from its code — `M1A` becomes an M-day
-section, `T3B` a T-day one — so its deadlines are right immediately. That is a starting value you
-can change, not a rule the system keeps applying: **if a section's code does not start with the day
-it meets, open it and correct the meeting days**, or it will fall back to each assignment's default
-deadline instead of its own day's.
+section, `T3B` a T-day one — so its deadlines are right immediately. The preview shows what each
+new section will start with before you create it. A code that is not a day letter followed by a
+digit (`LAB-3`, `Sec 4`) gets **no meeting days**, which is right for a course that does not use M
+and T days. That is a starting value you can change, not a rule the system keeps applying: **if a
+section's code does not start with the day it meets, open it and correct the meeting days**, or it
+will fall back to each assignment's default deadline instead of its own day's. A section name can
+be anything the course uses; only something that is plainly not a name (longer than 24 characters,
+or holding characters such as a semicolon) is refused, with the reason shown in the list of rows
+that were not imported.
+
+**A term that has not started.** Open **Courses and terms** and use **Students and roster import**
+on the offering's row; it opens that offering's Students tab even while the offering is inactive,
+and the course menu lists it marked *Inactive*. You can also paste the rows into the box under the
+file area instead of uploading a file. A cadet who already has an account from an earlier term or
+course is enrolled here with the same account: no second account is made, and the earlier term is
+not touched. Importing the same file again changes nothing.
 
 **To add a single section later**, use **+ Add section** on **Admin → Staff → Section coverage**.
 The form derives the meeting days and period from the code as you type them and lets you correct

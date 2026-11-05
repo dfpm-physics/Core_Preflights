@@ -76,6 +76,10 @@ export const FACULTY_LINKS = [
   // frozen contract URL (CORE.md §6) that AI-generated prefill links target — renaming it would
   // break every deployed artifact. Same for the student list.
   { key: 'lessons',      label: 'Assignments',  href: 'lessons.html',           icon: 'assignments',   emoji: '📚' },
+  // Items: the newer entry page for every kind of work (v2). Directors only, because it writes.
+  // An instructor who types the URL gets a plain "directors only" state, and the database refuses
+  // the writes regardless.
+  { key: 'items',        label: 'Items',        href: 'items.html',             icon: 'grades',        emoji: '🧾', directorOnly: true },
   // NO Extensions entry. It was its own destination from 2026-07-22 until 2026-07-30, on the
   // argument that a recurring review should not be buried inside an administrative page. The
   // director's call reverses that: it is the **Extensions tab of Course Admin** now, beside
@@ -138,6 +142,12 @@ export const USER_MENU_LINKS = [
    * opened when something has gone wrong, not while teaching. */
   { key: 'tutor-errors', label: 'Tutor errors', href: 'tutor-errors.html',
     icon: 'info', emoji: '⚠️', facultyOnly: true },
+  /* Courses and terms -- create a course, a term or an offering, and copy one term's design into
+   * the next. In the menu, not on the bar, for the reason Artifacts is: it is opened a few times a
+   * term, not while teaching. `directorOnly` is discoverability; the page itself says what only a
+   * site administrator can do, and the database holds the line. */
+  { key: 'terms', label: 'Courses and terms', href: 'terms.html', icon: 'settings', emoji: '🗓️',
+    facultyOnly: true, directorOnly: true },
   // Separated by a rule above it: it is a different tier from "your own account", and running the
   // two together is how somebody lands on the raw table browser looking for their password.
   { key: 'system',  label: 'System',  href: 'system.html',  icon: 'settings', emoji: '🛠️',
@@ -170,7 +180,7 @@ export const USER_MENU_LINKS = [
    *
    * Gated on the GLOBAL flag, like System — the sandboxes carry their own director gate
    * (tests/browser/guard.js), so this is discoverability, not the boundary. */
-  { key: 'tests',   label: 'Test views', href: '../../tests/index.html', icon: 'beaker', emoji: '🧪',
+  { key: 'tests',   label: 'Test views', href: '../../tests/index.html', icon: 'atom', emoji: '🧪',
     adminOnly: true, facultyOnly: true, external: true },
 ];
 
@@ -225,7 +235,7 @@ export function courseOptionsHTML(ctx) {
   const option = (c) => {
     const active = c.offeringId === ctx.currentOffering;
     // When the term is already a heading above, repeating it on every row is noise.
-    const sub = [spansTerms ? null : c.termLabel, roleWord(c)].filter(Boolean).join(' · ');
+    const sub = [spansTerms ? null : c.termLabel, roleWord(c), c.isActive === false ? 'Inactive' : null].filter(Boolean).join(' · ');
     return `
       <button class="menu-item course-opt${active ? ' active' : ''}" role="menuitemradio"
               aria-checked="${active}" data-course="${esc(c.offeringId)}">

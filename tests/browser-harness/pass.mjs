@@ -4,6 +4,7 @@
 // every console error, uncaught exception and failed request per page. Screenshots land in the
 // session scratchpad — never the repo, because faculty pages render real cadet names.
 
+import { NO_PRODUCTION_ARG } from './env.mjs';
 import puppeteer from 'puppeteer-core';
 import { existsSync, mkdirSync } from 'node:fs';
 import { resolve, sep } from 'node:path';
@@ -22,20 +23,20 @@ const flag = (name) => argv.includes(`--${name}`);
 const BASE = arg('base', 'http://localhost:8000');
 const THEME = arg('theme', 'light');
 const STUDENT = flag('student');
-// Faculty credentials come from supabase/admin/.env (PREP_TEST_FACULTY_*) unless overridden on the
+// Faculty credentials are the seeded staging login in env.mjs (PREP_TEST_FACULTY_* overrides), unless overridden on the
 // command line — so the walkthrough is `node pass.mjs` with no secret typed. The student path uses
 // the deliberate test cadet from tests/app-schema/harness.mjs; no real account is involved.
 const FAC = STUDENT ? {} : testFaculty();
-const EMAIL = arg('email', STUDENT ? '3009999999@usafa.edu' : FAC.email || null);
+const EMAIL = arg('email', STUDENT ? 'cadet999@prep-staging.example' : FAC.email || null);
 // Last EIGHT digits, not the last-six provisioning default: the account was rotated 2026-08-17
 // (Supabase requires 8+ chars). tests/app-schema/harness.mjs holds the other copy — change both.
-const PASSWORD = arg('password', STUDENT ? '09999999' : FAC.password || null);
+const PASSWORD = arg('password', STUDENT ? '999999' : FAC.password || null);
 const OUT = arg('out', process.env.CLAUDE_SCRATCHPAD
   || resolve(process.env.TEMP || '/tmp', 'prep-browser-pass'));
 
 if (!EMAIL || !PASSWORD) {
   console.error('No faculty credentials. Set PREP_TEST_FACULTY_EMAIL / _PASSWORD in '
-    + 'supabase/admin/.env, or pass --email and --password (or --student for the test cadet).');
+    + 'the environment, or pass --email and --password (or --student for the test cadet).');
   process.exit(2);
 }
 // A screenshot of a faculty page is a roster. Refuse to put one in the working tree.
@@ -93,7 +94,9 @@ const FACULTY = [
 const STUDENT_PAGES = [
   ['dashboard',   '/site/student/dashboard.html', '.page-head, .stat-tile, main'],
   ['lessons',     '/site/student/lessons.html',   '.page-head, .empty-state, main'],
-  ['assignments', '/site/student/assignments.html', '.page-head, .empty-state, main'],
+  // With no ?a=<offering> this page sends the cadet to lessons.html by design (students navigate by
+  // lesson). The redirect is the expected answer, so it is named as the 4th field and asserted.
+  ['assignments', '/site/student/assignments.html', '.page-head, .empty-state, main', 'lessons.html'],
   ['account',     '/site/student/account.html',   '.page-head h1'],
   ['help',        '/site/student/help.html',      '.page-head, .help-shell, main'],
 ];
@@ -102,7 +105,7 @@ const PAGES = STUDENT ? STUDENT_PAGES : FACULTY;
 const browser = await puppeteer.launch({
   executablePath: CHROME,
   headless: 'new',
-  args: ['--no-sandbox', '--disable-dev-shm-usage', '--window-size=1440,1000'],
+  args: [NO_PRODUCTION_ARG, '--no-sandbox', '--disable-dev-shm-usage', '--window-size=1440,1000'],
   defaultViewport: { width: 1440, height: 1000 },
 });
 const page = await browser.newPage();
@@ -125,7 +128,7 @@ page.on('requestfailed', r => {
 
 const results = [];
 
-async function visit(label, path, selector) {
+async function visit(label, path, selector, expectRedirect = null) {
   problems = [];
   const url = BASE + path;
   let status = 'ok', note = '';
@@ -138,7 +141,9 @@ async function visit(label, path, selector) {
     // label "rollup". A harness that reports a false pass is worse than no harness.
     const landedOn = new URL(page.url()).pathname;
     const askedFor = new URL(url).pathname;
-    if (landedOn !== askedFor) {
+    if (landedOn !== askedFor && expectRedirect && landedOn.endsWith('/' + expectRedirect)) {
+      note = `redirected to ${expectRedirect} as designed`;
+    } else if (landedOn !== askedFor) {
       status = 'REDIRECTED';
       note = /login\.html$/.test(landedOn)
         ? 'bounced to login — the session did not survive'
@@ -189,7 +194,7 @@ if (/login\.html/.test(page.url())) {
 }
 console.log(`Signed in — landed on ${page.url().replace(BASE, '')}\n`);
 
-for (const [label, path, sel] of PAGES) await visit(label, path, sel);
+for (const [label, path, sel, redir] of PAGES) await visit(label, path, sel, redir);
 
 /* ── report ───────────────────────────────────────────────────────────────── */
 const bad = results.filter(r => r.status !== 'ok' || r.problems.length);

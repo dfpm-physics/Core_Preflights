@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Items · PREP</title>
+  <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
+  <link rel="stylesheet" href="../css/styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../js/config.js"></script>
+</head>
+<body>
+  <header id="topnav"></header>
+  <main class="page-wide" id="main">
+    <div class="center-load"><span class="spinner"></span><span>Loading items…</span></div>
+  </main>
+
+  <!-- Item form (directors). One item has one path here: kind, delivery, grading, points, dates. -->
+  <div class="modal-backdrop" id="item-modal">
+    <div class="modal" style="max-width:760px">
+      <div class="modal-head"><h2 id="im-title">New item</h2><button class="modal-close" data-close>×</button></div>
+      <div class="alert alert-error" id="im-error" style="display:none"></div>
+      <div class="alert alert-info" id="im-note" style="display:none"></div>
+
+      <div class="row wrap" style="gap:14px">
+        <div class="field grow" style="min-width:160px"><label for="i-kind">Kind</label><select id="i-kind"></select>
+          <div class="field-hint">A label and a report group. It fills in delivery and grading below, and does nothing else.</div></div>
+        <div class="field" style="min-width:110px;flex:0 0 130px"><label for="i-points">Points</label>
+          <input id="i-points" type="text" inputmode="decimal" placeholder="10">
+          <div class="field-hint" id="i-points-note"></div></div>
+      </div>
+      <div class="field"><label for="i-title">Title</label><input id="i-title" type="text" maxlength="200"></div>
+      <div class="field"><label for="i-desc">Description (optional)</label><textarea id="i-desc" maxlength="2000"></textarea></div>
+
+      <div class="row wrap" style="gap:14px">
+        <div class="field grow" style="min-width:200px"><label for="i-delivery">How the work is done</label><select id="i-delivery"></select></div>
+        <div class="field grow" style="min-width:200px"><label for="i-grading">How it is graded</label><select id="i-grading"></select></div>
+      </div>
+      <div class="field-hint" id="i-path-note" style="margin-top:-8px;margin-bottom:14px"></div>
+      <div class="row wrap" id="i-interactive" style="gap:14px;display:none">
+        <div class="field grow" style="min-width:200px"><label for="i-islug">Tutor id</label><input id="i-islug" type="text" placeholder="lesson-02-charge">
+          <div class="field-hint">The id the tutor lesson posts to. Lowercase letters, numbers and hyphens. It cannot be changed later.</div></div>
+        <div class="field grow" style="min-width:200px"><label for="i-iurl">Tutor link (optional)</label><input id="i-iurl" type="text" placeholder="https://"></div>
+      </div>
+
+      <div class="row wrap" style="gap:20px;margin-bottom:16px">
+        <label class="check-inline"><input type="checkbox" id="i-late"> <span>Accept late work (it is marked late)</span></label>
+        <label class="check-inline"><input type="checkbox" id="i-bonus"> <span>Bonus (adds to points earned only)</span></label>
+        <label class="check-inline"><input type="checkbox" id="i-prog"> <span>Counts at Prog</span></label>
+      </div>
+
+      <div class="field">
+        <label>Dates</label>
+        <div class="row wrap" style="gap:14px;align-items:flex-end">
+          <div class="field" id="i-allbox" style="margin-bottom:0"><label for="i-alldate" style="font-weight:500">Date for all sections</label><input id="i-alldate" type="date"></div>
+          <span id="i-daybox" class="row wrap" style="gap:14px;align-items:flex-end;display:none"></span>
+          <div class="field" style="margin-bottom:0"><label for="i-time" style="font-weight:500">Time (Mountain)</label><input id="i-time" type="text" value="23:59" style="width:90px"></div>
+        </div>
+        <div id="i-samebox" style="display:none;margin-top:8px">
+          <label class="check-inline"><input type="checkbox" id="i-same"> <span>Both tracks get the same date</span></label>
+          <div class="field-hint">This course has M-day and T-day sections, which are due on different days. Enter a date for each track. Enter only one and tick this box to use it for both.</div>
+        </div>
+        <div class="field-hint" id="i-zone-note">Leave every date empty for an item with no deadline.</div>
+        <div id="i-sections" style="margin-top:10px"></div>
+      </div>
+
+      <div class="row" style="justify-content:flex-end;gap:10px;margin-top:6px">
+        <button class="btn btn-ghost" data-close>Cancel</button>
+        <button class="btn btn-primary" id="im-save">Save item</button>
+      </div>
+      <div class="field-hint" style="text-align:right;margin-top:8px">Saving keeps the item unpublished.</div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { bootstrap } from '../js/auth.js';
+    import { renderNav } from '../js/nav.js';
+    import { initTheme } from '../js/theme.js';
+    import { db } from '../js/supabase.js';
+    import { esc, runPage, wireModalDismiss } from '../js/util.js';
+    import * as I from '../js/faculty-items.js';
+
+    const ctx = await bootstrap({ require: 'faculty' });
+    runPage(ctx, init);
+
+    let vm = null;               // { items, sections, kinds }
+    let editing = null;          // the item being edited, or null for a new one
+    let saving = false;
+
+    const $ = (id) => document.getElementById(id);
+    const isDirector = () => ctx.isDirectorForCurrent();
+
+    function init() {
+      initTheme();
+      renderNav(ctx, { active: 'items', onCourseChange: () => load() });
+      wireForm();
+      return load().then(openFromQuery);
+    }
+
+    /* The Mountain-time note. The shared deadline helpers read a time in the browser's own zone, so
+     * the module converts first; this note just says so when the browser is elsewhere. */
+    function zoneNote() {
+      const mine = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      return `Dates and times are in Mountain time (${I.COURSE_ZONE}), whatever zone this browser is in` +
+        (mine && mine !== I.COURSE_ZONE ? ` (it is set to ${mine})` : '') +
+        '. Leave every date empty for an item with no deadline.';
+    }
+
+    async function load() {
+      const root = $('main');
+      const where = `${esc(ctx.courseTitleOf(ctx.currentOffering))}${ctx.currentTermLabel ? ' · ' + esc(ctx.currentTermLabel) : ''}`;
+      const head = (extra = '') => `<div class="page-head"><div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:10px">
+          <div><h1>Items</h1><div class="sub">Everything graded in ${where}.</div></div>${extra}</div></div>`;
+
+      if (!ctx.currentOffering) { root.innerHTML = head() + `<div class="alert alert-warn">No course access found.</div>`; return; }
+      if (!isDirector()) {
+        root.innerHTML = head() + `<div class="empty-state"><div class="es-ic">🔒</div><h3>Directors only</h3>
+          <p>Only a director of this course can enter and change items. Ask a director of ${esc(ctx.courseTitleOf(ctx.currentOffering))} if something here needs to change.</p></div>`;
+        return;
+      }
+
+      root.innerHTML = head() + `<div class="center-load"><span class="spinner"></span><span>Loading…</span></div>`;
+      vm = await I.loadItems(db, ctx.currentOffering);
+      if (vm.error) {
+        console.error('items load failed', vm.error);
+        root.innerHTML = head() + `<div class="alert alert-error">${esc(I.databaseNotReady(vm.error)
+          ? 'This database has not been upgraded for this page yet, so there is nothing to show.'
+          : 'Could not load the items: ' + I.plainError(vm.error))}</div>`;
+        return;
+      }
+
+      const newBtn = `<span class="row" style="gap:8px"><a class="btn btn-ghost btn-sm" id="scale-link" href="scale.html">Letter scale</a>
+        <button class="btn btn-primary" id="new-btn">+ New item</button></span>`;
+      const banner = `<div class="alert alert-info" id="unpublished-note">Items entered here stay unpublished until step 2.
+        Students cannot see them, and there is no publish button on this page yet.</div>`;
+      const rows = vm.items.map(rowHtml).join('');
+      root.innerHTML = head(newBtn) + banner + (vm.items.length ? `<div class="table-wrap"><table id="items-table">
+          <thead><tr><th>Item</th><th>Kind</th><th>Delivery</th><th>Grading</th><th>Points</th><th>Dates</th><th>State</th><th></th></tr></thead>
+          <tbody>${rows}</tbody></table></div>`
+        : `<div class="empty-state"><div class="es-ic">🧾</div><h3>No items yet</h3>
+            <p>Click <strong>+ New item</strong> to enter the first one.</p></div>`);
+      $('new-btn').addEventListener('click', () => openForm(null));
+      root.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', () =>
+        openForm(vm.items.find(x => x.offeringId === b.dataset.edit))));
+      root.querySelectorAll('[data-remove]').forEach(b => b.addEventListener('click', () =>
+        doRemove(vm.items.find(x => x.offeringId === b.dataset.remove))));
+    }
+
+    function flags(it) {
+      return [it.lateAllowed ? 'late OK' : null, it.isBonus ? 'bonus' : null, it.progIncluded ? 'Prog' : null]
+        .filter(Boolean).map(t => `<span class="score-badge pending" style="font-size:0.72em">${esc(t)}</span>`).join(' ');
+    }
+
+    /* Questions are entered on their own page, for an item delivered as questions on the site. */
+    function questionsLink(it) {
+      const p = it.paths.length === 1 ? it.paths[0] : null;
+      if (!p || p.delivery !== 'online_questions') return '';
+      return `<a class="btn btn-ghost btn-sm" data-questions="${esc(it.offeringId)}" href="questions.html?a=${encodeURIComponent(it.offeringId)}">Questions</a> `;
+    }
+
+    function rowHtml(it) {
+      const state = it.isNew
+        ? `<span class="score-badge pending">Unpublished</span>`
+        : `<span class="score-badge ${it.isPublished ? 'full' : 'pending'}">${it.isPublished ? 'Published' : 'Draft'}</span>
+           <div class="muted" style="font-size:0.78em;margin-top:3px">Entered on the older page</div>`;
+      const actions = it.isNew
+        ? `${questionsLink(it)}<button class="btn btn-ghost btn-sm" data-edit="${esc(it.offeringId)}">Edit</button>
+           <button class="btn btn-ghost btn-sm" style="color:var(--red)" data-remove="${esc(it.offeringId)}">Remove</button>`
+        : `<a class="btn btn-ghost btn-sm" href="lessons.html" title="This item was entered on the older page. It is read-only here.">Open in the older editor</a>`;
+      return `<tr data-item="${esc(it.offeringId)}" data-new="${it.isNew ? '1' : '0'}">
+        <td><div style="font-weight:600">${esc(it.title)}</div><div class="muted" style="font-size:0.78em"><code>${esc(it.slug)}</code></div>
+            <div style="margin-top:4px">${flags(it)}</div></td>
+        <td>${esc(it.kindLabel)}</td>
+        <td>${esc(it.deliveryText)}</td>
+        <td>${esc(it.gradingText)}</td>
+        <td>${esc(it.pointsText)}</td>
+        <td>${esc(it.dueText)}</td>
+        <td>${state}</td>
+        <td style="white-space:nowrap">${actions}</td></tr>`;
+    }
+
+    /* ── The form ─────────────────────────────────────────────────────────── */
+    function wireForm() {
+      const modal = document.getElementById('item-modal');
+      wireModalDismiss(modal, closeForm);
+      $('i-kind').addEventListener('change', () => {
+        // Kind only prefills. Once an item exists its path is its own.
+        if (editing) return;
+        const kind = vm.kinds.find(k => k.id === $('i-kind').value);
+        const p = I.prefillFromKind(kind);
+        fillDelivery(p.delivery); fillGrading(p.delivery, p.grading); showInteractive(); syncPoints();
+      });
+      $('i-delivery').addEventListener('change', () => {
+        const d = $('i-delivery').value;
+        fillGrading(d, I.gradingsFor(d)[0]); showInteractive(); syncPoints();
+      });
+      $('i-grading').addEventListener('change', syncPoints);
+      $('im-save').addEventListener('click', save);
+    }
+
+    function fillDelivery(value) {
+      $('i-delivery').innerHTML = I.deliveries().map(d =>
+        `<option value="${esc(d)}">${esc(I.DELIVERY_LABEL[d])}</option>`).join('');
+      $('i-delivery').value = value;
+    }
+    function fillGrading(delivery, value) {
+      const opts = I.gradingsFor(delivery);
+      $('i-grading').innerHTML = opts.map(g => `<option value="${esc(g)}">${esc(I.GRADING_LABEL[g])}</option>`).join('');
+      $('i-grading').value = opts.includes(value) ? value : opts[0];
+    }
+    /* An auto-checked item's points are the sum of its questions, set by the database. */
+    function pointsOwned() {
+      if (editing && editing.paths.length !== 1) return editing.paths.some(p => I.pointsOwnedByQuestions(p.grading));
+      return I.pointsOwnedByQuestions($('i-grading').value);
+    }
+    function syncPoints() {
+      const owned = pointsOwned();
+      $('i-points').disabled = owned;
+      $('i-points-note').textContent = owned
+        ? 'Set by the questions. Add them with the Questions button on the item once it is saved.' : '';
+    }
+    function showInteractive() {
+      $('i-interactive').style.display = $('i-delivery').value === 'interactive_tutor' ? 'flex' : 'none';
+    }
+
+    function sectionRows(sectionDates) {
+      if (!vm.sections.length) return `<div class="muted" style="font-size:0.84em">This course offering has no sections yet. A date for all sections still applies once they exist.</div>`;
+      return `<div class="field-hint" style="margin-bottom:6px">A different date for one section (optional). A section left empty uses the date for all sections.</div>
+        <div class="table-wrap" style="max-height:220px;overflow-y:auto"><table><thead><tr><th>Section</th><th>Meets</th><th>Date</th></tr></thead><tbody>${
+          vm.sections.map(s => `<tr><td>${esc(s.code)}</td><td>${esc((s.meeting_days || []).join(' ') || 'no set days')}</td>
+            <td><input type="date" data-sec="${esc(s.id)}" value="${esc(sectionDates?.[s.id] || '')}"></td></tr>`).join('')
+        }</tbody></table></div>`;
+    }
+
+    function openForm(item) {
+      editing = item;
+      const err = $('im-error'); err.style.display = 'none'; err.textContent = '';
+      const note = $('im-note'); note.style.display = 'none'; note.textContent = '';
+      $('im-title').textContent = item ? 'Edit item' : 'New item';
+
+      const kindOpts = vm.kinds.map(k => `<option value="${esc(k.id)}">${esc(k.label)}</option>`).join('');
+      $('i-kind').innerHTML = kindOpts;
+      const kind0 = vm.kinds.find(k => k.id === (item?.kindId)) || vm.kinds[0];
+      const form = item ? null : I.emptyForm(kind0, vm.sections);
+
+      $('i-kind').value = item ? item.kindId : form.kindId;
+      $('i-title').value = item ? item.title : '';
+      $('i-desc').value = item ? item.description : '';
+      $('i-points').value = item ? item.pointsText : '';
+      $('i-late').checked = item ? item.lateAllowed : form.lateAllowed;
+      $('i-bonus').checked = item ? item.isBonus : false;
+      $('i-prog').checked = item ? item.progIncluded : false;
+
+      const path = item && item.paths.length === 1 ? item.paths[0] : null;
+      const locked = !!item && item.paths.length !== 1;
+      const delivery = path ? path.delivery : (item ? '' : form.delivery);
+      const grading = path ? path.grading : (item ? '' : form.grading);
+      fillDelivery(delivery || I.deliveries()[0]);
+      fillGrading($('i-delivery').value, grading);
+      $('i-delivery').disabled = locked; $('i-grading').disabled = locked;
+      $('i-islug').value = path && path.modality === 'interactive' ? path.slug : '';
+      // A tutor id is the lesson's address once a link exists, so it is fixed then. A tutor with no link yet (a copy made by a
+      // rollover starts so) can still be given the id its lesson will post to; the save re-checks that nobody has used it.
+      const tutorHasLink = !!(path && path.modality === 'interactive' && String(path.content?.artifact_url || '').trim());
+      $('i-islug').disabled = !!path && path.modality === 'interactive' && tutorHasLink;
+      $('i-iurl').value = path?.content?.artifact_url || '';
+      $('i-path-note').textContent = locked
+        ? `This item has ${item.paths.length === 0 ? 'no path' : item.paths.length + ' paths'}, so its delivery and grading are changed on a later page. Everything else here still saves.`
+        : (path && path.modality === 'interactive' && !tutorHasLink
+          ? 'This tutor has no link yet, so its id can still be changed: use the id its lesson posts to. Once a link is saved the id is fixed.'
+          : 'Only combinations the database accepts are offered.');
+      showInteractive();
+      syncPoints();
+
+      const sched = item ? I.scheduleToForm({ due_at: item.dueAt, due_by_day: item.dueByDay }, item.dueRows, vm.sections)
+        : { allDate: '', dayDates: {}, time: I.DEFAULT_TIME, sectionDates: {} };
+      const two = I.isTwoTrack(vm.sections);
+      $('i-allbox').style.display = two ? 'none' : '';
+      $('i-daybox').style.display = two ? 'flex' : 'none';
+      $('i-samebox').style.display = two ? 'block' : 'none';
+      $('i-same').checked = false;
+      $('i-daybox').innerHTML = two ? I.meetingDays(vm.sections).map(d =>
+        `<span class="field" style="margin-bottom:0"><label for="i-day-${esc(d)}" style="font-weight:500">${esc(d)}-day date</label>` +
+        `<input id="i-day-${esc(d)}" data-day="${esc(d)}" type="date" value="${esc(sched.dayDates?.[d] || '')}"></span>`).join('') : '';
+      $('i-alldate').value = sched.allDate;
+      $('i-time').value = sched.time;
+      $('i-zone-note').textContent = zoneNote();
+      $('i-sections').innerHTML = sectionRows(sched.sectionDates);
+
+      $('item-modal').classList.add('open');
+      $('i-title').focus();
+    }
+
+    function closeForm() { $('item-modal').classList.remove('open'); editing = null; }
+
+    function readForm() {
+      const sectionDates = {};
+      document.querySelectorAll('#i-sections [data-sec]').forEach(el => { sectionDates[el.dataset.sec] = el.value; });
+      const dayDates = {};
+      document.querySelectorAll('#i-daybox [data-day]').forEach(el => { dayDates[el.dataset.day] = el.value; });
+      return {
+        kindId: $('i-kind').value,
+        title: $('i-title').value,
+        description: $('i-desc').value,
+        delivery: $('i-delivery').value,
+        grading: $('i-grading').value,
+        points: $('i-points').value,
+        lateAllowed: $('i-late').checked,
+        isBonus: $('i-bonus').checked,
+        progIncluded: $('i-prog').checked,
+        allDate: $('i-alldate').value,
+        dayDates,
+        sameDate: $('i-same').checked,
+        time: $('i-time').value.trim() || I.DEFAULT_TIME,
+        sectionDates,
+        interactiveSlug: $('i-islug').value,
+        interactiveUrl: $('i-iurl').value,
+      };
+    }
+
+    function showError(text) { const e = $('im-error'); e.textContent = text; e.style.display = 'block'; }
+
+    async function save() {
+      if (saving) return;
+      const form = readForm();
+      const locked = !!editing && editing.paths.length !== 1;
+      const problems = I.checkForm(form, { kinds: vm.kinds, sections: vm.sections, slugFrozen: !!editing && editing.paths.length === 1 && editing.paths[0].modality === 'interactive'
+          && ($('i-islug').disabled || form.interactiveSlug.trim() === editing.paths[0].slug), lockedPath: locked,
+        pointsLocked: locked && pointsOwned() });
+      if (problems.length) { showError(problems.join(' ')); return; }
+      saving = true; $('im-save').disabled = true;
+      try {
+        const c = { courseId: ctx.currentCourse, courseCode: ctx.currentCourseCode,
+                    courseOfferingId: ctx.currentOffering, sections: vm.sections };
+        let res = editing ? await I.updateItem(db, c, editing, form) : await I.createItem(db, c, form);
+        if (res.needsConfirm) {
+          // The new delivery replaces the old path, which holds questions and answer keys. Say how many, ask,
+          // and for keys ask a second time. Nothing has been written yet.
+          const impact = res.needsConfirm;
+          if (!window.confirm(I.switchWarning(editing.title, impact))) { showError('Nothing was changed.'); return; }
+          if (impact.keys > 0 && !window.confirm(I.KEYS_SECOND_CONFIRM)) { showError('Nothing was changed.'); return; }
+          res = await I.updateItem(db, c, editing, form, { questions: impact.questions, keys: impact.keys, keysConfirmed: impact.keys > 0 });
+          if (res.needsConfirm) { showError('The questions on this item changed while you were deciding. Nothing was changed. Save again to see the new numbers.'); return; }
+        }
+        if (res.error) {
+          console.error('item save failed', res.error);
+          showError(I.plainError(res.error) + (res.partial ? ' ' + res.partial : ''));
+          if (res.partial) await load();
+          return;
+        }
+        closeForm();
+        await load();
+      } finally { saving = false; $('im-save').disabled = false; }
+    }
+
+    async function doRemove(item) {
+      if (!item) return;
+      const pre = await I.previewRemoval(db, item.offeringId);
+      if (pre.error) {
+        console.error('item remove check failed', pre.error);
+        window.alert(pre.refused ? pre.error.message : 'Could not check this item: ' + I.plainError(pre.error));
+        return;
+      }
+      const impact = pre.impact;
+      if (!window.confirm(I.removalWarning(item.title, impact))) return;
+      if (impact.keys > 0 && !window.confirm(I.KEYS_SECOND_CONFIRM)) return;
+      const res = await I.removeItem(db, item.offeringId, { questions: impact.questions, keys: impact.keys, keysConfirmed: impact.keys > 0 });
+      if (res.needsConfirm) {
+        window.alert('The questions on this item changed while you were deciding. Nothing was removed. Try again to see the new numbers.');
+        return;
+      }
+      if (res.error) {
+        console.error('item remove failed', res.error);
+        window.alert(res.refused ? res.error.message : 'Could not remove: ' + I.plainError(res.error));
+        await load();
+        return;
+      }
+      await load();
+    }
+
+    /* A link from the older Assignments page: items.html?a=<offering id>. */
+    function openFromQuery() {
+      const id = new URLSearchParams(location.search).get('a');
+      if (!id || !vm || vm.error) return;
+      const item = vm.items.find(x => x.offeringId === id);
+      const root = $('main');
+      if (item && item.isNew) { openForm(item); return; }
+      const msg = item
+        ? 'That item was entered on the older page, so it is read-only here.'
+        : 'That item is not in the course offering you have selected. Choose its course from the menu at the top.';
+      root.insertAdjacentHTML('afterbegin', `<div class="alert alert-warn">${esc(msg)}</div>`);
+    }
+  </script>
+</body>
+</html>

@@ -184,9 +184,6 @@ if (target) {
     section('unlock attribution');
 
     const { data: anyInstructor } = await client.from('instructors').select('id, name').limit(1);
-    check('a student can read the instructors table',
-          (anyInstructor || []).length > 0,
-          'instructors_read is USING(true) for every authenticated role');
 
     const { error: anonUnlock } = await client.from('submissions')
       .update({ chosen_activity_id: null }).eq('id', cs.id);

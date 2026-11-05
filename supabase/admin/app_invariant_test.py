@@ -80,8 +80,8 @@ def main():
     course = cur.fetchone()[0]
     cur.execute("INSERT INTO terms (code,label) VALUES ('__t-fall26','Test Fall 2026') RETURNING id")
     term = cur.fetchone()[0]
-    cur.execute("INSERT INTO course_offerings (course_id,term_id) VALUES (%s,%s) RETURNING id",
-                (course, term))
+    cur.execute("INSERT INTO course_offerings (course_id,term_id,is_active) "
+                "VALUES (%s,%s,true) RETURNING id", (course, term))
     co = cur.fetchone()[0]
     cur.execute("INSERT INTO sections (course_offering_id,code,meeting_days,period) "
                 "VALUES (%s,'M1A','{M}',1) RETURNING id", (co,))

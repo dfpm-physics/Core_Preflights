@@ -1,0 +1,9 @@
+Cadet EMPLID,Cadet Name,Email,Cadet Squadron,Section,Subject,Course Number
+3000000801,"Rosterone, Ada Q.",rf0801@prep-staging.example,CS01,LAB-1,,
+3000000802,"Rostertwo, Bo",rf0802@prep-staging.example,CS02,LAB-1,,
+3000000803,"Rosterthree, Cy",rf0803@prep-staging.example,CS03,LAB-2,,
+3000000804,"Rosterfour, Di",rf0804@prep-staging.example,CS04,LAB-2,,
+3000000805,"Rosterfive, Ed",rf0805@prep-staging.example,CS05,W2C,,
+3000000806,"Rostersix, Fay",rf0806@prep-staging.example,CS06,Bad;Section,,
+3000000807,"Rosterseven, Gus",rf0807@prep-staging.example,CS07,LAB-1,PHYS,215
+3000000808,"Rostereight, Hal",not-an-address,CS08,LAB-1,,

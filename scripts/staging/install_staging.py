@@ -10,7 +10,8 @@ WHAT IT RUNS, IN ORDER
   1. supabase/admin/app_schema_bootstrap.sql   as `postgres`  (roles, schema, grants)
      The three REPLACE_ME_* passwords are replaced with new random values.
   2. supabase/migrations/app/NNN_*.sql         as `prep_app_owner` (SET ROLE), in number order.
-     *_ROLLBACK.sql files are skipped.
+     Only the top-level files of that folder run. Rollback files live in its `rollback/`
+     subfolder and are never read by this script.
   3. bootstrap §6  the two auth.users foreign keys, as `postgres`.
   4. bootstrap §10 GRANT authenticated TO prep_app_owner (lets app_rls_test.py prove RLS).
   5. tutor_error_log grants, set to what production holds. This table is the one production built
@@ -18,12 +19,14 @@ WHAT IT RUNS, IN ORDER
   6. Storage buckets and policies, as `postgres`: supabase/migrations/023 and 024. These live in
      the `public` chain folder but touch only schema `storage`, and they gate on `app.*`.
      (019 is skipped: it gates on public.instructors, which does not exist here. 024 replaces it.)
+  7. The migration ledger: every file that ran is recorded in app.migration_ledger (migration 024)
+     through migration_ledger.py, in the same run. Skipped, with a notice, if 024 did not run.
   It does NOT seal prep_app_owner (bootstrap §7), because production is not sealed either.
 
 SAFETY
   * Dry run by default. Nothing is written without --commit.
-  * Refuses any target that names the production project ref.
-  * Refuses unless --expect-ref matches the project ref in the connection string.
+  * Refuses any target whose project ref is not exactly the staging ref (db_target.py reads the URL).
+  * --expect-ref is a second confirmation; it cannot widen that rule.
   * Refuses if schema `app` already exists, unless --from NNN resumes a partial build.
   * Never prints a password or the connection string.
 
@@ -48,13 +51,15 @@ import os
 import re
 import secrets
 import sys
+import getpass
 from pathlib import Path
-from urllib.parse import urlparse
 
 PROD_REF = "shzvpmlnqfmzfmuxkowi"
 REPO = Path(__file__).resolve().parents[2]
 BOOTSTRAP = REPO / "supabase" / "admin" / "app_schema_bootstrap.sql"
 MIGRATIONS = REPO / "supabase" / "migrations" / "app"
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import db_target  # noqa: E402
 STORAGE_FILES = [
     REPO / "supabase" / "migrations" / "023_artifact_sources_storage.sql",
     REPO / "supabase" / "migrations" / "024_lesson_figures_app_policies.sql",
@@ -96,22 +101,13 @@ def fail(msg):
 
 
 def target_ref(url):
-    """Return the project ref named in the URL, from the pooler username or the direct host."""
-    p = urlparse(url)
-    user = p.username or ""
-    host = p.hostname or ""
-    if user.startswith("postgres.") and len(user) > len("postgres."):
-        return user.split(".", 1)[1]
-    m = re.match(r"^db\.([a-z0-9]+)\.supabase\.co$", host)
-    if m:
-        return m.group(1)
-    return None
+    """The project ref named in the URL, read by the shared strict parser (None when refused)."""
+    return db_target.ref_of(url)
 
 
 def migration_files(start):
-    files = sorted(
-        f for f in MIGRATIONS.glob("*.sql") if not f.name.upper().endswith("_ROLLBACK.SQL")
-    )
+    # Top level only: rollback files live in MIGRATIONS / "rollback" and are never part of the chain.
+    files = sorted(f for f in MIGRATIONS.glob("*.sql") if re.match(r"^\d{3}_", f.name))
     if start:
         files = [f for f in files if f.name[:3] >= start]
     return files
@@ -125,11 +121,9 @@ def run_sql(cur, label, sql, as_owner=False):
     """Run one file. Wrap it in a transaction when it does not carry its own."""
     body = sql if has_txn(sql) else f"BEGIN;\n{sql}\nCOMMIT;"
     if as_owner:
+        # Every migration sets its own search_path (009 did not until 2026-11-04). The session
+        # is left on the connection default on purpose, so a file that forgets fails here.
         cur.execute("SET ROLE prep_app_owner;")
-        # 009_analysis_runs.sql names its objects without `app.` and sets no search_path, so
-        # it only works when the session already points at `app`. Production evidently ran it
-        # that way. Files that SET LOCAL search_path themselves still override this.
-        cur.execute("SET search_path = app, public;")
     try:
         cur.execute(body)
     except Exception as exc:  # noqa: BLE001 — report and stop at the first failure
@@ -150,6 +144,27 @@ def run_sql(cur, label, sql, as_owner=False):
     return True
 
 
+def record_ledger(cur, files, start):
+    """Record the files this run applied in app.migration_ledger, if migration 024 created it."""
+    import migration_ledger as ml
+
+    cur.execute("SELECT to_regclass('app.migration_ledger') IS NOT NULL;")
+    if not cur.fetchone()[0]:
+        print("skip     migration ledger: app.migration_ledger does not exist (migration 024 not applied)")
+        return
+    rows = [("app", f.name, ml.checksum(f)) for f in files]
+    rows += [("public", f.name, ml.checksum(f)) for f in STORAGE_FILES]
+    by = getpass.getuser()
+    cur.execute("BEGIN;")
+    try:
+        added = ml.record_rows(cur, rows, "applied", by, "recorded by install_staging.py")
+        cur.execute("COMMIT;")
+    except Exception:  # noqa: BLE001
+        cur.execute("ROLLBACK;")
+        raise
+    print(f"ok       migration ledger: {added} row(s) recorded")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--expect-ref", required=True, help="the staging project ref you expect")
@@ -160,11 +175,10 @@ def main():
     url = os.environ.get("STAGING_DB_URL", "").strip()
     if not url:
         fail("STAGING_DB_URL is not set.")
-    ref = target_ref(url)
-    if ref is None:
-        fail("cannot read a project ref from STAGING_DB_URL (expected postgres.<ref> or db.<ref>.supabase.co).")
-    if PROD_REF in url or ref == PROD_REF or args.expect_ref == PROD_REF:
-        fail("target is the PRODUCTION project. This script only builds staging.")
+    try:
+        ref = db_target.require_staging(url, args.expect_ref).ref
+    except db_target.DbTargetError as exc:
+        fail(str(exc))
     if ref != args.expect_ref:
         fail(f"STAGING_DB_URL names project {ref}, not {args.expect_ref}.")
     if args.start and not re.fullmatch(r"\d{3}", args.start):
@@ -251,6 +265,8 @@ def main():
     for f in STORAGE_FILES:
         if not run_sql(cur, f.name, f.read_text(encoding="utf-8")):
             return 1
+
+    record_ledger(cur, files, args.start)
 
     print("done.  Manual step left: Dashboard > Project Settings > Data API > Exposed schemas > add `app`.")
     conn.close()

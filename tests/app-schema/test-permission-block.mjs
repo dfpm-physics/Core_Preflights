@@ -44,10 +44,12 @@ const permissionBlock = new Function(
   'esc', 'STATE', 'launchRow', 'launchNote', 'writtenHref',
   `${src}; return permissionBlock;`)(esc, STATE, launchRow, launchNote, writtenHref);
 
-// The course director's wording, 2026-08-24. Verbatim, deliberately: this is the sentence a cadet
-// is asked to act on, and paraphrasing it in a later edit changes what they were told.
-const SENTENCE = 'If you are not able to complete the interactive iPREP and you have permission ' +
-                 'from your instructor, you may complete the assignment using PREP.';
+// The course director's wording, revised 2026-08-28 when the permission clause was removed (every
+// remaining assignment became the cadet's own choice). Verbatim, deliberately: this is the
+// sentence a cadet is asked to act on, and paraphrasing it in a later edit changes what they were
+// told. The earlier wording, with the permission clause, is asserted ABSENT below.
+const SENTENCE = 'If you are not able to complete the interactive iPREP, you may complete the ' +
+                 'assignment using PREP instead.';
 
 const norm = s => s.replace(/\s+/g, ' ');
 // The sentence carries markup inside it (the permission clause is bold + underlined), so the
@@ -62,12 +64,10 @@ section('permissionBlock — the offered fallback');
 
 let html = norm(permissionBlock(base));
 check("carries the director's sentence verbatim", text(permissionBlock(base)).includes(SENTENCE));
-// The CONDITION is emphasised, not the whole sentence: a cadet skimming the box is deciding
-// whether it applies to them, and this is the clause that decides it. Asserted as one unbroken
-// run so a reformat that splits the tags across the clause fails here.
-check('the permission clause is bold AND underlined',
-      /<strong><u>and you have permission from your instructor<\/u><\/strong>/.test(
-        norm(permissionBlock(base))));
+// The permission clause was removed on purpose (2026-08-28): the box must never ask a cadet to go
+// and get cleared before using the fallback.
+check('the box no longer asks for instructor permission',
+      !/permission/i.test(text(permissionBlock(base))));
 check('the interactive is the headline', html.includes('Complete the interactive iPREP lesson'));
 check('the interactive card is launchable', html.includes('<LAUNCH where=choice disabled=false>'));
 check('the written path is given a working link', html.includes('href="?a=off-1"'));

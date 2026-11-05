@@ -1,7 +1,9 @@
 # PREP Roadmap
 
-**Status:** living document — reviewed 2026-07-22, revised same day with the course director's
-decisions and a verification pass against the code. Unlike `docs/decisions/`, this file is
+**Status:** living document. Sections 1–8 were last reviewed 2026-07-22, with the course director's
+decisions and a verification pass against the code. Section 9 (the `v2` branch) was added 2026-11-04.
+It carries the current dates and closed decisions, which are recorded in
+[`decisions/V2-SCOPE.md`](decisions/V2-SCOPE.md). Unlike `docs/decisions/`, this file is
 **refreshed, not superseded**. Update it as items land; do not fork a second copy.
 
 > **Ordering convention (2026-07-22):** the priority bands (§1–§4) hold **open work only**.
@@ -235,7 +237,7 @@ renders `r.detail` verbatim, so any staff member who opens that page reads them.
   project. Effect, not cause.
 - **Not a repo leak.** Checked across tracked files and the full history of every branch: no real
   key has ever been committed. The only match is the synthetic
-  `AIzaSyTESTKEYNOTREALDONOTUSE0000000000000` in `tests/browser-harness/`.
+  `AIzaSyTESTKEYNOTREALDONOTUSE0000000000000` in `tests/browser-harness/`. <!-- allowlist-secret: synthetic test value -->
 - **Not public.** The table is behind login and RLS, staff-read only, and is not served by Pages.
 - **Not currently live credentials.** All 29 belong to suspended projects, so they are dead.
 
@@ -2121,3 +2123,100 @@ Still the **cheap half of P3.3**, and the taxonomy work is now observable before
 Deliberately left: `lesson_aggregate.py`'s Python `summarize()` still tallies only the two recognized
 booleans — teaching the aggregator to write prose about flags whose meaning is undefined belongs with
 P3.3, not ahead of it.
+
+---
+
+## 9. The next version (`v2` branch)
+
+*Added 2026-11-04 by Matthew Recker via Claude. Records what the course director asked for and the
+open choices, so the work can start from a fresh session. The setup is in the 2026-11-04 entry of
+[`../CHANGELOG.md`](../CHANGELOG.md).*
+
+### V2.1 — Where the work happens
+
+- All v2 work is on branch `v2`. `main` stays the live site until a pull request merges `v2` into
+  it. Bring `main` into `v2` often. **A merge does not change the database:** each migration is
+  applied on its own, under the CORE.md §0 gate.
+- Local site: `python scripts/staging/serve_local.py`. Database: staging, project
+  `wkibeptktbnaddfynrwr`. Build: `install_staging.py`. Test people and lessons: `seed_staging.py`.
+- **Production migrations are applied at the two cutover steps in V2.6,** each one on its own, and
+  recorded in `app.migration_ledger`. Not every numbered file goes at the same step.
+
+### V2.2 — Auto-graded numeric homework · *design open, not started*
+
+**What the course director asked for.** Cengage and WebAssign are going away. Gradescope stays for
+quizzes, exams and labs, and those results are ported in. Homework questions let a student enter a
+result, and there is a known value: within a set percentage earns credit. AI writes the correct
+answer and the accepted range when it creates the question. Normal web code checks the answer.
+
+**Recommended, not yet decided:**
+- Check answers on the server (a Supabase function or RPC), so the answer key never reaches the
+  browser.
+- Use one parser for number formats (`1E3`, `1.0e3`, `1000`, `1,000`), not an AI-written list of
+  accepted strings.
+- Allow an absolute tolerance as well as a percentage, because a percentage fails at a correct
+  answer of 0.
+- Pick one rule for the comma, because `1,000` can be read two ways.
+
+**Open question:** does each student get different numbers? *Default until answered: the same numbers
+for all, with a model able to hold per-student values later.*
+
+**Priority.** Nothing else covers homework once those services end, so this has no fallback. It must
+work on 6 Jan 2027, or on the first homework due date at the latest. *Default until the course
+director confirms the end date: they end before Spring 2027.*
+
+### V2.3 — Where the gradebook lives · *closed 2026-11-04*
+
+**PREP, on Supabase.** The Django gradebook is a spec and a comparison, not a part of the system.
+It runs alongside PREP until the 8 March Prog, and the two are compared. Findings about it in outside
+reviews may describe an older copy. Check them against the newest one first.
+
+### V2.4 — Letting other people test before go-live · *not started*
+
+A second GitHub repository, `dfpm-physics/iPREP-staging`, serving the site from Pages
+(recommended). `site/js/config.js` already sends that address to staging. Netlify or Cloudflare
+would also work. `serve_local.py` does not run there, so the 92 generated lesson pages would still
+name production and need their own answer first. Add this to the staff-page work only if instructors
+must test before step 1, and keep testers off those pages until then.
+
+### V2.5 — Gaps in staging
+
+*Status at the end of the 2026-11-04 safety work.*
+
+- **Edge functions:** the account functions and the error log are deployed to staging by
+  `scripts/staging/deploy_functions.py`. The AI proxies are not deployed, and the tool refuses them.
+- **Real lessons are not copied,** only test lessons and made-up people. Real cadet data must never
+  go to staging.
+- **A real lesson on claude.ai still submits to production.** Test submissions with a local Gemini
+  copy.
+- **Tests:** `tests/app-schema/` targets staging only, and refuses any other target.
+- **CI:** `.github/workflows/ci.yml`, report-only on `main`. The name scan cannot run in CI, because it
+  needs the live roster. Run it locally before a push.
+- **Migrations:** `app.migration_ledger`, a fingerprint diff, and a `rollback/` folder for each chain.
+  `009_analysis_runs.sql` runs alone, and `app` functions pin their search path.
+- **Restore:** a timed dump and restore is in `docs/operations/RESTORE-DRILL.md`. The production-size
+  run is still owed.
+- **Documents:** run `python scripts/docs/check_doc_sources.py status --write` right after the next
+  commit. `site/help/DOC-STATUS.json` is out of step until then.
+
+### V2.6 — Dates, grade rules, and cutover · *settled 2026-11-04*
+
+The decisions are in [`decisions/V2-SCOPE.md`](decisions/V2-SCOPE.md) and
+[`decisions/GRADE-RULES.md`](decisions/GRADE-RULES.md). This section points at them.
+
+| Date | What must be true |
+|---|---|
+| About 1 Dec 2026, **step 1** | Instructors can create courses and enter all seven work types on the real database. Students see no change. Every database change adds, and replaces nothing. |
+| 21 Dec 2026 | Fall final grades are due. No student-facing change before this. |
+| After 21 Dec, before 6 Jan 2027, **step 2** | Student schedule and grade list, in-person entry, grade import, and the held live-site changes ship as one reviewed batch. |
+| 6 Jan 2027 | Spring term starts. Online homework works, or by the first homework due date at the latest. |
+| 8 Mar 2027 | Prog grades are due, and the Prog report works. |
+| 24 May 2027 | Final grades are due, and the Final report works. |
+
+**Checkpoints to step 1:** data model design written, 13 Nov. Migrations on staging with the current
+site proven on them, 20 Nov. **Go or no-go, 24 Nov.** Staff pages done on staging, 27 Nov.
+
+**Grade rules, in short:** plain points, earned divided by possible. Bonus adds to earned only.
+Excused leaves the total, and only the Course Director sets it. Missing counts as 0. Ungraded stays
+out of the official total. Late work is accepted and marked, with no automatic point loss. No
+rounding. Exact decimal math.

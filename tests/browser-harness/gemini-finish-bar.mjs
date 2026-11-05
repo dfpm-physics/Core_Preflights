@@ -18,6 +18,7 @@
 // What it is NOT: a test that the tutor produces a report. It starts from one already produced.
 // Per CORE.md §2, a Node-only check is never the sole verification — pair it with a real run.
 
+import { NO_PRODUCTION_ARG } from './env.mjs';
 import puppeteer from 'puppeteer-core';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { createServer } from 'node:http';
@@ -86,7 +87,7 @@ const NAME = 'Testcadet';
 
 const browser = await puppeteer.launch({
   executablePath: CHROME, headless: 'new',
-  args: ['--no-sandbox', '--disable-dev-shm-usage'],
+  args: [NO_PRODUCTION_ARG, '--no-sandbox', '--disable-dev-shm-usage'],
   defaultViewport: { width: 1440, height: 1000 },
 });
 const page = await browser.newPage();
@@ -117,7 +118,7 @@ function seed(slug, name, report) {
     }
     return real(input, init);   // same-origin assets only; a tutor call would fail loudly
   };
-  localStorage.setItem('prep.gemini.apikey', 'AIzaSyTESTKEYNOTREALDONOTUSE0000000000000');
+  localStorage.setItem('prep.gemini.apikey', 'AIzaSyTESTKEYNOTREALDONOTUSE0000000000000');  // allowlist-secret: synthetic test value
   // evaluateOnNewDocument runs on EVERY navigation, so a reload re-ran this and overwrote the
   // session the page had just stamped. Seed only when there is nothing there, which is also
   // what a real first visit looks like.
@@ -142,7 +143,7 @@ await page.goto(url, { waitUntil: 'networkidle0', timeout: 60000 });
 await page.waitForFunction(() => document.querySelector('#root')?.childElementCount > 0,
                            { timeout: 30000 }).catch(() => {});
 
-await page.type('#cadet-id', NAME);
+await page.type('#prep-lastname', NAME);
 await page.waitForFunction(() => {
   const b = [...document.querySelectorAll('button')].find(x => /Start Preflight/i.test(x.textContent));
   return b && !b.disabled;                       // needs the name AND connStatus === 'ok'
@@ -244,7 +245,7 @@ breakLz = false;
 const p3 = await browser.newPage();
 await p3.evaluateOnNewDocument(seed, SLUG, NAME, REPORT);
 await p3.goto(url, { waitUntil: 'networkidle0', timeout: 60000 });
-await p3.type('#cadet-id', NAME);
+await p3.type('#prep-lastname', NAME);
 await p3.waitForFunction(() => {
   const b = [...document.querySelectorAll('button')].find(x => /Start Preflight/i.test(x.textContent));
   return b && !b.disabled;                       // needs the name AND connStatus === 'ok'
@@ -286,7 +287,7 @@ ok('the snapshot is stamped submitted', stamped.submitted);
 await p3.goto(url, { waitUntil: 'networkidle0', timeout: 60000 });
 await p3.waitForFunction(() => document.querySelector('#root')?.childElementCount > 0,
                          { timeout: 30000 }).catch(() => {});
-await p3.type('#cadet-id', NAME);
+await p3.type('#prep-lastname', NAME);
 await p3.waitForFunction(() => /already submitted/i.test(document.body.innerText), { timeout: 15000 })
   .catch(() => {});
 const back = await p3.evaluate(() => document.body.innerText);
@@ -303,7 +304,7 @@ breakLz = true;
 const p2 = await browser.newPage();
 const t0 = Date.now();
 await p2.evaluateOnNewDocument((slug, name, report) => {
-  localStorage.setItem('prep.gemini.apikey', 'AIzaSyTESTKEYNOTREALDONOTUSE0000000000000');
+  localStorage.setItem('prep.gemini.apikey', 'AIzaSyTESTKEYNOTREALDONOTUSE0000000000000');  // allowlist-secret: synthetic test value
   localStorage.setItem('prep.gemini.session.' + slug, JSON.stringify({
     v: 1, id: slug, mode: 'graded', cadetId: name, ts: Date.now(),
     msgs: [{ role: 'user', hidden: true, content: 'Begin.' },
@@ -327,7 +328,7 @@ await p2.evaluateOnNewDocument((slug, name, report) => {
 await p2.goto(url, { waitUntil: 'networkidle0', timeout: 60000 });
 await p2.waitForFunction(() => document.querySelector('#root')?.childElementCount > 0,
                          { timeout: 30000 }).catch(() => {});
-await p2.type('#cadet-id', NAME);
+await p2.type('#prep-lastname', NAME);
 await p2.waitForFunction(() => {
   const b = [...document.querySelectorAll('button')].find(x => /Start Preflight/i.test(x.textContent));
   return b && !b.disabled;                       // needs the name AND connStatus === 'ok'
@@ -367,7 +368,7 @@ if (src.includes('const APP_OPENING = true')) {
   // A FRESH graded session: clear the seeded one so the opening actually runs.
   await p4.evaluateOnNewDocument(s => localStorage.removeItem('prep.gemini.session.' + s), SLUG);
   await p4.goto(url, { waitUntil: 'networkidle0', timeout: 60000 });
-  await p4.type('#cadet-id', NAME);
+  await p4.type('#prep-lastname', NAME);
   await p4.waitForFunction(() => {
     const b = [...document.querySelectorAll('button')].find(x => /Start Preflight/i.test(x.textContent));
     return b && !b.disabled;                       // needs the name AND connStatus === 'ok'

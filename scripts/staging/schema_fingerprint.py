@@ -15,6 +15,12 @@ CONNECTION (pick one)
                      PREP_APP_READ_* role from a dotenv file (for production:
                      --dotenv supabase/admin/.env). Uses the read-only tier.
 
+PRODUCTION IS REFUSED BY DEFAULT
+  When the connection names the production project, the tool stops unless --allow-production-read
+  is given. That flag is for the course director's own run from the live clone, using the
+  read-only tier; an agent working in a development clone does not pass it. A connection string
+  this tool cannot read a project from is also refused.
+
 USAGE
   python scripts/staging/schema_fingerprint.py --dotenv supabase/admin/.env > prod.txt
   python scripts/staging/schema_fingerprint.py --url-env STAGING_DB_URL     > staging.txt
@@ -23,6 +29,10 @@ USAGE
 import argparse
 import os
 import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import db_target  # noqa: E402
 
 QUERIES = [
     ("table", """
@@ -106,6 +116,24 @@ def read_dotenv(path):
     return values
 
 
+def connection_ref(args):
+    """The project the connection reaches, read the same way every staging tool reads it."""
+    if args.url_env:
+        try:
+            return db_target.parse(os.environ.get(args.url_env, "").strip()).ref
+        except db_target.DbTargetError as exc:
+            sys.exit(str(exc))
+    env = read_dotenv(args.dotenv)
+    ref = env.get("PREP_PROJECT_REF", "").strip().lower()
+    if not ref:
+        sys.exit("REFUSED  the dotenv file names no PREP_PROJECT_REF.")
+    # The host is what the connection really reaches: if it names production, the ref counts as
+    # production whatever the other key says.
+    if db_target.PRODUCTION_REF in env.get("PREP_DB_HOST", "").strip().lower():
+        return db_target.PRODUCTION_REF
+    return ref
+
+
 def connect(args):
     import psycopg2
 
@@ -132,7 +160,14 @@ def main():
     src = ap.add_mutually_exclusive_group(required=True)
     src.add_argument("--url-env")
     src.add_argument("--dotenv")
+    ap.add_argument("--allow-production-read", action="store_true",
+                    help="permit a read-only fingerprint of the production project (course director's own run)")
     args = ap.parse_args()
+
+    ref = connection_ref(args)
+    if ref == db_target.PRODUCTION_REF and not args.allow_production_read:
+        sys.exit("REFUSED  that connection names the production project. Pass --allow-production-read "
+                 "only for the course director's own read-only run.")
 
     conn = connect(args)
     conn.set_session(readonly=True, autocommit=True)

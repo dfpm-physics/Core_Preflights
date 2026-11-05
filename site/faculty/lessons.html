@@ -302,6 +302,7 @@
     import { questionsOf, artifactUrlOf, isArtifactLaunchable } from '../js/schema.js';
     import * as L from '../js/faculty-lessons.js';
     import { loadBackups, backupFor } from '../js/faculty-artifacts.js';
+    import { NEW_PAGE_HREF, publishRefusalMessage } from '../js/new-page-guard.js';
 
     const ctx = await bootstrap({ require: 'faculty' });
     runPage(ctx, init);
@@ -539,7 +540,12 @@
       // same URL twice. Where there is no Gemini build, Launch is the Claude artifact and there
       // is still nothing to put here.
       const backup = '';
-      const manage = isDirector() ? `
+      // An item entered on the newer page is edited there. This page would overwrite its kind and
+      // paths, so it offers a link in place of the editing buttons (new-page-guard.js).
+      const manage = isDirector() && l.enteredOnNewPage ? `
+        <a class="btn btn-ghost btn-sm" href="${esc(NEW_PAGE_HREF)}?a=${esc(encodeURIComponent(l.offeringId))}"
+           title="This item was entered on the newer page. Edit it there.">Open on the newer page</a>`
+        : isDirector() ? `
         <button class="btn btn-ghost btn-sm" data-edit="${esc(l.offeringId)}">Edit</button>
         <button class="btn btn-ghost btn-sm" data-pub="${esc(l.offeringId)}">${l.isPublished ? 'Unpublish' : 'Publish'}</button>
         <button class="btn btn-ghost btn-sm" style="color:var(--red)" data-del="${esc(l.offeringId)}">Remove</button>` : '';
@@ -1703,7 +1709,12 @@
     async function doTogglePublish(offeringId) {
       const l = vm.lessons.find(x => x.offeringId === offeringId);
       const { error } = await L.togglePublish(offeringId, l.isPublished);
-      if (error) alert('Could not update: ' + error.message);
+      if (error) {
+        // The one refusal a director can act on gets a plain sentence; the raw detail stays in the console.
+        const plain = publishRefusalMessage(error);
+        if (plain) console.warn('Publish refused:', error.message);
+        alert(plain || 'Could not update: ' + error.message);
+      }
       load();
     }
 

@@ -172,7 +172,7 @@ export const ENROLLMENT_JOIN = 'enrollments!inner(id,student_id,section_id,stude
 
 export const STAFF_SELECT =
   'id,role,section_id,course_offering_id,' +
-  'course_offerings(id,course_id,term_id,courses(id,code,title),' +
+  'course_offerings(id,course_id,term_id,is_active,courses(id,code,title),' +
   'terms(id,code,label,starts_on,ends_on,grades_due_on))';
 
 export const ENROLLMENT_SELECT =
@@ -243,6 +243,9 @@ export function shapeOffering(row) {
   return {
     offeringId: row.id,
     courseOfferingId: row.course_offering_id,
+    // Which page owns this row. Only the lesson editor's query selects the column; every other
+    // reader leaves it out, so this is false for them. See new-page-guard.js.
+    enteredOnNewPage: row.entered_on_new_page === true,
     assignmentId: a.id,
     slug: a.slug,
     title: a.title,
