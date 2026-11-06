@@ -43,6 +43,7 @@ OFFLINE = [
     "test-faculty-questions.mjs",
     "test-faculty-scale.mjs",
     "test-faculty-terms.mjs",
+    "test-course-days.mjs",
     "test-student-view.mjs",
     "test-student-loader.mjs",
 

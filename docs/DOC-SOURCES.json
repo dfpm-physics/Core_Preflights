@@ -214,6 +214,7 @@
         "supabase/migrations/app/017_due_by_day.sql",
         "supabase/migrations/app/018_feedback_completed.sql",
         "supabase/migrations/app/019_effort_partial_credit_flat.sql",
+        "supabase/migrations/app/086_course_meeting_days.sql",
         "site/js/schema.js",
         "site/js/faculty-grade.js",
         "site/js/faculty-rollup.js"

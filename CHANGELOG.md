@@ -42,6 +42,26 @@ An assignment that exists now shows a visible section above More options with th
 - Did not: move the grading box (it stays under More options), change `needsMoreOptions` (a saved tutor assignment still opens More options), touch the frozen lesson page or contract, write to staging, or commit.
 
 ---
+## 2026-11-06 — Matthew Recker via Claude (the days a course meets; branch `v2-cf-days`, local, not committed)
+
+**What.** A course now has its own list of meeting days, M and T by default. Migration `app/086` adds `courses.meeting_days`
+(with its rollback). The list is on the course, not the term, so a term copy shares it with no copy step. Where it shows:
+the course forms on the courses-and-terms page (guided setup and the one-form-at-a-time form) have a closed "More options" box
+that says M and T is the split schedule; the Add a section form on the Staff tab offers only the course's days; each section
+tile shows the day it meets and says so when the course does not list it; the roster import preview adds one line, and never
+blocks, when a new section's day is outside the list.
+
+**Why.** The pages listed M, T, W, R, F everywhere, on a split schedule that only uses M and T.
+
+**Proved.** Migration, rollback and re-apply on a scratch database (schema fingerprints match before/rollback and
+first apply/re-apply); a new offline suite `test-course-days.mjs`. Before the column exists the pages read M and T and say
+nothing; any other failed read of the list shows an error.
+
+The inline-script hashes of `admin.html` and `terms.html` were rebuilt with `scripts/checks/csp_pages.py --write`.
+
+**Deliberately not done.** Not applied to any shared database. `db-schema.js` is not regenerated (it comes from a database
+that has the column). `TRACK_ORDER`, due-date logic and the Health page are unchanged. An existing course's list cannot be
+edited from a page yet (only a site administrator may write `courses`; there is no edit form).
 
 ## 2026-11-05 — Matthew Recker via Claude (small faults from the roll-in walk, and the parts that stayed unwalked; branch `v2-step2-rollin`, local)
 

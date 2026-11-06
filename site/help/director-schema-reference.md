@@ -114,7 +114,7 @@ Reusable definitions, independent of any semester:
 
 | Table | Holds |
 |---|---|
-| `courses` | The subject — code (`phys-215`), title, department |
+| `courses` | The subject — code (`phys-215`), title, department, and the days of the week it meets (`meeting_days`, M and T unless set otherwise) |
 | `terms` | Fall 2026 — instruction dates, finals window, and when grades are due |
 | `assignment_kinds` | The list of work types. `preflight` today; homework and exams are added as rows, not code |
 | `assignments` | **The container.** One piece of work: kind, slug, title, objectives |
