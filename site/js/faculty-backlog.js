@@ -12,7 +12,7 @@ export const PILES = [
   { key: 'toPublish', title: 'Draft scores to publish',  hint: 'A score is drafted but students cannot see it.' },
   { key: 'toEnter',   title: 'Scores to enter',          hint: 'Nothing is entered, the column is open, and the date has passed.' },
   { key: 'held',      title: 'Held by a release date',   hint: 'Graded, but the item\'s release date has not arrived.' },
-  { key: 'badDate',   title: 'Date problems',            hint: 'The deadline cannot be worked out, so the item cannot be judged.' },
+  { key: 'badDate',   title: 'Date problems',            hint: 'The deadline cannot be worked out, so the assignment cannot be judged.' },
 ];
 
 /** Which pile one cell belongs to, or null when it is not backlog. First match wins. */

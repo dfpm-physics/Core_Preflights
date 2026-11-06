@@ -70,8 +70,8 @@ export function plainEntryError(e) {
   if (e?.code === '40001' || /changed since you read|removed since you read/.test(m)) return 'A grade changed while you were looking at it. Reload the page and check the numbers again. Nothing was saved.';
   if (/already published/.test(m)) return 'A score you are changing is already published to students. Nothing was saved. Confirm the replacement and try again.';
   if (/not a plain number|too large|above the item|below zero|more than two decimals/.test(m)) return 'A score is out of range or is not a plain number. Nothing was saved.';
-  if (/not published to students/.test(m)) return 'This item is not published to students yet, so publishing its scores would show them nothing. Publish the item first.';
-  if (/not entered by hand or by import/.test(m)) return 'This item is not entered by hand or by import. Its scores are published from the grade page.';
+  if (/not published to students/.test(m)) return 'This assignment is not published to students yet, so publishing its scores would show them nothing. Publish the assignment first.';
+  if (/not entered by hand or by import/.test(m)) return 'This assignment is not entered by hand or by import. Its scores are published from the grade page.';
   if (/not an enrolled cadet/.test(m)) return 'A cadet in this batch is not in one of your sections. Nothing was saved.';
   if (/Failed to fetch|NetworkError|timeout/i.test(m)) return 'The connection dropped, so it is not known whether this was saved. Reload and check before trying again.';
   if (e?.code === '42501' || /permission denied|row-level security/i.test(m)) return 'The database refused this. Only a Director can do it.';

@@ -202,4 +202,21 @@ section('a save is built from the page context the way the page builds it (revie
   check('a form remembers the course it was opened on, and a save on another course is refused', /formOffering/.test(script) && /ctx\.currentOffering !== formOffering/.test(script));
 }
 
+section('staff read "assignment", not "item" (Matthew asked for Assignments), and the questions page no longer says it stays unpublished');
+{
+  const files = { 'site/faculty/questions.html': ['stays unpublished', 'This item cannot', 'the item can be', 'auto-checked item'],
+    'site/js/faculty-questions.js': ['auto-checked item,'],
+    'site/faculty/entry.html': ['>Item<', 'Fills item', 'This item', 'Publish the item', 'The item no longer', 'the item is worth', 'Items graded'],
+    'site/js/faculty-entry.js': ['This item', 'Publish the item'],
+    'site/js/faculty-entry-parse.js': ['this item is worth', 'matched to an item'],
+    'site/faculty/backlog.html': ['<th>Item</th>', 'Two items are', 'An item is matched'],
+    'site/js/faculty-backlog.js': ['the item cannot be judged'] };
+  for (const [file, phrases] of Object.entries(files)) {
+    const text = readFileSync(resolve(REPO, file), 'utf8');
+    for (const ph of phrases) check(`${file.split('/').pop()}: no "${ph}"`, !text.includes(ph));
+  }
+  const q = readFileSync(resolve(REPO, 'site/faculty/questions.html'), 'utf8');
+  check('the questions page says students see it once it is published', /until it is published/.test(q));
+}
+
 process.exit(summary() ? 0 : 1);

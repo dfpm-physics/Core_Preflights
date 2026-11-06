@@ -110,7 +110,7 @@ section('checking one question');
   eq('a good multiple select passes', problems(mc({ format: 'multiple_select', key: { ...mc().key, correct: ['a', 'b'] } })), []);
   eq('a good numeric passes', problems(numeric()), []);
   eq('prose passes on a human graded item', Q.checkQuestion(prose(), { grading: 'human_graded' }), []);
-  check('prose is refused on an auto_checked item, in words', problems(prose()).some(p => /prose question cannot be on an auto-checked item/.test(p)));
+  check('prose is refused on an auto_checked item, in words', problems(prose()).some(p => /prose question cannot be on an auto-checked assignment/.test(p)));
   check('prose with a machine field is refused', Q.checkQuestion(prose({ key: { ...prose().key, value: '4' } }), { grading: 'human_graded' }).some(p => /never a machine field/.test(p)));
   check('prose with a sig fig rule is refused', Q.checkQuestion(prose({ key: { ...prose().key, sigFigMode: 'warn' } }), { grading: 'human_graded' }).length > 0);
   check('a multiple choice with two correct is refused', problems(mc({ key: { ...mc().key, correct: ['a', 'b'] } })).some(p => /exactly one correct/.test(p)));

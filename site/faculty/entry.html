@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8=' 'sha256-l4zAO0UaBEMOZd1Xzzk4733mwv1xEgopVfEKDpITgsE='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8=' 'sha256-O2r6T8g/yVE64a77EB8CmrEmfLPINXJ0HyLF2Pm2AvM='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Enter scores · PREP</title>
   <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
@@ -69,7 +69,7 @@
       }
       if (!vm.items.length) {
         root.innerHTML = head() + `<div class="empty-state"><div class="es-ic">✏️</div><h3>Nothing to enter yet</h3>
-          <p>Items graded by hand entry or by import appear here. A Director adds them on the Assignments page.</p></div>`;
+          <p>Assignments graded by hand entry or by import appear here. A Director adds them on the Assignments page.</p></div>`;
         return;
       }
       if (!itemId || !item()) itemId = vm.items[0].id;
@@ -99,7 +99,7 @@
       $('main').innerHTML = head() + `
         ${note ? `<div class="alert alert-${note.kind}" id="note">${esc(note.text)}</div>` : ''}
         <div class="row wrap" style="gap:14px;align-items:flex-end;margin-bottom:12px">
-          <div class="field" style="margin:0"><label for="f-item">Item</label><select id="f-item">${itemOpts}</select></div>
+          <div class="field" style="margin:0"><label for="f-item">Assignment</label><select id="f-item">${itemOpts}</select></div>
           <div class="field" style="margin:0"><label for="f-sec">Section</label><select id="f-sec">${secOpts}</select></div>
           <button class="btn btn-primary" id="save-btn">Save entered scores</button>
           <button class="btn btn-ghost" id="pub-btn" disabled>Publish this column</button>
@@ -140,10 +140,10 @@
       preview = res.preview;
       info.style.color = '';
       if (!preview.itemPublished) {
-        info.textContent = 'This item is not published to students yet, so publishing its scores would show them nothing. Publish the item first. Publishing the column is off until then.';
+        info.textContent = 'This assignment is not published to students yet, so publishing its scores would show them nothing. Publish the assignment first. Publishing the column is off until then.';
         pub.disabled = true;
       } else if (!preview.handEntered) {
-        info.textContent = 'This item is not entered by hand or by import, so its scores are published from the grade page.';
+        info.textContent = 'This assignment is not entered by hand or by import, so its scores are published from the grade page.';
         pub.disabled = true;
       } else {
         const bits = [`${preview.drafts} drafted score(s) would be published`];
@@ -287,7 +287,7 @@
       const reason = prompt('Why is this cadet excused from this item? A reason is required and is logged with your name.');
       if (reason == null) return;
       const res = await E.excuse(db, enrollmentId, itemId, reason);
-      note = res.error ? { kind: 'error', text: E.plainEntryError(res.error) } : { kind: 'success', text: 'Excused. The item no longer counts in this cadet\'s total.' };
+      note = res.error ? { kind: 'error', text: E.plainEntryError(res.error) } : { kind: 'success', text: 'Excused. The assignment no longer counts in this cadet\'s total.' };
       if (res.error) { render(); return; }
       await reloadKeep();
     }
@@ -329,18 +329,18 @@
         <td>${c.old != null ? esc(P.centsText(c.old)) : '<span class="muted">none</span>'}</td><td><strong>${esc(P.centsText(c.cents))}</strong></td><td>${c.finalized ? 'replaces published' : c.kind}${c.method === 'name' ? ' · matched by name' : ''}</td></tr>`).join('');
       box.innerHTML = `<div class="card" style="padding:14px;margin-bottom:14px">
         <div class="row" style="justify-content:space-between"><strong>Import preview · ${esc(parsed.format)}</strong><button class="btn btn-ghost btn-sm" id="imp-cancel">Cancel</button></div>
-        <table style="margin:10px 0"><thead><tr><th>File column</th><th>Fills item</th></tr></thead><tbody>${colRows}</tbody></table>
+        <table style="margin:10px 0"><thead><tr><th>File column</th><th>Fills assignment</th></tr></thead><tbody>${colRows}</tbody></table>
         <div class="field-hint">${plan.counts.rows} row(s) in the file, ${plan.counts.matched} matched to a cadet, ${plan.counts.unmatched} not matched. ${plan.counts.changes} score(s) would change, ${plan.same} already match.</div>
         ${plan.blockers.length ? `<div class="alert alert-error"><strong>Fix the file first. Nothing has been changed.</strong><ul>${list(plan.blockers)}</ul></div>` : ''}
         ${plan.duplicates.length ? `<div class="alert alert-error"><ul>${plan.duplicates.map(d => `<li>${esc(d.name)}: lines ${d.rowNos.join(', ')}</li>`).join('')}</ul></div>` : ''}
         ${plan.held.length ? `<div class="alert alert-warn"><ul>${list(plan.held)}</ul>
            ${plan.unmatched.length ? `<label class="check-inline"><input type="checkbox" id="opt-skip"${importOpts.skipUnmatched ? ' checked' : ''}> <span>Skip the ${plan.unmatched.length} unmatched row(s)</span></label>` : ''}
            ${plan.nameMatched.length ? `<label class="check-inline"><input type="checkbox" id="opt-name"${importOpts.acceptNameMatches ? ' checked' : ''}> <span>Accept the ${plan.nameMatched.length} row(s) matched by name alone</span></label>` : ''}
-           ${plan.maxMismatch.map(mm => `<label class="check-inline"><input type="checkbox" data-max="${esc(mm.key)}"${importOpts.acceptMax[mm.key] === mm.token ? ' checked' : ''}> <span>Import "${esc(mm.name)}" as written, although it is out of ${esc(mm.fileMaxList.map(P.centsText).join(' and '))} and the item is worth ${P.centsText(mm.itemPointsCents)}</span></label>`).join('')}
+           ${plan.maxMismatch.map(mm => `<label class="check-inline"><input type="checkbox" data-max="${esc(mm.key)}"${importOpts.acceptMax[mm.key] === mm.token ? ' checked' : ''}> <span>Import "${esc(mm.name)}" as written, although it is out of ${esc(mm.fileMaxList.map(P.centsText).join(' and '))} and the assignment is worth ${P.centsText(mm.itemPointsCents)}</span></label>`).join('')}
            ${plan.changes.some(c => c.finalized) ? `<label class="check-inline"><input type="checkbox" id="opt-pub"${importOpts.allowPublished === plan.overwritesPublished ? ' checked' : ''}> <span>Allow replacing ${plan.overwritesPublished} published score(s)</span></label>` : ''}</div>` : ''}
         ${plan.unmatched.length ? `<details><summary>${plan.unmatched.length} unmatched row(s)</summary><ul>${plan.unmatched.map(u => `<li>Line ${u.rowNo}: ${esc(u.name)} (${esc(u.reason)})</li>`).join('')}</ul></details>` : ''}
         ${plan.notes.length ? `<div class="alert alert-info"><ul>${list(plan.notes)}</ul></div>` : ''}
-        ${plan.changes.length ? `<div class="table-wrap" style="max-height:320px;overflow:auto"><table><thead><tr><th>Cadet</th><th>Item</th><th>Now</th><th>New</th><th></th></tr></thead><tbody>${chg}</tbody></table></div>${plan.changes.length > 200 ? `<div class="field-hint">Showing the first 200 of ${plan.changes.length}.</div>` : ''}` : ''}
+        ${plan.changes.length ? `<div class="table-wrap" style="max-height:320px;overflow:auto"><table><thead><tr><th>Cadet</th><th>Assignment</th><th>Now</th><th>New</th><th></th></tr></thead><tbody>${chg}</tbody></table></div>${plan.changes.length > 200 ? `<div class="field-hint">Showing the first 200 of ${plan.changes.length}.</div>` : ''}` : ''}
         <div class="row" style="justify-content:flex-end;margin-top:10px"><button class="btn btn-primary" id="imp-apply"${plan.canApply ? '' : ' disabled'}>Import ${plan.changes.length} score(s)</button></div></div>`;
       $('imp-cancel').onclick = () => { parsed = null; renderImport(); };
       box.querySelectorAll('[data-col]').forEach(s => s.onchange = () => { const it = vm.items.find(i => i.id === s.value); if (it) mapping[s.dataset.col] = it; else delete mapping[s.dataset.col];

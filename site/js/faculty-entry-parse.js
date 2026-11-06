@@ -76,7 +76,7 @@ export function checkCell(raw, item) {
   const r = parseScore(raw);
   if (!r.ok || r.blank) return r;
   if (item && !item.bonus && item.pointsCents != null && r.cents > item.pointsCents) {
-    return { ok: false, reason: `${centsText(r.cents)} is more than the ${centsText(item.pointsCents)} points this item is worth` };
+    return { ok: false, reason: `${centsText(r.cents)} is more than the ${centsText(item.pointsCents)} points this assignment is worth` };
   }
   return r;
 }
@@ -314,7 +314,7 @@ export function matchRoster(rows, roster) {
 export function buildImportPlan({ parsed, mapping, roster, existing = {}, options = {} }) {
   const blockers = [...(parsed.blockers || [])], held = [], notes = [...(parsed.notes || [])];
   const mapped = (parsed.columns || []).map((c, i) => ({ c, i, item: mapping?.[c.key] })).filter(x => x.item);
-  if (!mapped.length) blockers.push('No file column is matched to an item yet.');
+  if (!mapped.length) blockers.push('No file column is matched to an assignment yet.');
   const usedItems = new Map();
   const maxMismatch = [];
   for (const x of mapped) {

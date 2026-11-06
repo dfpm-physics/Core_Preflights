@@ -240,7 +240,7 @@ check('Questions button opens the page', await openQuestions(d, `${TAG} auto`));
 let text = await pageText(d);
 check('the page names the item and says it is auto-checked', /Qharness item auto/.test(text) && /auto-checked/.test(text));
 check('it says the points are the sum of the questions', /the sum of its 0 questions/.test(text), text.slice(0, 300));
-check('it says the item stays unpublished and no student reads a key', /stays unpublished/.test(text) && /no student can read an answer key/.test(text));
+check('it says students cannot see it until it is published, and no student reads a key', /until it is published/.test(text) && /no student can read an answer key/.test(text));
 check('there is no publish control', !(await d.$('[data-pub]')) && !/^\s*Publish\s*$/m.test(text));
 const formats = await d.evaluate(async () => { document.getElementById('add-btn').click(); await new Promise(r => setTimeout(r, 200));
   const v = [...document.querySelectorAll('#q-format option')].map(o => o.value); document.querySelector('#q-modal [data-close]').click(); return v; });
@@ -410,7 +410,7 @@ const BAD = [
 let dr = await dryRun(d, BAD);
 check('the dry run lists all four rows', dr.rows.length === 4 && same(dr.rows.map(r => r.ok), ['1', '0', '0', '0']), JSON.stringify(dr.rows));
 check('it says the whole file is refused and nothing is written', /refused, so the whole file is refused and nothing will be written/.test(dr.verdict), dr.verdict);
-check('every refusal names its row and reason', /Row 3.*correct value/.test(dr.report) && /Row 4.*prose question cannot be on an auto-checked item/.test(dr.report) && /Row 5.*two decimal places at most/.test(dr.report), dr.report.slice(0, 600));
+check('every refusal names its row and reason', /Row 3.*correct value/.test(dr.report) && /Row 4.*prose question cannot be on an auto-checked assignment/.test(dr.report) && /Row 5.*two decimal places at most/.test(dr.report), dr.report.slice(0, 600));
 check('the write button stays off', dr.writeDisabled === true);
 rb = readItems(TAG); a = byTitle(rb, `${TAG} auto`);
 check('nothing was written, not even the good row', !('imp1' in a.questions) && Object.keys(a.questions).length === 4 && a.points === '6.50');

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8=' 'sha256-dAqOKZBp7zeqY07yaqmAemLDYdG+N1Gmhc4xxUTu1FQ='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8=' 'sha256-xM1xHF/ua5KKunwZcuEmHFQjb8TG6pMbvpszbLnpJuc='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Questions · PREP</title>
   <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
@@ -145,7 +145,7 @@
         <label class="check-inline"><input type="radio" name="pf-origin" value="human"> <span>A person wrote them</span></label>
         <label class="check-inline" style="margin-left:18px"><input type="radio" name="pf-origin" value="ai"> <span>An AI model wrote them</span></label>
         <div class="field-hint">Needed only when the file has no <code>written_by</code> column. If the file has that column, it is used and this is ignored.
-          Answers written by an AI model must each be checked by a person before the item can be published.</div>
+          Answers written by an AI model must each be checked by a person before the assignment can be published.</div>
       </fieldset>
       <div class="row" style="gap:10px;margin:10px 0">
         <button class="btn btn-primary" type="button" id="pf-check">Check the file (dry run)</button>
@@ -250,12 +250,12 @@
       const pointsNote = auto
         ? `<div class="alert alert-info" id="points-note">This assignment is worth <strong id="item-points">${esc(String(item.points))}</strong> points, the sum of its ${live.length} question${live.length === 1 ? '' : 's'}. The database keeps the two equal; you do not enter the assignment's points.</div>`
         : `<div class="alert alert-info" id="points-note">This assignment is human graded, so its points (<strong id="item-points">${esc(String(item.points))}</strong>) are set on the Assignments page. The questions add up to <strong>${esc(String(Q.sumPoints(questions)))}</strong>.</div>`;
-      const unpub = `<div class="alert alert-info" id="unpublished-note">This assignment stays unpublished. Students cannot see its questions, and no student can read an answer key at any time.</div>`;
+      const unpub = `<div class="alert alert-info" id="unpublished-note">Students cannot see this assignment or its questions until it is published (tick Published on the Assignments page). No student can read an answer key at any time.</div>`;
       const rows = questions.map((q, i) => rowHtml(q, i)).join('');
       const aiLeft = Q.uncheckedAiQuestions(questions);
       const aiNote = aiLeft.length
         ? `<div class="alert alert-warn" id="ai-note">${aiLeft.length} answer${aiLeft.length === 1 ? ' was' : 's were'} written by an AI model and ${aiLeft.length === 1 ? 'has' : 'have'} not been checked by a person.
-            This item cannot be published until ${aiLeft.length === 1 ? 'it is' : 'each is'} checked. <button class="btn btn-primary btn-sm" id="rv-btn" type="button">Check them now</button></div>` : '';
+            This assignment cannot be published until ${aiLeft.length === 1 ? 'it is' : 'each is'} checked. <button class="btn btn-primary btn-sm" id="rv-btn" type="button">Check them now</button></div>` : '';
       root.innerHTML = head(actions, sub) + pointsNote + unpub + aiNote + (questions.length
         ? `<div class="table-wrap"><table id="q-table"><thead><tr><th>#</th><th>Id</th><th>Format</th><th>Question</th><th>Points</th><th>Key</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`
         : `<div class="empty-state"><div class="es-ic">❓</div><h3>No questions yet</h3><p>Click <strong>+ Add a question</strong>, or <strong>Import from CSV</strong> to add many at once.</p></div>`)
@@ -527,7 +527,7 @@
       const bad = plan.rows.filter(r => !r.ok).length;
       const warn = plan.warnings.map(w => `<div class="alert alert-warn">${esc(w)}</div>`).join('');
       const aiLine = plan.aiCount
-        ? ` ${plan.aiCount} answer${plan.aiCount === 1 ? ' is' : 's are'} marked as written by an AI model, so you will be asked to check ${plan.aiCount === 1 ? 'it' : 'each'} before the item can be published.` : '';
+        ? ` ${plan.aiCount} answer${plan.aiCount === 1 ? ' is' : 's are'} marked as written by an AI model, so you will be asked to check ${plan.aiCount === 1 ? 'it' : 'each'} before the assignment can be published.` : '';
       const verdict = plan.fileErrors.length ? ''
         : plan.ok ? `<div class="alert alert-info" id="pf-verdict">Every row is good. ${plan.rows.length} question${plan.rows.length === 1 ? '' : 's'} will be saved.
             Look at each question, its answer and the range of answers that will be marked right. Nothing has been saved yet.${aiLine}</div>`

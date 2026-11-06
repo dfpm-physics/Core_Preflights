@@ -148,7 +148,7 @@ export function checkQuestion(q, { grading = 'auto_checked', takenQids = [], isN
   const fmt = q.format;
   if (!FORMATS.includes(fmt)) { out.push(`${label}: the format must be one of ${FORMATS.join(', ')}.`); return out; }
   if (fmt === 'prose' && grading === 'auto_checked') {
-    out.push(`${label}: a prose question cannot be on an auto-checked item, because a machine never marks prose. Choose another format, or make the assignment human graded.`);
+    out.push(`${label}: a prose question cannot be on an auto-checked assignment, because a machine never marks prose. Choose another format, or make the assignment human graded.`);
   }
   if (blank(q.qid)) out.push('Each question needs an id.');
   else if (!QID_RE.test(String(q.qid))) out.push(`${label}: the id may use letters, numbers, dot, dash and underscore only (up to 64).`);
