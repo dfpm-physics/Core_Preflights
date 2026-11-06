@@ -20,6 +20,7 @@ import { createHash } from 'node:crypto';
 import { handle } from '../../supabase/functions/check-answer/handler.js';
 import * as fnParser from '../../supabase/functions/check-answer/numeric-answer.js';
 import * as siteParser from '../../site/js/numeric-answer.js';
+import * as siteSymbolic from '../../site/js/symbolic-answer.js';
 import { check, eq, section, summary } from './mini-assert.mjs';
 
 const U = '11111111-1111-4111-8111-111111111111';
@@ -198,6 +199,62 @@ section('retries and double sends cannot exceed the limit (against a model of th
   check('10 sends at once with a limit of 3: exactly 3 stored', w.stored.length === 3 && results.filter(r => r.ok).length === 3, `${w.stored.length}`);
   check('the other 7 are told limit_reached', results.filter(r => r.code === 'limit_reached').length === 7);
   const again = await send(w, base); check('another send after that is still refused', again.ok === false && w.stored.length === 3);
+}
+
+section('symbolic answers: the same file as the site, checked on the server');
+{
+  const a = norm('../../site/js/symbolic-answer.js');
+  check('the function folder holds the site symbolic checker, byte for byte (line endings aside)', a === norm('../../supabase/functions/check-answer/symbolic-answer.js'));
+  check('the handler imports it from its own folder and never calls eval or the Function constructor',
+    /from '\.\/symbolic-answer\.js'/.test(norm('../../supabase/functions/check-answer/handler.js')) && !/\beval\s*\(|new\s+Function|\bFunction\s*\(/.test(norm('../../supabase/functions/check-answer/handler.js')));
+  check('the site module is the one used below', typeof siteSymbolic.checkSymbolic === 'function');
+  const symKey = { expression: 'm*v^2/2', variables: ['m', 'v'] };
+  const sw = (extra = {}) => world({ format: 'symbolic', key: symKey, ...extra });
+  const r1 = await send(sw(), { ...base, answer: '0.5 m v^2' });
+  eq('an equivalent form is right, and the reply has the same four fields', [r1.ok, r1.correct, Object.keys(r1).sort()], [true, true, ['attempt_no', 'attempts_left', 'correct', 'ok']]);
+  const wr = sw(); const r2 = await send(wr, { ...base, answer: 'm v^2' });
+  eq('a different expression is wrong, and an attempt is stored', [r2.ok, r2.correct, wr.stored.length], [true, false, 1]);
+  eq('what is stored is the raw text and no parsed number', [wr.stored[0].p_answer, wr.stored[0].p_parsed, wr.stored[0].p_is_correct], [{ raw: 'm v^2' }, null, false]);
+  check('no reply carries the key expression', !/m\*v\^2\/2/.test(JSON.stringify([r1, r2])));
+  for (const [text, code] of [['z', 'unknown_name'], ['(m v', 'brackets'], ['', 'empty'], ['F = m v', 'equals'], ['1/2m', 'ambiguous_division'], ['m;v', 'bad_character'], ['sin m', 'function_brackets'], ['('.repeat(60) + 'm' + ')'.repeat(60), 'too_deep'], ['m+'.repeat(150), 'too_long']]) {
+    const w = sw(); const r = await send(w, { ...base, answer: text });
+    check(`"${text.slice(0, 20)}" is refused (${code}) and nothing is stored`, r.ok === false && r.code === code && w.stored.length === 0 && !w.calls.some(c => c[0] === 'record_answer'), JSON.stringify(r).slice(0, 160));
+    check(`"${text.slice(0, 20)}": the sentence does not reveal the key`, !/v\^2\/2/.test(r.error || ''));
+  }
+  // variables that can be negative reach the checker; by default every variable is positive
+  const posKey = { expression: 'x', variables: ['x'] };
+  const rp = await send(sw({ key: posKey }), { ...base, answer: 'sqrt(x^2)' });
+  check('by default sqrt(x^2) matches x (positive values only)', rp.ok === true && rp.correct === true, JSON.stringify(rp));
+  const rn = await send(sw({ key: { ...posKey, signed_variables: ['x'] } }), { ...base, answer: 'sqrt(x^2)' });
+  check('a variable marked can-be-negative reaches the checker: sqrt(x^2) no longer matches x', rn.ok === true && rn.correct === false, JSON.stringify(rn));
+  const rg = await send(sw({ key: { expression: 'sqrt(k/m)', variables: ['k', 'm'] } }), { ...base, answer: 'sqrt(k)/sqrt(m)' });
+  check('a split square root is right', rg.ok === true && rg.correct === true, JSON.stringify(rg));
+  const rt = await send(sw({ key: { expression: '6.63e-34*f', variables: ['f'] } }), { ...base, answer: '0' });
+  check('a tiny key does not accept zero', rt.ok === true && rt.correct === false, JSON.stringify(rt));
+  const rb = await send(sw({ key: { expression: 'x', variables: ['x'], signed_variables: ['q'] } }), { ...base, answer: 'x' });
+  check('a signed name that is not a variable is a key fault', rb.ok === false && rb.code === 'key_fault', JSON.stringify(rb));
+  const num = await send(sw(), { ...base, answer: 5 }); check('a non-text answer is refused', num.ok === false && num.code === 'bad_answer');
+  const arr = await send(sw(), { ...base, answer: ['m'] }); check('a list is refused', arr.ok === false);
+  for (const [label, key] of [
+    ['a key that does not parse', { expression: '(m*v', variables: ['m', 'v'] }],
+    ['a key with no expression', { expression: null, variables: ['m', 'v'] }],
+    ['a key using a variable the question does not allow', { expression: 'm*q', variables: ['m', 'v'] }],
+    ['a key with no variables', { expression: 'm', variables: [] }],
+    ['a key undefined at every test point', { expression: 'sqrt(-1-m^2)', variables: ['m', 'v'] }],
+    ['a key with an unclear division', { expression: '1/2m', variables: ['m', 'v'] }],
+  ]) {
+    const w = sw({ key }); const r = await send(w, { ...base, answer: 'm' });
+    check(`${label}: key_fault, nothing stored, nothing marked wrong`, r.ok === false && r.code === 'key_fault' && /fault in this question/.test(r.error) && w.stored.length === 0 && !('correct' in r), JSON.stringify(r).slice(0, 160));
+  }
+  const hostile = sw(); const rh = await send(hostile, { ...base, answer: 'constructor.constructor("return 1")()' });
+  check('a hostile answer is refused, not run', rh.ok === false && hostile.stored.length === 0);
+  const wl = sw({ limit: 2 });
+  const rs = await Promise.all(Array.from({ length: 6 }, () => send(wl, { ...base, answer: 'm' })));
+  check('the attempt limit holds for symbolic answers too', wl.stored.length === 2 && rs.filter(r => r.code === 'limit_reached').length === 4);
+  const same = [await send(sw(), { ...base, answer: 'm*v*v/2' }), await send(sw(), { ...base, answer: 'm*v*v/2' })];
+  eq('the same answer gets the same verdict every time', same[0], same[1]);
+  const ref = world({ format: 'numeric' }); const nr = await send(ref, { ...base, answer: '9.8' });
+  eq('a numeric question behaves as before', [nr.ok, nr.correct, ref.stored[0].p_parsed], [true, true, '98e-1']);
 }
 
 process.exit(summary() ? 0 : 1);

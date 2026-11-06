@@ -66,6 +66,8 @@ const mc = (over = {}) => ({ ...Q.emptyQuestion('multiple_choice'), qid: 'q1', p
   choices: [{ id: 'a', text: 'One' }, { id: 'b', text: 'Two' }], key: { ...Q.emptyQuestion().key, correct: ['b'] }, ...over });
 const numeric = (key = {}, over = {}) => ({ ...Q.emptyQuestion('numeric'), qid: 'n1', prompt: 'How much?', points: '2',
   key: { ...Q.emptyQuestion('numeric').key, value: '9.8', ...key }, ...over });
+const symbolic = (key = {}, over = {}) => ({ ...Q.emptyQuestion('symbolic'), qid: 's1', prompt: 'Energy?', points: '2', variables: 'm, v',
+  key: { ...Q.emptyQuestion('symbolic').key, expression: 'm*v^2/2', variables: 'm, v', ...key }, ...over });
 const prose = (over = {}) => ({ ...Q.emptyQuestion('prose'), qid: 'p1', prompt: 'Explain.', points: '3', ...over });
 const problems = (q, o = {}) => Q.checkQuestion(q, { grading: 'auto_checked', ...o });
 
@@ -74,14 +76,16 @@ section('the spec: formats, the zero rule, the prose rule (read from migration 0
 {
   const sql = read('supabase/migrations/app/030_questions_and_keys.sql');
   const m = sql.match(/questions_format_ck CHECK \(format IN \(([^)]*)\)\)/);
-  const formats = [...m[1].matchAll(/'([a-z_]+)'/g)].map(x => x[1]);
+  // 085 widens the format check (symbolic answers); the formats the database accepts are the last definition.
+  const m85 = read('supabase/migrations/app/085_symbolic_answers.sql').match(/ADD CONSTRAINT questions_format_ck\s+CHECK \(format IN \(([^)]*)\)\)/);
+  const formats = [...(m85 || m)[1].matchAll(/'([a-z_]+)'/g)].map(x => x[1]);
   eq('the page offers exactly the formats the database accepts', [...Q.FORMATS].sort(), formats.sort());
   check('the database requires an absolute tolerance for a value of 0', /question_keys_zero_needs_abs CHECK \(value IS NULL OR value <> 0 OR tol_abs IS NOT NULL\)/.test(sql));
   check('points are numeric(6,2), so a third decimal is a real problem', /points\s+numeric\(6,2\)/.test(sql));
   eq('MAX_POINTS fits numeric(6,2)', Q.MAX_POINTS, 9999.99);
   check('the database sets the key stamps (the page need not and does not)', /question_keys_stamp/.test(sql));
-  eq('an auto_checked item is not offered prose', Q.formatsFor('auto_checked'), ['multiple_choice', 'multiple_select', 'numeric']);
-  eq('a human graded item is offered all four', Q.formatsFor('human_graded'), Q.FORMATS);
+  eq('an auto_checked item is not offered prose', Q.formatsFor('auto_checked'), ['multiple_choice', 'multiple_select', 'numeric', 'symbolic']);
+  eq('a human graded item is offered all five', Q.formatsFor('human_graded'), Q.FORMATS);
 }
 
 section('numbers and ids');
@@ -195,6 +199,8 @@ section('the student preview carries no key');
   const src = read('site/js/faculty-questions.js');
   const fn = src.slice(src.indexOf('export function previewHtml'), src.indexOf('/* ══', src.indexOf('export function previewHtml')));
   check('previewHtml never reads the key object', !/\.key\b/.test(fn));
+  const sy = Q.previewHtml(symbolic({ expression: 'm*v^2/2', variables: 'm, v' }, { variables: 'm, v' }), 1);
+  check('a symbolic preview names the variables and never the expression', sy.includes('m, v') && !sy.includes('v^2') && /disabled/.test(sy), sy);
 }
 
 section('the CSV parser');
@@ -528,6 +534,46 @@ section('choice rows: a switch for correct, joined delete button');
   check('the switch is checked when correct and text is escaped', /checked/.test(html) && !/x "q"/.test(html));
   const css = read('site/css/styles.css');
   check('the shared CSS joins the input and button with no gap', /\.choice-join\s*\{[^}]*display:\s*flex/.test(css) && /\.choice-join > button[^{]*\{[^}]*margin:\s*0;[^}]*border-left-width:\s*0/.test(css));
+}
+
+section('symbolic questions: the expected expression and its variables');
+{
+  eq('a good symbolic question has no problems', problems(symbolic()), []);
+  check('symbolic is offered on an auto-checked item', Q.formatsFor('auto_checked').includes('symbolic'));
+  check('a missing expression is refused', problems(symbolic({ expression: '' })).some(p => /expected expression/.test(p)));
+  check('no variables is refused', problems(symbolic({ variables: '' }, { variables: '' })).some(p => /at least one variable/.test(p)));
+  check('a variable named like a function is refused', problems(symbolic({ variables: 'sin, x' })).some(p => /function or constant/.test(p)));
+  check('a duplicate variable is refused', problems(symbolic({ variables: 'x, x', expression: 'x' })).some(p => /twice/.test(p)));
+  check('nine variables are refused', problems(symbolic({ variables: 'a b c d e1 f g h i', expression: 'a' })).some(p => /at most 8/.test(p)));
+  check('a key that does not parse is refused with the reason', problems(symbolic({ expression: '(m*v' })).some(p => /cannot be used/.test(p) && /bracket/i.test(p)), problems(symbolic({ expression: '(m*v' })).join('|'));
+  check('a key using a name that is not a listed variable is refused', problems(symbolic({ expression: 'm*q' })).some(p => /cannot be used/.test(p) && /q/.test(p)));
+  check('an unclear division in the key is refused', problems(symbolic({ expression: '1/2m' })).some(p => /cannot be used/.test(p)));
+  check('a key defined almost nowhere is refused', problems(symbolic({ expression: 'sqrt(-1-m^2)' })).some(p => /no real value/.test(p)));
+  check('a key over the length limit is refused', problems(symbolic({ expression: 'm+'.repeat(101) })).some(p => /longer than 200/.test(p)));
+  check('numeric fields on a symbolic question are refused', problems(symbolic({ value: '3' })).some(p => /cannot carry numeric fields/.test(p)));
+  check('a unit hint on a symbolic question is refused', problems(symbolic({}, { unitHint: 'm' })).some(p => /unit hint/.test(p)));
+  check('a choice question may not carry an expression', problems(mc({ key: { ...Q.emptyQuestion().key, correct: ['b'], expression: 'x' } })).some(p => /expression/.test(p)));
+  check('a prose question may not carry an expression', problems(prose({ key: { ...Q.emptyQuestion('prose').key, expression: 'x' } }), { grading: 'human_graded' }).some(p => /machine field/.test(p)));
+  eq('the key columns are the expression, the variable list and the ones that can be negative, in order', Q.keyColumns(symbolic({ expression: ' m*v^2/2 ', variables: 'm,  v' })), { expression: 'm*v^2/2', variables: ['m', 'v'], signed_variables: [] });
+  eq('the question columns carry no unit hint and no choices', [Q.questionColumns(symbolic(), 1).unit_hint, Q.questionColumns(symbolic(), 1).choices], [null, null]);
+  const row = { id: 'q-id', qid: 's1', format: 'symbolic', prompt_md: 'E?', points: '2', unit_hint: null, position: 1, is_retired: false, updated_at: 't', choices: null };
+  const back = Q.questionFromRows(row, { id: 'k', version: 2, expression: 'm*v^2/2', variables: ['m', 'v'] });
+  eq('a stored symbolic question comes back into the form', [back.key.expression, back.key.variables, back.variables], ['m*v^2/2', 'm, v', 'm, v']);
+  check('an unchanged key makes no new version', Q.sameKey({ expression: 'm*v^2/2', variables: ['m', 'v'] }, Q.keyColumns(symbolic())));
+  // variables that can be negative
+  eq('a variable marked can-be-negative goes into the key', Q.keyColumns(symbolic({ signed: 'v' })).signed_variables, ['v']);
+  eq('a stored one comes back into the form', Q.questionFromRows(row, { id: 'k', version: 2, expression: 'm*v^2/2', variables: ['m', 'v'], signed_variables: ['v'] }).key.signed, 'v');
+  check('marking one is a change to the key (a new version)', !Q.sameKey({ expression: 'm*v^2/2', variables: ['m', 'v'] }, Q.keyColumns(symbolic({ signed: 'v' }))));
+  check('marking none and storing none are the same key', Q.sameKey({ expression: 'm*v^2/2', variables: ['m', 'v'], signed_variables: null }, Q.keyColumns(symbolic())));
+  eq('a good signed list has no problems', problems(symbolic({ signed: 'v' })), []);
+  check('a signed name that is not a listed variable is refused', problems(symbolic({ signed: 'q' })).some(p => /not one of the variables/.test(p)));
+  check('a key that needs a negative value is usable only when that variable is marked',
+    problems(symbolic({ expression: 'sqrt(-m)' })).some(p => /no real value/.test(p)) && problems(symbolic({ expression: 'sqrt(-m)', signed: 'm' })).length === 0);
+  check('a choice question may not carry signed variables', problems(mc({ key: { ...Q.emptyQuestion().key, correct: ['b'], signed: 'x' } })).some(p => /expression or variables/.test(p)));
+  check('the key columns read from the database include signed_variables', /signed_variables/.test(read('site/js/faculty-questions.js')));
+  check('a changed expression makes a new version', !Q.sameKey({ expression: 'm*v^2/2', variables: ['m', 'v'] }, Q.keyColumns(symbolic({ expression: 'm*v^2' }))));
+  check('a changed variable list makes a new version', !Q.sameKey({ expression: 'm*v^2/2', variables: ['m', 'v'] }, Q.keyColumns(symbolic({ variables: 'm, v, t' }))));
+  check('the stored key columns include the new fields', /expression,variables/.test(read('site/js/faculty-questions.js')));
 }
 
 summary();

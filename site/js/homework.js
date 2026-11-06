@@ -23,6 +23,7 @@
 //   auto-checked grade before the deadline; a database test pins it (test_step2_together_scratch.py, section 10).
 
 import { esc, fmtDateTime } from './util.js';
+import { parseSymbolic } from './symbolic-answer.js';
 
 export const ANSWER_FUNCTION = 'check-answer';
 /** The relation the grade row is read from: the student's view of their own grades (see the header). */
@@ -32,6 +33,7 @@ export const GRADE_COLUMNS = 'enrollment_id,assignment_offering_id,points_earned
 export const TEXT = {
   network: 'Could not reach the server. That answer was not counted. Try again.',
   noAnswer: 'Type your answer first.',
+  noExpression: 'Type your answer first. It can be an expression, for example m*v^2/2.',
   noChoice: 'Choose an answer first.',
   scoreMissing: 'Your answer was counted, but your score could not be loaded. Reload the page.',
   notOpen: 'This homework is not open yet.',
@@ -92,6 +94,7 @@ export function buildView({ item, doc, grade }) {
       return {
         id: q.id, qid: q.qid, number: i + 1, prompt: q.prompt_md || '', figureUrl: q.figure_url || '',
         unitHint: q.unit_hint || '', format: q.format, choices: q.choices || [], points: num(q.points),
+        variables: Array.isArray(q.variables) ? q.variables.filter(v => typeof v === 'string') : [],
         used, left: limit === null ? null : Math.max(0, num(limit) - used),
         counts: s && s.max !== undefined ? { score: num(s.score), max: num(s.max) } : null,
         message: null,
@@ -121,7 +124,23 @@ export function describeReply(res, limit) {
 }
 
 /** Read what the student entered for one question. { ok, value } or { ok:false, text }. */
+/**
+ * How an expression answer reads, before it is sent. Local only: it uses the same reader as the server, so a typing error
+ * is caught here, but it NEVER says whether the answer is right (this file holds no key). { tone, text }.
+ */
+export function symbolicPreview(q, text) {
+  const t = String(text ?? '');
+  if (t.trim() === '') return { tone: '', text: '' };
+  const r = parseSymbolic(t, q.variables || []);
+  if (!r.ok) return { tone: 'bad', text: `I cannot read that yet: ${r.message} Nothing is counted until you press Check answer, and an answer that cannot be read does not use a try.` };
+  return { tone: 'ok', text: `Your answer reads as: ${r.reading}` };
+}
+
 export function readEntry(q, entry) {
+  if (q.format === 'symbolic') {
+    const v = String(entry?.text ?? '').trim();
+    return v ? { ok: true, value: v } : { ok: false, text: TEXT.noExpression };
+  }
   if (q.format === 'numeric') {
     const v = String(entry?.text ?? '').trim();
     return v ? { ok: true, value: v } : { ok: false, text: TEXT.noAnswer };
@@ -152,6 +171,13 @@ function questionHTML(q, readOnly) {
     input = `<input type="text" inputmode="decimal" autocomplete="off" spellcheck="false" data-entry="${esc(q.id)}"
       placeholder="Type a number" style="max-width:240px" ${readOnly ? 'disabled' : ''}>
       <div class="field-hint">${q.unitHint ? `Give your answer in ${esc(q.unitHint)}. ` : ''}Use a decimal point, not a comma.</div>`;
+  } else if (q.format === 'symbolic') {
+    const names = (q.variables || []).map(esc).join(', ');
+    input = `<input type="text" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="200" data-entry="${esc(q.id)}"
+      placeholder="Type an expression" style="max-width:360px" ${readOnly ? 'disabled' : ''}>
+      <div class="field-hint">Use ${names ? esc(names) : 'the given letters'}. Write * to multiply, / to divide and ^ for a power, for example m*v^2/2.
+        Put brackets round anything you divide by: 1/(2*x), not 1/2x.</div>
+      <div class="muted" style="margin-top:6px;font-size:0.88em" data-preview="${esc(q.id)}" aria-live="polite"></div>`;
   } else {
     const type = q.format === 'multiple_select' ? 'checkbox' : 'radio';
     input = `${type === 'checkbox' ? '<div class="field-hint" style="margin-bottom:6px">Choose all that apply.</div>' : ''}
@@ -253,7 +279,7 @@ export async function mountHomework(root, deps) {
 
   const readEntered = (q) => {
     const block = $(`#qb-${CSS.escape(q.id)}`);
-    if (q.format === 'numeric') return { text: block.querySelector('input[type="text"]').value };
+    if (q.format === 'numeric' || q.format === 'symbolic') return { text: block.querySelector('input[type="text"]').value };
     return { choices: [...block.querySelectorAll('input:checked')].map(i => i.value) };
   };
 
@@ -300,6 +326,16 @@ export async function mountHomework(root, deps) {
   root.addEventListener('keydown', (e) => {
     const t = e.target.closest?.('input[type="text"][data-entry]');
     if (t && e.key === 'Enter' && byId[t.dataset.entry]) { e.preventDefault(); check(byId[t.dataset.entry]); }
+  });
+  root.addEventListener('input', (e) => {
+    const t = e.target.closest?.('input[type="text"][data-entry]');
+    const q = t && byId[t.dataset.entry];
+    if (!q || q.format !== 'symbolic') return;
+    const el = $(`[data-preview="${CSS.escape(q.id)}"]`);
+    if (!el) return;
+    const p = symbolicPreview(q, t.value);
+    el.textContent = p.text;
+    el.style.color = p.tone === 'bad' ? 'var(--red, #c62828)' : '';
   });
   root.addEventListener('change', (e) => {
     const r = e.target.closest?.('input[type="radio"][data-entry], input[type="checkbox"][data-entry]');

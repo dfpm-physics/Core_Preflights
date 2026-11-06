@@ -267,6 +267,58 @@ When step 2 drops `grades_new_items_stay_unfinalized`:
 - **Library question edits already move a completed term's `points_possible`** through the 030 sync. The new regrade covers
   active terms only; whether past terms should be frozen against library edits is the director's decision.
 
+## Symbolic answers (migration 085, added 2026-11-05)
+
+A question whose answer is an expression, such as `m*v^2/2`. It is checked by working both expressions out at fixed values and
+comparing the numbers. No AI is involved.
+
+- **Where it runs.** On the server, in `check-answer`, like a numeric answer. The key (expression and variables) goes from the
+  database to the function only; the student page receives the variable names and never the expression.
+- **Reader.** One small written parser, `site/js/symbolic-answer.js`, copied byte for byte into `check-answer/` and
+  `remark-question/` (tests fail if a copy differs). It uses no `eval`, no `Function` constructor, no dynamic import and no
+  property lookup by a name the student typed. The text becomes a tree of plain objects, evaluated by a switch.
+- **Limits, checked while reading and before anything is evaluated.** 200 characters, 150 tokens, 200 nodes, nesting depth 20
+  (brackets, function calls, signs in a row, a tower of powers), 8 variables of 12 characters each. A name that can be split
+  into variable names in more than one way is refused.
+- **Grammar.** `+ - * / ^` (and `**`), round brackets, juxtaposition (`2x`, `m v`, `2(x+1)`), numbers with a decimal
+  point and an exponent, the constants `pi` (or the Greek letter) and `e`, and the functions `sin cos tan asin acos atan sinh
+  cosh tanh sqrt exp ln log10 abs`. `log` alone is refused (natural or base 10 is unclear). Units, vectors and equations are not
+  read.
+- **Refused, not marked wrong, and no attempt used.** An unknown name (the message lists the allowed variables, never the key),
+  an unbalanced bracket, an equals sign, a function without brackets, a character outside the grammar, an answer too long or
+  too deeply nested, two numbers side by side, and a division followed by juxtaposition (`1/2x`, `1/2m`, `1/2(m)`, `a/b c`, `1/x y`), which could
+  mean two different things. **One case is read, by decision (2026-11-05):** a plain number divided by a plain number, then a
+  space, then a factor, is the fraction times that factor. `1/2 m v^2` is (1/2)*m*v^2, `3/4 x` is (3/4)*x, `1/2 (m v^2)` is
+  (1/2)*(m*v^2), and `1 / 2 m` reads the same way. The space is what carries the meaning: without it (`1/2x`) the input is
+  still refused, and both sides of the slash must be plain numbers (`a/b c` and `1/x y` stay refused). The rule applies to an
+  answer and to a key alike, and the reading shown to staff and students brackets the fraction, as `(1 / 2) * m * v^2`.
+  Whitespace changes no other reading. The student's page shows the same message while typing, and shows how the answer is read.
+- **Test points.** 96 candidate points, fixed by a seeded generator whose seed is a hash of the sorted variable names, so the
+  same question gives the same points in any order and on any date. Magnitudes from 0.25 to 40. **Every variable is tested on
+  positive values only** (physics quantities mostly are), so `sqrt(k)/sqrt(m)` matches `sqrt(k/m)`, `ln(a)-ln(b)` matches
+  `ln(a/b)` and `sqrt(x^2)` matches `x`. A variable staff list under "Variables that can be negative"
+  (`question_keys.signed_variables`) takes both signs from the seventh point on; marking one does not move the magnitudes. Every
+  point at which the key is defined is used. An answer that is undefined at such a point (division by zero,
+  an even root of a negative number, overflow) is wrong. If the key is defined at fewer than 8 points, that is a fault in the
+  question: `key_fault`, nothing stored.
+- **Comparison.** `|a - b| <= 1e-9 * max(|a|, |b|) + 4 * E` at each point, E being a bound on the rounding error of the two
+  expressions there (every operation adds 2.3e-16 times its own result to what its operands carry). There is no absolute floor:
+  an earlier version used `max(1, ...)`, which accepted 0 and any wrong multiple for a key below about 1e-9 everywhere
+  (`6.63e-34*f`). A difference smaller than about one part in a billion is not seen, and that limit is stated to staff. A key
+  that is 0 with no subtraction in it must be matched exactly; one that is 0 through cancellation is matched within the rounding.
+- **Stated to staff on the question page.** It proves two expressions are equal at the test points, not that one is simplified;
+  units and vectors are out of the first version; the answer must be defined wherever the key is.
+- **Staff.** Format "Expression (symbolic)" on the question page: the expected expression, the allowed variables, a button that
+  shows how the key reads, and a trial answer that shows how it would be read and marked. A key that does not read, or is defined
+  almost nowhere, is refused on save.
+- **Names.** A Greek letter and its Latin spelling are one name in the answer, the key and the variable list (the micro sign
+  is mu); listing both is a duplicate. Look-alikes mapped before reading: real minus, superscript and subscript digits, times and
+  divide signs, one-half, one-quarter, three-quarters, and a square-root sign before a bracket.
+- **Rollover.** `KEY_COPY` carries `expression`, `variables` and `signed_variables`; a test reads the migrations and fails when a
+  `question_keys` column is neither copied nor deliberately left out.
+- **Not built.** The problem-file and CSV uploads do not carry this type (add one question at a time on the page). Per-student
+  values, units and vectors. A browser walk-through of either page; the real edge function; a deployed run.
+
 ## Stage E gate: test list
 
 Runs now (offline or on a scratch database):

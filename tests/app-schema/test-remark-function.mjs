@@ -211,4 +211,20 @@ section('refusals reach staff as plain sentences');
   }
 }
 
+section('symbolic answers are re-marked with the same checker');
+{
+  check('remark-question holds the site symbolic checker byte for byte', norm('../../site/js/symbolic-answer.js') === norm('../../supabase/functions/remark-question/symbolic-answer.js'));
+  const ctx = { format: 'symbolic', key: { expression: 'm*v^2/2', variables: ['m', 'v'] } };
+  const mk = (raw) => markAttempt(ctx, { id: 'a1', answer: { raw } });
+  eq('an equivalent form is right', mk('0.5 m v^2'), { id: 'a1', is_correct: true, parsed: null });
+  eq('a different expression is wrong', mk('m v'), { id: 'a1', is_correct: false, parsed: null });
+  eq('an answer that cannot be read is left as it was', mk('(m v'), { id: 'a1', is_correct: null, parsed: null });
+  eq('a stored answer with no text is left as it was', markAttempt(ctx, { id: 'a1', answer: {} }), { id: 'a1', is_correct: null, parsed: null });
+  eq('by default the answer is tested on positive values: sqrt(x^2) is x', markAttempt({ format: 'symbolic', key: { expression: 'x', variables: ['x'] } }, { id: 'a1', answer: { raw: 'sqrt(x^2)' } }).is_correct, true);
+  eq('with the variable marked can-be-negative it is not', markAttempt({ format: 'symbolic', key: { expression: 'x', variables: ['x'], signed_variables: ['x'] } }, { id: 'a1', answer: { raw: 'sqrt(x^2)' } }).is_correct, false);
+  eq('a tiny key is not matched by zero', markAttempt({ format: 'symbolic', key: { expression: '1.6e-19*V', variables: ['V'] } }, { id: 'a1', answer: { raw: '0' } }).is_correct, false);
+  eq('a key that does not parse stops the run', markAttempt({ format: 'symbolic', key: { expression: '(m', variables: ['m'] } }, { id: 'a1', answer: { raw: 'm' } }), null);
+  eq('a key with no variables stops the run', markAttempt({ format: 'symbolic', key: { expression: 'm', variables: [] } }, { id: 'a1', answer: { raw: 'm' } }), null);
+}
+
 process.exit(summary() ? 0 : 1);

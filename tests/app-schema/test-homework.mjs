@@ -19,7 +19,7 @@ import { readFileSync } from 'node:fs';
 globalThis.location = { pathname: '/Core_Preflights/site/student/homework.html', search: '' };
 const {
   ANSWER_FUNCTION, GRADE_SOURCE, TEXT, buildView, describeReply, readEntry, sendAnswer, scoreText, renderHomework,
-  triesLeftText, ruleText, fmt,
+  triesLeftText, ruleText, fmt, symbolicPreview,
 } = await import('../../site/js/homework.js');
 import { check, eq, section, summary } from './mini-assert.mjs';
 
@@ -148,6 +148,35 @@ section('the drawn page');
   check('one held-back question reads in the singular', renderHomework(buildView({ item, doc: doc({ held_back: 1 }), grade })).includes('1 question is not available yet'));
   check('the page carries no key field names', !/correct_choice|tol_|key_version/.test(html));
   check('a figure url is escaped into an image', renderHomework(buildView({ item, doc: doc({ questions: [{ ...doc().questions[0], figure_url: 'https://x.test/a"b.png' }] }), grade })).includes('a&quot;b.png'));
+}
+
+section('expression answers: typed text, a local preview that never marks');
+{
+  const sq = { id: '33333333-3333-4333-8333-333333333335', qid: 's1', position: 3, prompt_md: 'Kinetic energy?', figure_url: null, unit_hint: null,
+    format: 'symbolic', choices: [], variables: ['m', 'v'], points: 2, attempts_used: 0 };
+  const view = buildView({ item, doc: doc({ questions: [sq] }), grade: null });
+  eq('the view carries the allowed variables', view.questions[0].variables, ['m', 'v']);
+  const html = renderHomework(view);
+  check('an expression question has a text box, the variable names and a preview line', html.includes('data-entry="' + sq.id + '"') && html.includes('m, v') && html.includes('data-preview="' + sq.id + '"'));
+  check('the box is not a number box', !html.includes('inputmode="decimal"') && !html.includes('Use a decimal point, not a comma'));
+  check('the page says to bracket a divisor', /Put brackets round anything you divide by/.test(html));
+  eq('an empty entry is refused with a sentence', readEntry(view.questions[0], { text: '  ' }).ok, false);
+  eq('a typed expression is sent as typed (trimmed)', readEntry(view.questions[0], { text: ' 0.5 m v^2 ' }), { ok: true, value: '0.5 m v^2' });
+  const q = view.questions[0];
+  eq('the preview shows how it reads', symbolicPreview(q, 'm v^2/2'), { tone: 'ok', text: 'Your answer reads as: m * v^2 / 2' });
+  const bad = symbolicPreview(q, 'm v^');
+  check('the preview names a problem and says no try is used', bad.tone === 'bad' && /does not use a try/.test(bad.text), bad.text);
+  check('an unknown variable is named in the preview', /allows: m, v/.test(symbolicPreview(q, 'm z').text));
+  check('an unclear division is flagged in the preview', /unclear/i.test(symbolicPreview(q, '1/2m').text));
+  eq('nothing typed, nothing shown', symbolicPreview(q, ''), { tone: '', text: '' });
+  const sent = [];
+  const deps = { invoke: async (name, body) => { sent.push([name, body]); return { data: { ok: true, correct: true, attempt_no: 1, attempts_left: 2 }, error: null }; } };
+  const r = await sendAnswer(deps, AO, q, '0.5 m v^2', 3);
+  eq('the answer goes to check-answer with the three fields only', [sent[0][0], Object.keys(sent[0][1]).sort(), r.kind, r.correct], ['check-answer', ['answer', 'assignment_offering_id', 'question_id'], 'checked', true]);
+  const refused = describeReply({ data: { ok: false, code: 'unknown_name', error: 'I do not know "z". This question allows: m, v.' }, error: null }, 3);
+  check('a refusal shows the server sentence and is not a spent try', refused.kind === 'refused' && /allows: m, v/.test(refused.text) && !refused.spent);
+  const none = renderHomework(buildView({ item, doc: doc({ questions: [{ ...sq, variables: undefined }] }), grade: null }));
+  check('a question that arrives without variables still draws', none.includes('the given letters'));
 }
 
 process.exit(summary() ? 0 : 1);

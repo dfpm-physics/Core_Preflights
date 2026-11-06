@@ -28,12 +28,14 @@
 
 import { NEW_PAGE_COLUMN } from './new-page-guard.js';
 import { esc } from './util.js';
+import { variableProblem, signedProblem, previewKey, MAX_SYMBOLIC_CHARS, MAX_VARIABLES } from './symbolic-answer.js';
 
-export const FORMATS = ['multiple_choice', 'multiple_select', 'numeric', 'prose'];
+export const FORMATS = ['multiple_choice', 'multiple_select', 'numeric', 'symbolic', 'prose'];
 export const FORMAT_LABEL = {
   multiple_choice: 'Multiple choice (one answer)',
   multiple_select: 'Multiple select (all that apply)',
   numeric: 'Numeric',
+  symbolic: 'Expression (symbolic)',
   prose: 'Prose (a person marks it)',
 };
 export const MODES = ['ignore', 'warn', 'require'];
@@ -129,12 +131,15 @@ const splitAliases = (s) => blank(s) ? [] : String(s).split(/[|,]/).map(x => x.t
 
 /** An empty question for the entry form. */
 export const emptyQuestion = (format = 'multiple_choice') => ({
-  qid: '', format, prompt: '', points: '1', unitHint: '',
+  qid: '', format, prompt: '', points: '1', unitHint: '', variables: '',      // variables: the names an answer may use (not secret; a student sees them)
   choices: format === 'multiple_choice' || format === 'multiple_select'
     ? [{ id: 'a', text: '' }, { id: 'b', text: '' }] : [],
   key: { correct: [], value: '', tolAbs: '', tolPct: '', sigFigs: '', sigFigMode: 'ignore',
-         unit: '', unitAliases: [], unitMode: 'ignore', reference: '' },
+         unit: '', unitAliases: [], unitMode: 'ignore', reference: '', expression: '', variables: '', signed: '' },   // signed: the variables that may be negative
 });
+
+/** The variable names typed in one box: separated by commas or spaces, in the order given. */
+export const splitVariables = (s) => blank(s) ? [] : String(s).split(/[\s,;]+/).map(x => x.trim()).filter(Boolean);
 
 /**
  * Check one question and its key. Returns plain sentences; empty means acceptable.
@@ -172,7 +177,8 @@ export function checkQuestion(q, { grading = 'auto_checked', takenQids = [], isN
   const choiceFormat = fmt === 'multiple_choice' || fmt === 'multiple_select';
   const machineFilled = (k.correct || []).length > 0 || !blank(k.value) || !blank(k.tolAbs) || !blank(k.tolPct) ||
     !blank(k.sigFigs) || !blank(k.unit) || (k.unitAliases || []).length > 0 ||
-    (k.sigFigMode && k.sigFigMode !== 'ignore') || (k.unitMode && k.unitMode !== 'ignore');
+    (k.sigFigMode && k.sigFigMode !== 'ignore') || (k.unitMode && k.unitMode !== 'ignore') ||
+    !blank(k.expression) || !blank(k.variables) || !blank(k.signed);
 
   if (choiceFormat) {
     const ch = q.choices || [];
@@ -198,6 +204,7 @@ export function checkQuestion(q, { grading = 'auto_checked', takenQids = [], isN
         (k.unitAliases || []).length || (k.sigFigMode && k.sigFigMode !== 'ignore') || (k.unitMode && k.unitMode !== 'ignore')) {
       out.push(`${label}: a choice question cannot carry numeric fields (value, tolerance, significant figures, unit).`);
     }
+    if (!blank(k.expression) || !blank(k.variables) || !blank(k.signed)) out.push(`${label}: a choice question cannot carry an expression or variables.`);
   } else {
     if ((q.choices || []).length) out.push(`${label}: only choice questions have choices.`);
     if ((k.correct || []).length) out.push(`${label}: only choice questions have correct choices.`);
@@ -223,6 +230,26 @@ export function checkQuestion(q, { grading = 'auto_checked', takenQids = [], isN
     if (!MODES.includes(k.unitMode || 'ignore')) out.push(`${label}: the unit rule must be ignore, warn or require.`);
     else if ((k.unitMode || 'ignore') !== 'ignore' && blank(k.unit)) out.push(`${label}: the unit is ${k.unitMode}d, so name the unit.`);
     if ((k.unitAliases || []).length && blank(k.unit)) out.push(`${label}: unit aliases need a unit.`);
+  } else if (fmt === 'symbolic') {
+    // Staff set the expected expression and the variables an answer may use. The same reader the answer function uses
+    // decides whether the expression reads and is defined at the test points, so a key that cannot be checked is
+    // refused here and never reaches a student.
+    const vars = splitVariables(k.variables);
+    const vp = variableProblem(vars);
+    if (vp) out.push(`${label}: ${vp}`);
+    const signed = splitVariables(k.signed);
+    const sp = vp ? null : signedProblem(signed, vars);
+    if (sp) out.push(`${label}: ${sp}`);
+    if (blank(k.expression)) out.push(`${label}: enter the expected expression, for example m*v^2/2.`);
+    else if (String(k.expression).length > MAX_SYMBOLIC_CHARS) out.push(`${label}: the expected expression is longer than ${MAX_SYMBOLIC_CHARS} characters.`);
+    else if (!vp && !sp) {
+      const pk = previewKey(String(k.expression), vars, signed);
+      if (!pk.ok) out.push(`${label}: the expected expression cannot be used. ${pk.message}`);
+    }
+    if (!blank(q.unitHint)) out.push(`${label}: a unit hint is for numeric questions. Units are not part of a symbolic answer.`);
+    if (!blank(k.value) || !blank(k.tolAbs) || !blank(k.tolPct) || !blank(k.sigFigs) || !blank(k.unit) || (k.unitAliases || []).length) {
+      out.push(`${label}: a symbolic question cannot carry numeric fields (value, tolerance, significant figures, unit).`);
+    }
   } else if (fmt !== 'prose') {
     if (!blank(q.unitHint)) out.push(`${label}: a unit hint is for numeric questions.`);
   }
@@ -275,11 +302,14 @@ export function keyColumns(q) {
       unit_aliases: aliases.length ? aliases : null, unit_mode: k.unitMode || 'ignore',
     };
   }
+  if (q.format === 'symbolic') {
+    return { expression: String(k.expression).trim(), variables: splitVariables(k.variables), signed_variables: splitVariables(k.signed) };
+  }
   return blank(k.reference) ? null : { reference_text: String(k.reference).trim() };
 }
 
 const KEY_FIELDS = ['correct_choice_ids', 'value', 'tol_abs', 'tol_pct', 'sig_figs', 'sig_fig_mode', 'unit',
-  'unit_aliases', 'unit_mode', 'reference_text'];
+  'unit_aliases', 'unit_mode', 'reference_text', 'expression', 'variables', 'signed_variables'];
 const KEY_DEFAULTS = { sig_fig_mode: 'ignore', unit_mode: 'ignore' };
 
 const normalizeKeyRow = (row) => {
@@ -303,7 +333,7 @@ export function questionFromRows(row, key) {
   const str = (v) => v === null || v === undefined ? '' : String(v);
   return {
     id: row.id, qid: row.qid, format: row.format, prompt: row.prompt_md || '', points: str(row.points),
-    unitHint: str(row.unit_hint), position: row.position, isRetired: row.is_retired === true,
+    unitHint: str(row.unit_hint), variables: (k.variables || []).join(', '), position: row.position, isRetired: row.is_retired === true,
     updatedAt: row.updated_at || null,         // sent back to save_question, unchanged, as the optimistic check
     choices: (row.choices || []).map(c => ({ id: c.id, text: c.text })),
     keyVersion: key ? key.version : null, keyId: key ? key.id : null,
@@ -311,6 +341,7 @@ export function questionFromRows(row, key) {
       correct: k.correct_choice_ids || [], value: str(k.value), tolAbs: str(k.tol_abs), tolPct: str(k.tol_pct),
       sigFigs: str(k.sig_figs), sigFigMode: k.sig_fig_mode || 'ignore', unit: str(k.unit),
       unitAliases: k.unit_aliases || [], unitMode: k.unit_mode || 'ignore', reference: str(k.reference_text),
+      expression: str(k.expression), variables: (k.variables || []).join(', '), signed: (k.signed_variables || []).join(', '),
     },
   };
 }
@@ -332,6 +363,9 @@ export function previewHtml(q, number = 1) {
     if (q.format === 'multiple_select') answer = `<div class="muted" style="font-size:0.84em">Select all that apply.</div>` + answer;
   } else if (q.format === 'numeric') {
     answer = `<input type="text" disabled placeholder="Your answer"> ${q.unitHint ? `<span class="muted">${esc(q.unitHint)}</span>` : ''}`;
+  } else if (q.format === 'symbolic') {
+    const names = splitVariables(q.variables).map(esc).join(', ');
+    answer = `<input type="text" disabled placeholder="Type an expression"> <span class="muted">${names ? 'Use: ' + names : ''}</span>`;
   } else {
     answer = `<textarea disabled placeholder="Your answer" style="width:100%;min-height:70px"></textarea>`;
   }
@@ -606,7 +640,7 @@ export async function loadItem(db, offeringId) {
 }
 
 const QUESTION_COLUMNS = 'id,activity_id,qid,position,prompt_md,format,choices,points,unit_hint,is_retired,updated_at';
-const KEY_COLUMNS = 'id,question_id,version,correct_choice_ids,select_rule,value,tol_abs,tol_pct,sig_figs,sig_fig_mode,unit,unit_aliases,unit_mode,reference_text,written_by,checked_by,checked_at,created_at,superseded_at';
+const KEY_COLUMNS = 'id,question_id,version,correct_choice_ids,select_rule,value,tol_abs,tol_pct,sig_figs,sig_fig_mode,unit,unit_aliases,unit_mode,reference_text,expression,variables,signed_variables,written_by,checked_by,checked_at,created_at,superseded_at';
 
 /**
  * Every question of an activity with its CURRENT key, in order. All versions of a key are read, so the page can

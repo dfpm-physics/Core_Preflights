@@ -319,10 +319,20 @@ const OFFERING_COPY = ['points_possible', 'grading_mode', 'switch_policy', 'posi
   'allow_over_max', 'prog_included', 'attempt_limit', 'attempt_rule', 'entered_on_new_page'];
 const PATH_COPY = ['grading_role', 'available_after', 'is_visible', 'position', 'delivery', 'grading', 'warn_earns_full'];
 const QUESTION_COPY = ['qid', 'position', 'prompt_md', 'figure_url', 'unit_hint', 'format', 'choices', 'points'];
-const KEY_COPY = ['variant_key', 'correct_choice_ids', 'select_rule', 'value', 'tol_abs', 'tol_pct', 'sig_figs',
-  'sig_fig_mode', 'unit', 'unit_aliases', 'unit_mode', 'reference_text', 'written_by'];
+// Every column of question_keys is either listed here or deliberately not copied (id, question_id, version, checked_by,
+// checked_at, created_by, created_at, superseded_at). tests/app-schema/test-faculty-terms.mjs reads the migrations and fails
+// when a column is in neither list, so a new key column cannot be left out of a rollover without someone deciding.
+export const KEY_COPY = ['variant_key', 'correct_choice_ids', 'select_rule', 'value', 'tol_abs', 'tol_pct', 'sig_figs',
+  'sig_fig_mode', 'unit', 'unit_aliases', 'unit_mode', 'reference_text', 'written_by', 'expression', 'variables', 'signed_variables'];
 
 const pick = (row, cols) => Object.fromEntries(cols.map(c => [c, row[c] ?? null]));
+// A key that has no symbolic fields is copied without those three columns, exactly as before they existed, so a numeric or
+// choice question's key insert is unchanged.
+const pickKey = (row) => {
+  const out = pick(row, KEY_COPY);
+  for (const c of ['expression', 'variables', 'signed_variables']) if (out[c] === null) delete out[c];
+  return out;
+};
 
 /**
  * Build the plan from what was read. Pure: no database, no clock, and the random tail is injectable.
@@ -458,7 +468,7 @@ export function buildRolloverPlan(src, tgt, opts, rand = randomHex) {
         : pathSlug(tgt.offering.courseCode, row.slug, act.modality);
       const questions = (src.questions.get(act.id) || []).map(q => ({
         row: pick(q, QUESTION_COPY),
-        key: (src.keys.get(q.id) || []).map(k => ({ ...pick(k, KEY_COPY), version: 1, checked_by: null, checked_at: null })),
+        key: (src.keys.get(q.id) || []).map(k => ({ ...pickKey(k), version: 1, checked_by: null, checked_at: null })),
       }));
       qn += questions.length; kn += questions.reduce((n, q) => n + q.key.length, 0);
       row.activities.push({

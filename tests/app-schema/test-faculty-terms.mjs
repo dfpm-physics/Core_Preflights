@@ -548,4 +548,56 @@ section('the checklist');
   check('turning a course on stays a site-administrator button', /isAdmin\(\)\s*\n?\s*\? \(o\.isActive/.test(html));
 }
 
+section('a symbolic question keeps its expression, its variables and the ones that can be negative when a term rolls over');
+{
+  const f = fixture();
+  f.src.questions.get('act-1').push({ id: 'q-3', activity_id: 'act-1', qid: 'Q3', position: 2, prompt_md: 'energy', figure_url: null, unit_hint: null, is_retired: false, format: 'symbolic', choices: null, points: 2 });
+  f.src.keys.set('q-3', [{ id: 'k-3', question_id: 'q-3', variant_key: '', version: 2, value: null, tol_abs: null, tol_pct: null, sig_figs: null,
+    sig_fig_mode: 'ignore', unit: null, unit_aliases: null, unit_mode: 'ignore', reference_text: null, written_by: 'human', select_rule: 'all_or_nothing',
+    correct_choice_ids: null, expression: 'm*v^2/2', variables: ['m', 'v'], signed_variables: ['v'], checked_by: 'someone', checked_at: '2026-10-01T00:00:00Z', superseded_at: null }]);
+  const plan = T.buildRolloverPlan(f.src, f.tgt, { dates: 'blank' }, rand);
+  const qs = plan.items[0].activities[0].questions;
+  const sym = qs.find(q => q.row.qid === 'Q3');
+  eq('the symbolic question is planned with its format', sym.row.format, 'symbolic');
+  eq('its key carries the expression, the variables and the ones that can be negative',
+    [sym.key[0].expression, sym.key[0].variables, sym.key[0].signed_variables], ['m*v^2/2', ['m', 'v'], ['v']]);
+  eq('and is unchecked, version 1', [sym.key[0].version, sym.key[0].checked_by], [1, null]);
+  reset();
+  const res = await T.runRollover(db, plan, 'co-spring', f.src, { id: 'me' });
+  eq('the rollover ran', res.error, null);
+  const sent = writes().filter(c => c.table === 'question_keys').flatMap(c => (Array.isArray(c.payload) ? c.payload : [c.payload]));
+  const symKey = sent.find(k => k.expression === 'm*v^2/2');
+  check('the key insert that reaches the database carries the expression, the variables and signed_variables',
+    !!symKey && JSON.stringify(symKey.variables) === '["m","v"]' && JSON.stringify(symKey.signed_variables) === '["v"]', JSON.stringify(sent).slice(0, 300));
+}
+
+section('the key copy lists every column of question_keys, so a new column cannot be left behind');
+{
+  // Every column the migrations give question_keys is either copied to the next term or on this list of columns that are
+  // deliberately NOT copied. A migration that adds a column fails this test until its author decides which.
+  const NOT_COPIED = new Set(['id', 'question_id', 'version', 'checked_by', 'checked_at', 'created_by', 'created_at', 'superseded_at']);
+  const dir = resolve(REPO, 'supabase/migrations/app');
+  const cols = new Set();
+  for (const file of readdirSync(dir).filter(n => /^\d+.*\.sql$/.test(n)).sort()) {
+    const sql = readFileSync(resolve(dir, file), 'utf8').replace(/\r\n/g, '\n').replace(/--[^\n]*/g, '');
+    const create = sql.match(/CREATE TABLE (?:app\.)?question_keys \(([\s\S]*?)\n\);/i);
+    if (create) {
+      for (const line of create[1].split('\n')) {
+        const m = line.match(/^\s{2}([a-z_]+)\s+[a-z]/);
+        if (m && !/^(constraint|unique|check|primary|foreign)$/i.test(m[1])) cols.add(m[1]);
+      }
+    }
+    for (const stmt of sql.match(/ALTER TABLE (?:app\.)?question_keys\b[^;]*;/gi) || []) {
+      for (const m of stmt.matchAll(/ADD COLUMN\s+(?:IF NOT EXISTS\s+)?([a-z_]+)/gi)) cols.add(m[1]);
+    }
+  }
+  check('the migrations were read and yielded the known columns', cols.has('correct_choice_ids') && cols.has('expression') && cols.has('variables') && cols.has('signed_variables'), [...cols].join(','));
+  const copied = new Set(T.KEY_COPY);
+  const missing = [...cols].filter(c => !copied.has(c) && !NOT_COPIED.has(c));
+  eq('every column of question_keys is copied or deliberately not', missing, []);
+  const stale = T.KEY_COPY.filter(c => !cols.has(c));
+  eq('and nothing in the copy list is a column that does not exist', stale, []);
+  check('the symbolic columns are in the copy list', ['expression', 'variables', 'signed_variables'].every(c => copied.has(c)));
+}
+
 process.exit(summary() ? 0 : 1);

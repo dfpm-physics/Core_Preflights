@@ -24,6 +24,7 @@
 // The reply is for staff and carries counts, enrollment ids of listed grades and attempt ids. It never carries the key.
 
 import { parseAnswer, checkNumeric, checkChoices } from './numeric-answer.js';
+import { checkSymbolic } from './symbolic-answer.js';
 
 export const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -68,6 +69,13 @@ export function markAttempt(ctx, attempt) {
     const res = checkNumeric(parsed, ctx.key);
     if (res.why === 'key_value_unreadable' || res.why === 'key_tolerance_unreadable') return null;
     return { id: attempt.id, is_correct: res.correct, parsed: parsed.dbText };
+  }
+  if (ctx.format === 'symbolic') {
+    if (!a || typeof a.raw !== 'string') return { id: attempt.id, is_correct: null, parsed: null };
+    const res = checkSymbolic(a.raw, ctx.key?.expression, ctx.key?.variables, ctx.key?.signed_variables ?? []);
+    if (res.keyFault) return null;                                   // the key itself cannot be read: nothing is re-marked
+    if (!res.ok) return { id: attempt.id, is_correct: null, parsed: null };
+    return { id: attempt.id, is_correct: res.correct, parsed: null };
   }
   if (ctx.format === 'multiple_choice' || ctx.format === 'multiple_select') {
     if (!a || !Array.isArray(a.choices)) return { id: attempt.id, is_correct: null, parsed: null };

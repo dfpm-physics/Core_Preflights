@@ -57,6 +57,7 @@ OFFLINE = [
     "test-grade-page-logic.mjs",
     "test-numeric-answer.mjs",
     "test-check-answer-function.mjs",
+    "test-symbolic-answer.mjs",
     "test-problem-file.mjs",
     "test-remark-function.mjs",
     "test-homework.mjs",

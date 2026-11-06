@@ -9,7 +9,7 @@
 //   * Who the student is:        the signed-in session (deps.getUser), never a field of the request.
 //   * Whether the answer may be taken at all (enrolled, published, released, before the deadline or late work
 //     allowed, attempts left): the database, in app.answer_context and again, under a lock, in app.record_answer.
-//   * Whether the answer is right: this file, with numeric-answer.js (the same file the site carries), against
+//   * Whether the answer is right: this file, with numeric-answer.js and symbolic-answer.js (the same files the site carries), against
 //     the key the database hands only to this function.
 //   * What is written: app.record_answer, which takes only the raw answer, the number read from it, the verdict
 //     and the key version it was marked against. The grade is recomputed there from stored attempts.
@@ -26,6 +26,7 @@
 //   the same, so the browser client never has to unpick a transport error.
 
 import { parseAnswer, checkNumeric, checkChoices, MAX_ANSWER_CHARS } from './numeric-answer.js';
+import { checkSymbolic } from './symbolic-answer.js';
 
 export const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -118,6 +119,15 @@ export async function handle(req, deps) {
       correct = verdict.correct;
       rawAnswer = { raw: answer };
       parsedText = parsed.dbText;
+    } else if (ctx.format === 'symbolic') {
+      // An expression, checked by evaluating it and the key at fixed test points (symbolic-answer.js). Nothing is executed.
+      // A refusal (unknown variable, unbalanced bracket, unclear division) costs no attempt, exactly like an unreadable number.
+      if (typeof answer !== 'string') return refusal('bad_answer', 'Type your answer as an expression.');
+      const res = checkSymbolic(answer, ctx.key?.expression, ctx.key?.variables, ctx.key?.signed_variables ?? []);
+      if (!res.ok) return res.keyFault ? refusal('key_fault', MESSAGES.key_fault) : refusal(res.code, res.message);
+      correct = res.correct;
+      rawAnswer = { raw: answer };
+      parsedText = null;
     } else if (ctx.format === 'multiple_choice' || ctx.format === 'multiple_select') {
       const selected = Array.isArray(answer) ? answer : typeof answer === 'string' ? [answer] : null;
       if (!selected || selected.length > MAX_CHOICES) return refusal('bad_answer', 'Choose an answer.');

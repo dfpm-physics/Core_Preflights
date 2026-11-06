@@ -8,6 +8,73 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-11-05 — Matthew Recker via Claude (symbolic answers: a spaced fraction reads as a product; branch `v2-symbolic`, local, uncommitted)
+
+**What.** In an expression answer or key, a plain number divided by a plain number, then a space, then a factor, now reads as the
+fraction times that factor: `1/2 m v^2` is (1/2)*m*v^2, `3/4 x` is (3/4)*x, `1 / 2 m` the same. Without the space (`1/2x`,
+`1/2m`, `1/2(m)`) it is still refused as unclear and costs no attempt, and `a/b c` and `1/x y` are still refused. The reading shown
+to staff and students brackets the fraction. Edited `site/js/symbolic-answer.js` and copied it byte for byte into the
+`check-answer` and `remark-question` folders; added cases to `tests/app-schema/test-symbolic-answer.mjs`; updated the decision
+record `docs/decisions/V2-STAGE-E-ANSWERS.md`.
+**Not done.** No migration, no deploy, no staging or production write. The earlier case that expected `1/2 (x)` to be refused now
+expects it accepted.
+
+---
+
+## 2026-11-05 — Matthew Recker via Claude (symbolic answers; branch `v2-symbolic`, built on `v2-step2-rollin`, local, uncommitted)
+
+**What.** A new kind of auto-checked question whose answer is an expression, such as `m*v^2/2`. The answer is checked on the
+server, in the `check-answer` function, by working the answer and the key out at fixed values of the variables and comparing the
+numbers. There is no AI step.
+- `site/js/symbolic-answer.js`: the one reader and checker, copied into the `check-answer` and `remark-question` folders. A small
+  written grammar; no `eval`, no `Function`, nothing executed. Limits on length, tokens, nesting and variables are checked before
+  anything is evaluated.
+- Migration `app/085_symbolic_answers.sql` (rollback in `app/rollback/`): the `symbolic` format and two key columns,
+  `expression`, `variables` and `signed_variables`. Not applied to staging or production. Proved on a throwaway database (68
+  checks, dropped afterwards): `scripts/staging/scratch_symbolic_proof.py`.
+- Question page: the format "Expression (symbolic)", the expected expression, the allowed variables, a reading of the key and
+  a trial answer. Student page: a text box that shows how the answer reads before it is sent.
+- An answer that cannot be read is refused with a plain message and does not use an attempt, like an unreadable number. A key
+  that does not read is a fault in the question: nothing is stored and no attempt is used.
+- Tests: `test-symbolic-answer.mjs` (new, in the offline list), and additions to the check-answer, re-mark, question-page and
+  homework suites. Numeric and choice questions behave as before.
+
+**Review fixes, same day (adversarial review of this branch: 1 critical, 3 major, 9 minor).**
+- **Tolerance (critical).** The comparison had an absolute floor of 1, so a key below about 1e-9 at every test point (6.63e-34*f,
+  1.6e-19*V) accepted 0 and any wrong multiple. It is now `|a-b| <= 1e-9*max(|a|,|b|) + 4*E`, where E is a rounding-error bound
+  worked out for the two expressions at that point (each operation adds 2.3e-16 times its own result). There is no absolute
+  amount, so a key is judged against its own size; a correct answer that cancels (`cosh(x)^2-sinh(x)^2` against `1`) still passes.
+  Tests: five physical constants at both ends of the scale, each refusing 0, twice the key, a part in a million off, and half.
+- **Positive values by default (major).** Every variable is now tested on positive values only, so `sqrt(k)/sqrt(m)` matches
+  `sqrt(k/m)`, `ln(a)-ln(b)` matches `ln(a/b)`, and `sqrt(x^2)` matches `x`. Staff list a variable under "Variables that can be
+  negative" and only those are also tested at negative values; the page preview says which. An answer undefined where the key is
+  defined is still wrong. Stored as `question_keys.signed_variables` (migration 085 edited in place, nothing was applied
+  anywhere), carried by `save_question`, `answer_context`, `remark_context` and the two functions.
+- **Term rollover (major).** `KEY_COPY` in `site/js/faculty-terms.js` now carries `expression`, `variables` and
+  `signed_variables` (a key without them is copied exactly as before). A new test reads every migration for the columns of
+  `question_keys` and fails when one is neither copied nor on the list of columns deliberately not copied.
+- **Greek and Latin spellings (major).** `theta` and the Greek theta, `mu` and the Greek mu, and the rest of the alphabet, are one
+  name in the answer, the key and the variable list; the micro sign is mu; listing both is a duplicate. A Greek letter stuck to a
+  function name (`2pi*sqrt(...)`) or to names (`mghsin(theta)`) now reads.
+- **Minor, fixed.** The trigger function `question_keys_check_symbolic` now has its execute privilege revoked from every API role
+  (checked in the scratch proof). The database's character check accepts the look-alikes the reader maps (micro sign, one-half,
+  one-quarter, three-quarters, subscript digits, a square-root sign before a bracket). The page message for a key defined at too
+  few points now names negative values and unmarked variables as the usual cause.
+- **Minor, not fixed.** `1/2 m v^2` and `1/2x` are still refused (reading `1/2 m` as one half times m contradicts the rule that
+  a division followed by juxtaposition is ambiguous; Matthew's decision). `2e-3` is still read as 0.002 (refusing it would also
+  refuse `6.63e-34`). A key the database accepts but the reader cannot read (`x/`) still shows a fault to students; no staff-side
+  health line was added. `x^2^3` reads right to left. Two variables that differ only by a Greek spelling are refused by the page and
+  the reader but not by the database. Identities with enormous intermediates are judged against the error bound, which is wide
+  there. Migration numbering (079 to 085) and whether the scratch proof is committed are left as they were.
+- **Copies.** The three `symbolic-answer.js` files are kept; the header names the site copy as the source. A byte check already
+  exists in `test-check-answer-function.mjs` and `test-remark-function.mjs`, so no new one was added.
+
+**What I deliberately did not do.** No migration applied anywhere; no function deployed; no sign-in; no browser walk-through of
+the question page or the student page (the page script's hash in its security policy was rebuilt with the checker script). The
+problem-file and CSV uploads do not carry the new type: it needs new columns in the file format, the import function and its
+tests, so it is not a small change. `site/js/db-schema.js` was not regenerated, because that needs the migration applied to a
+database. Nothing committed or pushed.
+
 ## 2026-11-05 — Matthew Recker via Claude (small faults from the roll-in walk, and the parts that stayed unwalked; branch `v2-step2-rollin`, local)
 
 Five small faults found in the roll-in walk are closed, each with a failing test first, and the screens the walk could not reach were walked in a browser against the staging project only.
