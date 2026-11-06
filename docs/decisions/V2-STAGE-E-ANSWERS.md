@@ -291,16 +291,25 @@ Part two, runs now:
 
 Needs staging (after the function is deployed and `070`/`071` are applied there):
 
-1. A real student session calls `check-answer`; the response body holds only the four fields.
+1. A real student session calls `check-answer`; the response body holds only the four fields. **Done 2026-11-06** (load run, item 8: all 454 replies read, each held only those fields).
 2. The same student reads `question_keys`, `question_attempts` of another student, and `grades` of another student: nothing.
-3. A request with another student's ids or forged fields returns the session student's result.
-4. An expired and a forged JWT are refused; a staff JWT cannot answer.
-5. Deadline with a false browser clock; at the deadline second; after it with an extension.
-6. Two browser tabs answering the last attempt together.
+3. A request with another student's ids or forged fields returns the session student's result. **Done 2026-11-06** (load run: 28 requests carrying a forged verdict, points, attempt number, student id and enrollment id; each was stored under the session student, with the verdict from the answer itself).
+4. An expired and a forged JWT are refused; a staff JWT cannot answer. **Part done 2026-11-06:** a session with a damaged signature, a string that is not a token, and a request with no credential were each refused with HTTP 401 before the function ran; the publishable key as a session and a key header alone were refused by the function as not signed in. An expired token and a staff token were not tried.
+5. Deadline with a false browser clock; at the deadline second; after it with an extension. **Part done 2026-11-06:** the server clock decided. 52 answers landed in the 120 second grace and were stored; 16 sent after the grace were refused as closed; no stored answer is later than the deadline plus 120 seconds. A false browser clock and an extension were not tried.
+6. Two browser tabs answering the last attempt together. **Done 2026-11-06** (load run: 28 pairs of simultaneous answers from one cadet, two rounds each; exactly 3 stored per cadet, the rest refused as limit reached, no gaps in attempt numbers).
 7. A key corrected mid-session (retry path).
 8. End-of-deadline load through the real function: many sessions in the last minute, measuring edge function cold start,
    latency (p95), error rate, and Supabase connection limits; then the database invariants of the scratch load test.
-9. Function logs hold no key, answer text beyond what is intended, or token.
+   **Done 2026-11-06** with `scripts/staging/load_check_answer.py`.
+   150 made-up cadets signed in with real sessions (282 s; the sign-in endpoint answered 429 seven times, the first after
+   38 sign-ins, and the script backed off). 442 requests from 16 threads in the last 60 seconds before the deadline, 30
+   seconds after it, and around the end of the 120 second grace: HTTP 200 for all 442, error rate 0 of 442. Median 388 ms,
+   p95 670 ms, p99 1026 ms, max 1788 ms; first request to the function after idle 1031 ms. Database connections 15 to 17 of
+   60, at most 3 active. Invariants all held: no cadet above 3 attempts; no gaps; nothing stored after deadline plus grace;
+   all 144 grades equal the best attempt recomputed; every stored attempt equals the reply the cadet got; forged fields
+   changed nothing. A run of 10 cadets came first, three times. The run's rows were deleted; the table
+   `grade_events`, which is append-only, kept 597 rows from the four runs (it holds ids and points, no names).
+9. Function logs hold no key, answer text beyond what is intended, or token. **Not done 2026-11-06:** the management logs endpoint answered that no log table exists for the staging project, so the logs could not be read. Replies and headers were read instead (item 8).
 10. The total (student, instructor, export) agrees for an auto-checked grade before and after the deadline.
 
 Part two, needs staging (after `072`, `073`, `check-answer` and `remark-question` are deployed there):
