@@ -8,6 +8,22 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-11-05 — Matthew Recker via Claude (small faults from the roll-in walk, and the parts that stayed unwalked; branch `v2-step2-rollin`, local)
+
+Five small faults found in the roll-in walk are closed, each with a failing test first, and the screens the walk could not reach were walked in a browser against the staging project only.
+
+- **Attempt limit.** The Assignments form has an "Attempts per question" box behind More options, shown only for questions answered on the site and marked automatically. It reads and writes `assignment_offerings.attempt_limit`, the column the answer functions already use. Empty means no limit; anything but a whole number from 1 to 999 is refused in a sentence that opens More options. A new assignment still opens short.
+- **Deadline moved earlier.** A save that moves a section's deadline earlier on an assignment that already has cadet work now asks first, with how many cadets in those sections have not submitted and how many have. Only a person decides this, so it is a confirmation and never a block: a yes saves.
+- **Unpublish.** Unpublishing an assignment that has submissions or grades asks first, with the counts, and says nothing is deleted.
+- **Percent display.** The database states a course percent as text cut at six decimals ("33.333333…"). The cadet page, the staff gradebook, the staff student page and the student note now print it to two places, rounded half up, and a value just under a whole number is cut instead (89.999999… shows 89.99) so a rounded figure never sits beside a lower letter. Nothing stored changed: `percent_key_text` still holds the full value and still decides the letter. The letter-scale preview, the near-a-line list and the gradebook CSV keep the database text on purpose.
+- **One word.** "Unpublished" is used for work cadets cannot see yet (it was already the larger share on the staff pages and pairs with "Published"). The Assignments list rows for older-page items, the Artifacts page, and the term-copy note now say it. The tutor destination card and the older lesson editor still say "draft": that editor is a frozen page and a test pins the card to it.
+
+Walked in a browser on a synthetic fixture course (removed afterwards): a prefill link for a second course the director runs switched the page and the saved assignment landed in that course; removing a tutor with one cadet committed to it asked first, released the cadet to draft, and the cadet could then submit the typed response; the gradebook CSV built by the page's own export button matched the staff gradebook for every cadet; the roster import preview grouped the example roster into fix-now, stays-out and another-course lists and wrote nothing.
+
+Page policy hashes rebuilt for the four pages whose inline scripts changed (`scripts/checks/csp_pages.py`, 34 pages, 0 problems). Offline suites: 67 of 67 clean.
+
+Not done: no migration was applied, nothing was pushed or merged, production was not touched. A reduced attempt limit does not warn about cadets who have already used more attempts. The reference-file list is still empty on the local server (it does not serve the reading folder).
+
 ## 2026-11-05 — Matthew Recker via Claude (roll-in walked on the staging project in a browser; branch `v2-step2-rollin`, local)
 
 Migrations 077, 078 and 079 were applied to the STAGING project only, one at a time as the schema owner, each with its verify queries and a ledger row, and the schema fingerprint matched a scratch build from the same files. The edge function `remark-question` was redeployed there. The pages were then walked on staging with seeded logins and made-up test data, and the three migrations were rolled back newest first and applied again; the fingerprint after the rollback equalled the one from before the first apply, and the one after the re-apply equalled the first apply.
