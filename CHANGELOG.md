@@ -34,6 +34,14 @@ From the click-through feedback. Change C of three.
 - Page hashes in the Content-Security-Policy meta tags were rebuilt for the edited pages (`csp_pages.py --write`).
 - **Not done:** no write to staging, no save or import was clicked, nothing committed. Backlog is left in place: its piles
   are now also visible in the new list, but it still carries near-a-line cadets and the exports.
+## 2026-11-06 — Matthew Recker via Claude (Assignments: "How cadets do this work" cards; branch `v2-cf-items`, local, uncommitted)
+
+An assignment that exists now shows a visible section above More options with three cards, in the same look as the cadets' chooser: Questions, Interactive tutor, Both (cadets choose). The selected card shows only what it needs: Questions links to the questions page with a count (or says the typed questions are in the box below), Tutor shows the tutor id, link, title and description, Both shows both plus what earns credit and the commit rule. The "Also offer an interactive tutor" checkbox is gone. A new assignment still asks the same short form; saving it creates it unpublished and opens it for setup with a plain line saying what to do next. A locked shape (several paths) shows why instead of the cards; in-person and done-elsewhere assignments say no cards apply. The card styles moved from the cadets' page into `styles.css` so there is one look.
+
+- What a save writes did not change: the cards set the same delivery, grading and tutor flag the old controls set, and `pathPlan`, `createItem` and `updateItem` are untouched, so every refusal and warning for work already done is as before. `test-items-setup.mjs` (new) shows this for each card.
+- Did not: move the grading box (it stays under More options), change `needsMoreOptions` (a saved tutor assignment still opens More options), touch the frozen lesson page or contract, write to staging, or commit.
+
+---
 
 ## 2026-11-05 — Matthew Recker via Claude (small faults from the roll-in walk, and the parts that stayed unwalked; branch `v2-step2-rollin`, local)
 

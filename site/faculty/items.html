@@ -33,6 +33,40 @@
         <div class="field"><label for="i-alldate">Due date</label><input id="i-alldate" type="date">
           <div class="field-hint" id="i-due-note">Leave empty for no deadline.</div></div>
       </div>
+      <section id="i-setup" style="display:none;margin:4px 0 16px">
+        <h3 style="margin:0 0 4px;font-size:1.02em">How cadets do this work</h3>
+        <div class="field-hint" id="i-setup-hint" style="margin-bottom:6px">Pick one. Questions, an interactive tutor, or both and let each cadet choose.</div>
+        <div class="alert alert-info" id="i-setup-locked" style="display:none"></div>
+        <div class="choice-grid" id="i-cards" role="radiogroup" aria-label="How cadets do this work" style="margin:10px 0">
+          <button type="button" class="choice-card" role="radio" aria-checked="false" data-mode="questions">
+            <span class="choice-head"><span class="choice-ic">&#9998;</span><span class="choice-titles"><span class="choice-title">Questions</span><span class="choice-meta">Cadets answer questions</span></span></span>
+            <span class="choice-body">Cadets answer the questions you write.</span></button>
+          <button type="button" class="choice-card" role="radio" aria-checked="false" data-mode="tutor">
+            <span class="choice-head"><span class="choice-ic">&#9889;</span><span class="choice-titles"><span class="choice-title">Interactive tutor</span><span class="choice-meta">Guided conversation</span></span></span>
+            <span class="choice-body">Cadets work through the material with an AI tutor.</span></button>
+          <button type="button" class="choice-card" role="radio" aria-checked="false" data-mode="both">
+            <span class="choice-head"><span class="choice-ic">&#8644;</span><span class="choice-titles"><span class="choice-title">Both (cadets choose)</span><span class="choice-meta">Questions or tutor</span></span></span>
+            <span class="choice-body">Each cadet picks the one they prefer.</span></button>
+        </div>
+        <div id="i-q-panel" style="display:none;margin-bottom:10px"></div>
+      <div class="form-grid" id="i-twopath" style="--fg-min:240px;display:none">
+        <div class="field"><label for="i-policy">What earns credit</label><select id="i-policy"></select>
+          <div class="field-hint" id="i-policy-hint"></div></div>
+        <div class="field" id="i-switch-wrap"><label for="i-switch">Once a cadet commits</label><select id="i-switch"></select>
+          <div class="field-hint">Applies when the cadet chooses.</div></div>
+      </div>
+      <div class="form-grid" id="i-interactive" style="--fg-min:200px;display:none">
+        <div class="field"><label for="i-islug">Tutor id</label><input id="i-islug" type="text" placeholder="lesson-02-charge">
+          <div class="field-hint">The id the tutor lesson posts to: lowercase letters, numbers and hyphens. It cannot be changed once a link is saved.</div></div>
+        <div class="field"><label for="i-iurl">Tutor link (optional)</label><input id="i-iurl" type="text" placeholder="https://">
+          <div class="field-hint">Where cadets open the tutor.</div></div>
+        <div class="field"><label for="i-ititle">Tutor title (optional)</label><input id="i-ititle" type="text" maxlength="200" placeholder="Defaults to the assignment title">
+          <div class="field-hint">Shown to cadets on the tutor.</div></div>
+        <div class="field"><label for="i-idesc">Tutor description (optional)</label><input id="i-idesc" type="text" maxlength="500">
+          <div class="field-hint">One line about the tutor.</div></div>
+        <div class="field-action" id="i-swap-wrap" style="display:none"><button type="button" class="btn btn-ghost btn-sm" id="i-swap">Replace this tutor…</button></div>
+      </div>
+      </section>
       <div id="i-written" style="display:none;margin-bottom:14px"></div>
 
       <details class="more-options" id="i-more">
@@ -45,26 +79,6 @@
             <div class="field-hint">Filled in from the kind.</div></div>
           <div class="field"><label for="i-grading">How it is graded</label><select id="i-grading"></select>
             <div class="field-hint" id="i-path-note"></div></div>
-        </div>
-        <div id="i-twopath-row" style="display:none;margin-bottom:12px">
-          <label class="check-inline"><input type="checkbox" id="i-withtutor"> <span>Also offer an interactive tutor, so a cadet can do either</span></label>
-        </div>
-        <div class="form-grid" id="i-twopath" style="--fg-min:240px;display:none">
-          <div class="field"><label for="i-policy">What earns credit</label><select id="i-policy"></select>
-            <div class="field-hint" id="i-policy-hint"></div></div>
-          <div class="field" id="i-switch-wrap"><label for="i-switch">Once a cadet commits</label><select id="i-switch"></select>
-            <div class="field-hint">Applies when the cadet chooses.</div></div>
-        </div>
-        <div class="form-grid" id="i-interactive" style="--fg-min:200px;display:none">
-          <div class="field"><label for="i-islug">Tutor id</label><input id="i-islug" type="text" placeholder="lesson-02-charge">
-            <div class="field-hint">The id the tutor lesson posts to: lowercase letters, numbers and hyphens. It cannot be changed once a link is saved.</div></div>
-          <div class="field"><label for="i-iurl">Tutor link (optional)</label><input id="i-iurl" type="text" placeholder="https://">
-            <div class="field-hint">Where cadets open the tutor.</div></div>
-          <div class="field"><label for="i-ititle">Tutor title (optional)</label><input id="i-ititle" type="text" maxlength="200" placeholder="Defaults to the assignment title">
-            <div class="field-hint">Shown to cadets on the tutor.</div></div>
-          <div class="field"><label for="i-idesc">Tutor description (optional)</label><input id="i-idesc" type="text" maxlength="500">
-            <div class="field-hint">One line about the tutor.</div></div>
-          <div class="field-action" id="i-swap-wrap" style="display:none"><button type="button" class="btn btn-ghost btn-sm" id="i-swap">Replace this tutor…</button></div>
         </div>
         <div class="form-grid" style="--fg-min:200px">
           <div class="field"><label for="i-num">Assignment number (optional)</label><input id="i-num" type="text" inputmode="numeric" placeholder="4">
@@ -161,6 +175,8 @@
     let editing = null;          // the assignment being edited, or null for a new one
     let saving = false;
     let fr = null;               // the free-response question editor (shown when the work is a typed response)
+    let pathMode = 'questions';  // the chosen card under "How cadets do this work": questions, tutor or both
+    let countSeq = 0;            // a question count that arrives after the card changed is ignored
     let swapOn = false;          // the person chose to replace the saved tutor with a different id
     let formSlug = '';           // the assignment id a prefill link names, used when a new assignment is first saved
     let pendingOverlay = null;   // a link's tutor, carried into the form for an existing assignment
@@ -287,16 +303,18 @@
         if (editing) return;
         const kind = vm.kinds.find(k => k.id === $('i-kind').value);
         const p = I.prefillFromKind(kind);
+        pathMode = I.modeFromDelivery(p.delivery, pathMode);
         fillDelivery(p.delivery); fillGrading(p.delivery, p.grading); showInteractive(); syncPoints();
         if (p.delivery === 'typed_response' && !fr.get()) fr.set(emptyEditor());
       });
       $('i-delivery').addEventListener('change', () => {
         const d = $('i-delivery').value;
+        pathMode = I.modeFromDelivery(d, pathMode);
         fillGrading(d, I.gradingsFor(d)[0]); showInteractive(); syncPoints();
         if (d === 'typed_response' && !fr.get()) fr.set(emptyEditor());
       });
       $('i-grading').addEventListener('change', () => { syncPoints(); fr.redraw(); });
-      $('i-withtutor').addEventListener('change', showInteractive);
+      document.querySelectorAll('#i-cards [data-mode]').forEach(b => b.addEventListener('click', () => chooseMode(b.dataset.mode)));
       $('i-policy').addEventListener('change', showInteractive);
       $('i-swap').addEventListener('click', () => {
         swapOn = !swapOn; syncSwap();
@@ -343,11 +361,64 @@
       $('i-points-note').textContent = owned
         ? 'Set by the questions. Add them with the Questions button on the assignment once it is saved.' : '';
     }
+    /* A card was chosen: set the delivery, its grading and the tutor beside it exactly as the boxes under More options would. */
+    function chooseMode(mode) {
+      if (isLocked(editing)) return;
+      const kind = vm.kinds.find(k => k.id === $('i-kind').value);
+      const r = I.applyMode(mode, { delivery: $('i-delivery').value, grading: $('i-grading').value }, kind ? I.prefillFromKind(kind) : null);
+      if (r.delivery !== $('i-delivery').value) fillDelivery(r.delivery);
+      fillGrading(r.delivery, r.grading);
+      if (I.isTypedResponse(r.delivery) && !fr.get()) fr.set(emptyEditor());
+      pathMode = mode;
+      showInteractive(); syncPoints();
+    }
+    /* The setup section: the cards, and under them only what the chosen card needs. */
+    function renderSetup() {
+      const d = $('i-delivery').value;
+      const locked = isLocked(editing);
+      const tutorOnly = d === 'interactive_tutor';
+      const two = I.isTypedResponse(d) && pathMode === 'both';
+      const cards = I.cardsApply(d);
+      // A new assignment starts short. The section appears for a saved one, or when a link already carries a tutor.
+      $('i-setup').style.display = editing || two || tutorOnly ? 'block' : 'none';
+      const lockedBox = $('i-setup-locked');
+      lockedBox.style.display = locked || (editing && !cards) ? 'block' : 'none';
+      lockedBox.textContent = locked
+        ? `This assignment has ${editing.paths.length === 0 ? 'no path' : editing.paths.length + ' paths'}, so how cadets do the work is changed on a later page. Everything else here still saves.`
+        : (editing && !cards ? `Cadets do this one ${I.DELIVERY_LABEL[d] ? I.DELIVERY_LABEL[d].toLowerCase() : 'outside the site'}, so there are no questions or tutor to set up. To change that, use "How the work is done" under More options.` : '');
+      $('i-cards').style.display = locked || !cards ? 'none' : '';
+      document.querySelectorAll('#i-cards [data-mode]').forEach(b => {
+        const on = b.dataset.mode === pathMode;
+        b.classList.toggle('selected', on); b.setAttribute('aria-checked', on ? 'true' : 'false');
+      });
+      $('i-setup-hint').style.display = locked || !cards ? 'none' : '';
+      const panel = $('i-q-panel');
+      const showQ = !locked && cards && (pathMode === 'questions' || pathMode === 'both') && !tutorOnly;
+      panel.style.display = showQ ? 'block' : 'none';
+      if (!showQ) return;
+      const saved = editing ? mainOf(editing) : null;
+      const seq = ++countSeq;
+      if (d === 'online_questions') {
+        if (saved && saved.delivery === 'online_questions' && saved.activityId) {
+          panel.innerHTML = `<a class="btn btn-ghost btn-sm" id="i-q-link" href="questions.html?a=${encodeURIComponent(editing.offeringId)}">Open the questions page</a>
+            <span class="muted" id="i-q-count" style="margin-left:8px">Counting the questions…</span>`;
+          I.countQuestionsAndKeys(db, [saved.activityId]).then(c => {
+            if (seq !== countSeq || !$('i-q-count')) return;
+            $('i-q-count').textContent = c.error ? 'The questions could not be counted. Reload the page to try again.'
+              : c.questions === 1 ? '1 question so far.' : `${c.questions} questions so far.`;
+          });
+        } else {
+          panel.innerHTML = '<span class="muted">Save this change first. Then the questions are added on their own page.</span>';
+        }
+      } else {
+        const n = saved && saved.delivery === 'typed_response' && Array.isArray(saved.content?.questions) ? saved.content.questions.length : null;
+        panel.innerHTML = `<span class="muted">Cadets answer in writing. The questions are written in the box just below.${n == null ? '' : n === 1 ? ' 1 question is saved.' : ` ${n} questions are saved.`}</span>`;
+      }
+    }
     function showInteractive() {
       const typed = $('i-delivery').value === 'typed_response';
       const locked = isLocked(editing);
-      const two = typed && !locked && $('i-withtutor').checked;
-      $('i-twopath-row').style.display = typed && !locked ? 'block' : 'none';
+      const two = typed && !locked && pathMode === 'both';
       $('i-twopath').style.display = two ? 'grid' : 'none';
       $('i-switch-wrap').style.display = $('i-policy').value === 'choice' ? 'block' : 'none';
       $('i-policy-hint').textContent = $('i-policy').value === 'tutor' && $('i-grading').value === 'ai_drafted'
@@ -357,6 +428,7 @@
       const showWritten = typed && !locked;
       $('i-written').style.display = showWritten ? 'block' : 'none';
       $('i-written-more').style.display = showWritten ? 'block' : 'none';
+      renderSetup();
     }
     /* The saved tutor's id is its address once a link exists. Replacing it is a separate, confirmed act. */
     function syncSwap() {
@@ -410,11 +482,13 @@
     function revealHidden(problems) {
       const id = problems.map(I.moreOptionsTarget).find(Boolean);
       if (!id) return false;
-      $('i-more').open = true;
       const el = $(id);
+      // The tutor and credit controls now sit in the setup section, which is always in view: point at them, open nothing.
+      const hidden = $('i-more').contains(el);
+      if (hidden) $('i-more').open = true;
       el.scrollIntoView({ block: 'center' });
       if (el.focus && el.tagName !== 'DIV') el.focus();
-      return true;
+      return hidden;
     }
 
     function sectionRows(sectionDates) {
@@ -460,7 +534,7 @@
       // rollover starts so) can still be given the id its lesson will post to; the save re-checks that nobody has used it.
       const tutorHasLink = !!(tutor && String(tutor.content?.artifact_url || '').trim());
       const shape = shapeOf(item);
-      $('i-withtutor').checked = item ? shape.kind === 'choice' : false;
+      pathMode = item ? I.modeOfShape(shape) : I.modeFromDelivery($('i-delivery').value, 'questions');
       $('i-policy').value = shape && shape.kind === 'choice' ? shape.policy : 'choice';
       $('i-switch').value = item?.switchPolicy || 'lock_on_commit';
       $('i-islug').value = tutor ? tutor.slug : '';
@@ -557,7 +631,7 @@
           fillDelivery(p.delivery); fillGrading(p.delivery, p.grading);
           if (!fr.get()) fr.set(emptyEditor());
         }
-        $('i-withtutor').checked = true;
+        pathMode = 'both';
         set('i-islug', f.interactiveSlug); set('i-iurl', f.interactiveUrl); set('i-ititle', f.interactiveTitle); set('i-idesc', f.interactiveDesc);
         if (f.policy) $('i-policy').value = f.policy;
       }
@@ -576,7 +650,7 @@
       if (!I.canCarryTutor(item)) { showNote(I.tutorRefusal(item)); return; }
       const cur = tutorOf(item);
       const set = (id, v) => { if (v != null && v !== '') $(id).value = v; };
-      if (mainOf(item).modality === 'written') $('i-withtutor').checked = true;
+      if (mainOf(item).modality === 'written') pathMode = 'both';
       swapOn = !!(cur && o.iid && o.iid !== cur.slug);
       syncSwap();
       set('i-islug', o.iid); set('i-iurl', o.iurl); set('i-ititle', o.ititle); set('i-idesc', o.idesc);
@@ -612,7 +686,7 @@
         interactiveUrl: $('i-iurl').value,
         interactiveTitle: $('i-ititle').value,
         interactiveDesc: $('i-idesc').value,
-        withTutor: $('i-withtutor').checked && $('i-delivery').value === 'typed_response',
+        withTutor: pathMode === 'both' && $('i-delivery').value === 'typed_response',
         policy: $('i-policy').value,
         switchPolicy: $('i-switch').value,
         swapTutor: swapOn,
@@ -690,8 +764,15 @@
           if (res.partial) await load();
           return;
         }
+        const wasNew = !editing;
         closeForm();
         await load();
+        // A new assignment is saved unpublished and opened straight away for setup: how cadets do the work, then its questions.
+        const created = wasNew && res.offeringId && vm && !vm.error ? vm.items.find(x => x.offeringId === res.offeringId) : null;
+        if (created) {
+          openForm(created);
+          showNote('Saved, and not published yet. Next: choose how cadets do this work below, add the questions or the tutor, then tick Published when it is ready.');
+        }
         if (res.publishError) {
           console.error('item publish refused', res.publishError);
           window.alert('The assignment was saved, but it is not published. ' + I.publishErrorText(res.publishError));
