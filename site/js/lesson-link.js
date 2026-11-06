@@ -51,11 +51,16 @@ export function policyFromRoles(typedRole, tutorRole) {
  * A course code from a link -> the offering to start from, and whether the code was honoured. Prefers the term already
  * in view; `courses` is sorted newest term first, so the fallback lands on the current semester.
  * `matched` is returned, never swallowed: a link naming a course this person does not run must be said out loud.
+ *
+ * `authorable`, when given, is the list the code is looked up in (the offerings this person directs). The Assignments page
+ * passes it: a course the person only teaches cannot be written to, so a link naming one is reported as not found rather
+ * than quietly landing in the course on screen. Without it the older page's rule holds (every course the person is in).
  */
-export function resolveOffering(courses, currentOffering, code) {
+export function resolveOffering(courses, currentOffering, code, authorable = null) {
   if (!code) return { offeringId: currentOffering, requestedCode: null, matched: true };
-  const here = (courses || []).find(c => c.offeringId === currentOffering && c.courseCode === code);
-  const any = here || (courses || []).find(c => c.courseCode === code);
+  const pool = authorable || courses || [];
+  const here = pool.find(c => c.offeringId === currentOffering && c.courseCode === code);
+  const any = here || pool.find(c => c.courseCode === code);
   return { offeringId: any?.offeringId || currentOffering, requestedCode: code, matched: !!any };
 }
 
@@ -67,12 +72,12 @@ export function authorableOfferings(courses, isGlobalAdmin) {
 /**
  * Read a prefill link. Returns null when the query is not a link.
  * @param {string} search  location.search
- * @param {{courses: object[], currentOffering: string}} ctx
+ * @param {{courses: object[], currentOffering: string, authorable?: object[]}} ctx
  */
 export function parsePrefill(search, ctx) {
   const p = new URLSearchParams(search || '');
   if (!PREFILL_TRIGGERS.some(k => p.has(k))) return null;
-  const scope = resolveOffering(ctx.courses, ctx.currentOffering, p.get('course'));
+  const scope = resolveOffering(ctx.courses, ctx.currentOffering, p.get('course'), ctx.authorable || null);
   return {
     id: p.get('id'), offeringId: scope.offeringId,
     requestedCode: scope.requestedCode, codeMatched: scope.matched,
@@ -82,6 +87,41 @@ export function parsePrefill(search, ctx) {
     ititle: p.get('ititle'), idesc: p.get('idesc'),
     pub: p.has('pub') ? ['1', 'true', 'yes'].includes((p.get('pub') || '').toLowerCase()) : null,
   };
+}
+
+/**
+ * Read a prefill link and take the page to the place it names, or refuse, before the chooser can open.
+ *
+ * The chooser shows a course and term, and everything under it (the sections, the kinds, the list of assignments, and the
+ * course a Save writes into) belongs to the course the PAGE has loaded. So when a link names another course the person
+ * directs, the page is moved there first (the same move choosing it from the chooser makes). If that cannot be done, the
+ * link is refused plainly. A link naming a course the person does not direct is reported by the chooser (codeMatched false)
+ * and stays on the course on screen, which the person can see before choosing anything. The chooser itself writes nothing.
+ *
+ * `io` is the page's side of it, so a test can drive this with a recording stand-in:
+ *   courses, authorable(), currentOffering(), ready(), switchTo(id) -> { error }, clearAddress(), openChooser(prefill),
+ *   refuse(text)
+ * @returns {Promise<{ status: 'not-a-link'|'opened'|'refused' }>}
+ */
+export async function runPrefill(search, io) {
+  if (!hasPrefill(search)) return { status: 'not-a-link' };
+  const prefill = parsePrefill(search, { courses: io.courses, currentOffering: io.currentOffering(), authorable: io.authorable() });
+  if (!prefill) return { status: 'not-a-link' };
+  if (prefill.offeringId !== io.currentOffering()) {
+    io.clearAddress();
+    const moved = await io.switchTo(prefill.offeringId);
+    if (!moved || moved.error || !io.ready()) {
+      io.refuse('This link is for a course and term the page could not open, so nothing was added. Choose that course from the menu at the top and open the link again.');
+      return { status: 'refused' };
+    }
+  } else if (!io.ready()) {
+    // Nothing is loaded for this course (the person does not direct it). The link stays in the address so that choosing a
+    // course they do direct, from the menu at the top, can read it.
+    io.refuse('This link adds a tutor to an assignment, and only a director of the course on screen can do that. Choose a course you direct from the menu at the top.');
+    return { status: 'refused' };
+  } else io.clearAddress();
+  await io.openChooser(prefill);
+  return { status: 'opened' };
 }
 
 const pick = (pv, ev) => (pv != null && pv !== '' ? pv : (ev ?? ''));
@@ -112,7 +152,7 @@ export function formFromPrefill(prefill, sections = []) {
   if (n !== '') out.lessonNumber = String(n);
   const id = pick(prefill.id, '');
   if (id) out.slug = id;
-  if (POLICY_FROM_LINK[prefill.policy]) out.policy = POLICY_FROM_LINK[prefill.policy];
+  if (typeof prefill.policy === 'string' && Object.hasOwn(POLICY_FROM_LINK, prefill.policy)) out.policy = POLICY_FROM_LINK[prefill.policy];
   if (prefill.iid != null || prefill.iurl != null) {
     out.withTutor = true;
     if (prefill.iid != null) out.interactiveSlug = prefill.iid;

@@ -11,7 +11,10 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { createHash } from 'node:crypto';
-import { check, section, summary, REPO } from './harness.mjs';
+import { check, eq, section, summary, installBrowser, REPO } from './harness.mjs';
+
+installBrowser({ pathname: '/site/faculty/items.html' });
+globalThis.window.db = { from: () => { throw new Error('no database in this test'); } };
 
 const PAGE = 'site/faculty/items.html';
 const html = readFileSync(resolve(REPO, PAGE), 'utf8').replace(/\r\n/g, '\n');
@@ -110,6 +113,82 @@ section('the rules the page keeps');
   check('a prefill link is read once and cleared from the address', /history\.replaceState\(null, '', location\.pathname\)/.test(script));
   check('an assignment from the older page is not selectable as a destination', /if \(!it \|\| !it\.isNew\) return;/.test(script));
   check('the confirmations stack into one acknowledgement', /needsTutorConfirm/.test(script) && /needsPointsConfirm/.test(script) && /ack\.points = true/.test(script));
+}
+
+section('the page\'s own link handler: a link for another course moves the page there first (review 3, C1)');
+{
+  // The real source of the page's link handling, lifted out of items.html and run against stand-ins. The chunk runs from
+  // the authorable() helper to the chooser, so a change to any of it is what this runs.
+  const a = script.indexOf('const authorable = ');
+  const b = script.indexOf('async function openDestChooser');
+  check('the page\'s link handling can be found', a > 0 && b > a);
+  const chunk = script.slice(a, b);
+  const LK = await import('../../site/js/lesson-link.js');
+  const COURSES = [
+    { offeringId: 'co-215', courseCode: 'phys-215', courseTitle: 'Physics 215', termLabel: 'Spring', role: 'director' },
+    { offeringId: 'co-110', courseCode: 'phys-110', courseTitle: 'Physics 110', termLabel: 'Spring', role: 'director' },
+    { offeringId: 'co-310', courseCode: 'phys-310', courseTitle: 'Physics 310', termLabel: 'Spring', role: 'instructor' },
+  ];
+  const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+  async function drive(search, { current = 'co-215', loadFails = false, directorHere = true } = {}) {
+    const log = [];
+    const ctx = { courses: COURSES, instructorRow: { is_global_admin: false }, currentOffering: current,
+      setCurrentOffering: async (id) => { log.push('setCurrentOffering:' + id); ctx.currentOffering = id; } };
+    const viewOf = (offering) => ({ items: [], sections: [{ id: 'sec-of-' + offering }], kinds: [] });
+    const run = new AsyncFunction('LK', 'ctx', 'location', 'history', 'initialVm', 'loadVm', 'chooserStub', 'renderNav', 'openFromQuery', '$', 'esc', 'onCourseChange',
+      `let vm = initialVm;
+       async function load() { vm = null; vm = await loadVm(); }
+       async function openDestChooser(prefill) { return chooserStub(prefill, vm); }
+       ${chunk}
+       return handleQuery();`);
+    const loadVm = async () => {
+      log.push('load:' + ctx.currentOffering);
+      if (!directorHere && ctx.currentOffering === current) return null;
+      return loadFails ? { error: { message: 'boom' }, items: [], sections: [], kinds: [] } : viewOf(ctx.currentOffering);
+    };
+    const page = { notes: [] };
+    const chooser = async (prefill, vm) => { log.push(`chooser:${prefill.offeringId}:page=${ctx.currentOffering}:sections=${vm?.sections?.[0]?.id}`); };
+    await run(LK, ctx, { search, pathname: '/site/faculty/items.html' }, { replaceState: () => log.push('address cleared') },
+      directorHere ? viewOf(current) : null, loadVm, chooser, () => log.push('nav'), () => log.push('openFromQuery'),
+      () => ({ insertAdjacentHTML: (_w, h) => page.notes.push(h) }), (x) => String(x), () => {});
+    return { log, page };
+  }
+  const link = '?new=1&id=lesson-04-x&course=phys-110&title=T&url=https%3A%2F%2Fclaude.ai%2Fpublic%2Fartifacts%2Fabc';
+  {
+    const r = await drive(link);
+    eq('director of both, page on 215: the page loads 110 and the chooser opens on 110 with 110\'s sections',
+      r.log.filter(x => x !== 'nav' && x !== 'address cleared'),
+      ['setCurrentOffering:co-110', 'load:co-110', 'chooser:co-110:page=co-110:sections=sec-of-co-110']);
+  }
+  {
+    const r = await drive(link, { loadFails: true });
+    check('a load that fails after the switch refuses plainly, and no chooser opens', !r.log.some(x => x.startsWith('chooser')) && r.page.notes.length === 1);
+  }
+  {
+    const r = await drive('?new=1&id=x&course=phys-310&title=T');
+    check('a course the person only teaches does not move the page', !r.log.some(x => x.startsWith('setCurrentOffering')));
+    check('and the chooser opens on the course on screen, where it will say the link\'s course is not one they run',
+      r.log.some(x => x === 'chooser:co-215:page=co-215:sections=sec-of-co-215'));
+  }
+  {
+    const r = await drive('?new=1&id=x&title=T', { directorHere: false });
+    check('a page with nothing loaded refuses, keeps the link in the address, and opens nothing',
+      !r.log.some(x => x.startsWith('chooser')) && !r.log.includes('address cleared') && r.page.notes.length === 1);
+  }
+  {
+    const r = await drive('?a=abc');
+    eq('an ?a= link goes to the older-page path', r.log, ['openFromQuery']);
+  }
+  check('the address is still cleared with the same call the contract test looks for', /history\.replaceState\(null, '', location\.pathname\)/.test(script));
+}
+
+section('a save is built from the page context the way the page builds it (review 3, C2)');
+{
+  const I = await import('../../site/js/faculty-items.js');
+  check('the page builds its save context with I.saveContext, not a literal', /I\.saveContext\(ctx, vm\.sections\)/.test(script));
+  check('no hand-built context with courseOfferingId remains in the page', !/courseOfferingId:\s*ctx\.currentOffering/.test(script));
+  check('a failure in the save is caught and shown, not swallowed', /catch \(e\)/.test(script.slice(script.indexOf('async function save()'), script.indexOf('async function doRemove'))));
+  check('a form remembers the course it was opened on, and a save on another course is refused', /formOffering/.test(script) && /ctx\.currentOffering !== formOffering/.test(script));
 }
 
 process.exit(summary() ? 0 : 1);

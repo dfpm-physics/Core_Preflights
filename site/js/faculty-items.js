@@ -851,9 +851,26 @@ function newPathContent(form) {
 }
 
 /**
+ * The context a save is given, built from what bootstrap() hands the page. The page and every test build it this one way, so
+ * a field a save needs cannot be present in a test and missing in the page (the release of committed cadets needs the person
+ * acting, and a hand-built test context once supplied it while the page's did not).
+ * @param {object} pageCtx  the object bootstrap() returns
+ * @param {object[]} sections  the sections of the course offering on screen
+ */
+export function saveContext(pageCtx, sections) {
+  return {
+    courseId: pageCtx?.currentCourse,
+    courseCode: pageCtx?.currentCourseCode,
+    courseOfferingId: pageCtx?.currentOffering,
+    sections: sections || [],
+    user: pageCtx?.user?.id ? { id: pageCtx.user.id } : null,
+  };
+}
+
+/**
  * Create a new item. Never publishes.
  *
- * ctx = { courseId, courseCode, courseOfferingId, sections }
+ * ctx = saveContext(...) = { courseId, courseCode, courseOfferingId, sections, user }
  * @returns {Promise<{ error: object|null, offeringId?: string, assignmentId?: string, slug?: string }>}
  */
 export async function createItem(db, ctx, form) {
@@ -1076,6 +1093,7 @@ export async function updateItem(db, ctx, item, form, ack = null) {
   const wantSlug = String(form.interactiveSlug || '').trim();
   const swapping = !!tutorNow && !!form.swapTutor && !!wantSlug && wantSlug !== tutorNow.slug && (duo ? wantTwo : form.delivery === 'interactive_tutor');
   const dropping = !!duo && !wantTwo;
+  let tutorCommitted = null;          // how many cadets the person was told would be released; the release checks it again
   if (swapping || dropping) {
     if (swapping) {
       const clash = await db.from('activities').select('id').eq('slug', wantSlug).maybeSingle();
@@ -1084,13 +1102,19 @@ export async function updateItem(db, ctx, item, form, ack = null) {
     }
     const t = await tutorImpact(db, tutorNow, item.offeringId);
     if (t.error) return { error: t.error };
+    // Cadets who chose the tutor are released in the name of the person acting, and the database refuses a release in nobody's
+    // name. Find that out here, before the offering row or anything else is written, not when the release is reached.
+    if (t.committed && !ctx?.user?.id) {
+      return { error: { message: `${plural(t.committed, 'cadet has', 'cadets have')} chosen this tutor and would have to be released, but the page could not tell who is acting. Sign in again and retry. Nothing was changed.` } };
+    }
     if (t.others.length) {
       return { error: { message: `This tutor is also scheduled in ${t.others.join(', ')}. Replacing or removing it here would delete it, and its reports, from there too. ` +
         'Remove it from that term first, or keep this id and change only the link. Nothing was changed.' } };
     }
     if ((t.committed || t.reports) && !tutorAckCovers(ack, t)) {
-      return { error: null, needsTutorConfirm: { kind: swapping ? 'swap' : 'drop', slug: tutorNow.slug, committed: t.committed, reports: t.reports } };
+      return { error: null, needsTutorConfirm: { kind: swapping ? 'swap' : 'drop', slug: tutorNow.slug, committed: t.committed, reports: t.reports, marked: t.marked } };
     }
+    tutorCommitted = t.committed;
   }
 
   // ---- the offering row: one guarded statement carrying every column it owns ----
@@ -1212,7 +1236,7 @@ export async function updateItem(db, ctx, item, form, ack = null) {
       }
     }
     if (cur.modality === 'interactive' && wantModality === 'interactive') {
-      const e = swapping ? await swapTutorPath(db, ctx, item, form, cur) : await updateTutorInPlace(db, item, form, cur);
+      const e = swapping ? await swapTutorPath(db, ctx, item, form, cur, tutorCommitted) : await updateTutorInPlace(db, item, form, cur);
       if (e) return partial(e);
     }
     if (isTypedResponse(form.delivery) && single.modality === 'written' && form.freeResponse) {
@@ -1240,7 +1264,7 @@ export async function updateItem(db, ctx, item, form, ack = null) {
       if (e) return partial(e);
     }
     if (wantTwo) {
-      const e = swapping ? await swapTutorPath(db, ctx, item, form, tutor) : await updateTutorInPlace(db, item, form, tutor);
+      const e = swapping ? await swapTutorPath(db, ctx, item, form, tutor, tutorCommitted) : await updateTutorInPlace(db, item, form, tutor);
       if (e) return partial(e);
       if (rolesChange) {
         // A replaced tutor was written with the role it was given; the typed path and an unreplaced tutor are updated here.
@@ -1254,7 +1278,7 @@ export async function updateItem(db, ctx, item, form, ack = null) {
         }
       }
     } else if (dropping) {
-      const e = await dropTutorPath(db, ctx, item, tutor, typed);
+      const e = await dropTutorPath(db, ctx, item, tutor, typed, tutorCommitted);
       if (e) return partial(e);
     }
   }
@@ -1294,12 +1318,37 @@ export async function tutorImpact(db, tutorPath, offeringId) {
       .select('assignment_offering_id, assignment_offerings!inner(id, course_offerings(courses(code), terms(label)))').eq('activity_id', id),
   ]);
   const error = c.error || r.error || o.error || null;
-  if (error) return { error, committed: 0, reports: 0, others: [] };
+  if (error) return { error, committed: 0, reports: 0, marked: 0, others: [] };
+  // A cadet who already holds a mark keeps it when released; whether they can send another report is for the person to know.
+  let marked = 0;
+  if (c.count) {
+    const ids = await committedSubmissionIds(db, offeringId, [id]);
+    if (ids.error) return { error: ids.error, committed: 0, reports: 0, marked: 0, others: [] };
+    for (const part of chunks(ids.ids, 100)) {
+      const g = await db.from('grades').select('*', { count: 'exact', head: true }).eq('assignment_offering_id', offeringId).in('submission_id', part);
+      if (g.error) return { error: g.error, committed: 0, reports: 0, marked: 0, others: [] };
+      marked += g.count || 0;
+    }
+  }
   const others = [...new Set((o.data || []).filter(x => x.assignment_offering_id !== offeringId).map(x => {
     const co = x.assignment_offerings?.course_offerings;
     return [co?.courses?.code, co?.terms?.label].filter(Boolean).join(' · ') || 'another term';
   }))];
-  return { error: null, committed: c.count || 0, reports: r.count || 0, others };
+  return { error: null, committed: c.count || 0, reports: r.count || 0, marked, others };
+}
+
+/** The ids of the submissions in one offering whose chosen activity is one of these, a page at a time (the API serves at most 1000 a request). */
+async function committedSubmissionIds(db, offeringId, activityIds) {
+  const ids = [];
+  for (let from = 0; ; from += 1000) {
+    let q = db.from('submissions').select('id').in('chosen_activity_id', activityIds);
+    if (offeringId) q = q.eq('assignment_offering_id', offeringId);
+    const r = await q.order('id').range(from, from + 999);
+    if (r.error) return { error: r.error, ids: [] };
+    ids.push(...(r.data || []).map(x => x.id));
+    if ((r.data || []).length < 1000) break;
+  }
+  return { error: null, ids };
 }
 
 /** Does the acknowledgement the person gave cover exactly what a tutor change would cost now? */
@@ -1312,21 +1361,31 @@ export const tutorAckCovers = (ack, impact) =>
  * that would clear a committed choice must come after this: letting the foreign key null it is refused.
  * @returns {Promise<{ error: object|null, unlocked: number }>}
  */
-export async function unlockCommittedTo(db, ctx, offeringId, activityIds) {
+export async function unlockCommittedTo(db, ctx, offeringId, activityIds, expected = null) {
   if (!activityIds?.length) return { error: null, unlocked: 0 };
-  let q = db.from('submissions').select('id').in('chosen_activity_id', activityIds);
-  if (offeringId) q = q.eq('assignment_offering_id', offeringId);
-  const hits = await q;
+  const hits = await committedSubmissionIds(db, offeringId, activityIds);
   if (hits.error) return { error: hits.error, unlocked: 0 };
-  const rows = hits.data || [];
-  if (!rows.length) return { error: null, unlocked: 0 };
-  const u = await db.from('submissions').update({
-    chosen_activity_id: null,
-    status: 'draft',
-    unlocked_by: ctx.user.id,                 // must be the person acting: the database rejects anyone else
-    unlocked_at: new Date().toISOString(),
-  }).in('id', rows.map(s => s.id));
-  return { error: u.error || null, unlocked: u.error ? 0 : rows.length };
+  const ids = hits.ids;
+  if (!ids.length) return { error: null, unlocked: 0 };
+  const who = ctx?.user?.id;
+  if (!who) {
+    return { error: { message: `${plural(ids.length, 'cadet has', 'cadets have')} chosen this tutor and would have to be released, but the page could not tell who is acting. Sign in again and retry. Nothing was released.` }, unlocked: 0 };
+  }
+  // The person was told a number. A cadet who committed since then was not counted, so nobody is released on a number that moved.
+  if (expected != null && ids.length !== expected) {
+    return { error: { message: `The cadets who chose this tutor changed while this was saving (${ids.length} now, ${expected} when you confirmed). Nobody was released. Save again to see the new numbers.` }, unlocked: 0 };
+  }
+  const stamp = new Date().toISOString();
+  for (const part of chunks(ids, 200)) {
+    const u = await db.from('submissions').update({
+      chosen_activity_id: null,
+      status: 'draft',
+      unlocked_by: who,                       // must be the person acting: the database rejects anyone else
+      unlocked_at: stamp,
+    }).in('id', part);
+    if (u.error) return { error: u.error, unlocked: 0 };
+  }
+  return { error: null, unlocked: ids.length };
 }
 
 /** Keep a saved tutor's link, description and title up to date; change its id only while that is still safe. Returns an error or null. */
@@ -1361,8 +1420,8 @@ async function updateTutorInPlace(db, item, form, cur) {
  * The caller has already counted and been acknowledged. The new row takes the old row's role, position and timing.
  * Returns an error or null.
  */
-async function swapTutorPath(db, ctx, item, form, cur) {
-  const unlocked = await unlockCommittedTo(db, ctx, item.offeringId, [cur.activityId]);
+async function swapTutorPath(db, ctx, item, form, cur, expected = null) {
+  const unlocked = await unlockCommittedTo(db, ctx, item.offeringId, [cur.activityId], expected);
   if (unlocked.error) return unlocked.error;
   const del = await db.from('activities').delete().eq('id', cur.activityId);
   if (del.error) {
@@ -1375,7 +1434,14 @@ async function swapTutorPath(db, ctx, item, form, cur) {
     assignment_id: item.assignmentId, modality: 'interactive', slug: String(form.interactiveSlug).trim(),
     title: tutorTitleFrom(form), content: tutorContentFrom(form), position: cur.order ?? 1,
   }).select('id').single();
-  if (ins.error) return { message: 'The old tutor was removed but the new one could not be created (' + plainError(ins.error) + '). Add the tutor again from this form.' };
+  if (ins.error) {
+    // The earlier check that the new id is free reads only what this person may see, so an id used in a course they cannot see
+    // gets here. The old tutor is already gone; put it back so the assignment is not left without one. Its reports cannot return.
+    const back = await restoreTutor(db, item, cur);
+    return back
+      ? { message: 'The new tutor could not be created (' + plainError(ins.error) + '), so the old tutor was put back. The reports sent through it were deleted and cannot be restored, and the cadets who had chosen it were released. Use a different id to try again.' }
+      : { message: 'The old tutor was removed but the new one could not be created (' + plainError(ins.error) + '), and the old one could not be put back. Add the tutor again from this form.' };
+  }
   const wantRoles = wantsTwoPaths(form) ? rolesFor(form.policy || 'choice') : null;
   const oa = await db.from('offering_activities').insert({
     assignment_offering_id: item.offeringId, activity_id: ins.data.id,
@@ -1385,6 +1451,22 @@ async function swapTutorPath(db, ctx, item, form, cur) {
   });
   if (oa.error) { await db.from('activities').delete().eq('id', ins.data.id); return oa.error; }
   return null;
+}
+
+/** Put a tutor that was just deleted back, as it was (id, link, title, role, position, timing). Its reports are not restored. Returns true when it worked. */
+async function restoreTutor(db, item, cur) {
+  const ins = await db.from('activities').insert({
+    assignment_id: item.assignmentId, modality: 'interactive', slug: cur.slug, title: cur.title || item.title,
+    content: cur.content || {}, position: cur.order ?? 1,
+  }).select('id').single();
+  if (ins.error || !ins.data) return false;
+  const oa = await db.from('offering_activities').insert({
+    assignment_offering_id: item.offeringId, activity_id: ins.data.id,
+    grading_role: cur.role || 'graded', available_after: cur.availableAfter || 'always', is_visible: cur.isVisible !== false, position: cur.order ?? 1,
+    delivery: 'interactive_tutor', grading: 'effort', warn_earns_full: false,
+  });
+  if (oa.error) { await db.from('activities').delete().eq('id', ins.data.id); return false; }
+  return true;
 }
 
 /** Add a tutor beside a saved typed response, with the roles the form asks for. Returns an error or null. */
@@ -1410,8 +1492,8 @@ async function addTutorPath(db, item, form, typed) {
 }
 
 /** Remove the tutor from a two-path item: release the cadets who chose it, delete it, and let the typed path earn credit. */
-async function dropTutorPath(db, ctx, item, tutor, typed) {
-  const unlocked = await unlockCommittedTo(db, ctx, item.offeringId, [tutor.activityId]);
+async function dropTutorPath(db, ctx, item, tutor, typed, expected = null) {
+  const unlocked = await unlockCommittedTo(db, ctx, item.offeringId, [tutor.activityId], expected);
   if (unlocked.error) return unlocked.error;
   const del = await db.from('activities').delete().eq('id', tutor.activityId);
   if (del.error) return del.error;
@@ -1427,9 +1509,15 @@ async function dropTutorPath(db, ctx, item, tutor, typed) {
 export function tutorChangeWarning(kind, title, impact) {
   const what = kind === 'swap' ? `Replace the tutor “${impact.slug}” on “${title}”?` : `Remove the tutor “${impact.slug}” from “${title}”?`;
   const lost = `It deletes ${plural(impact.reports, 'report', 'reports')} cadets sent through it.`;
+  // Every cadet who had committed to this tutor in this term is released, not one cadet: the count says how many.
   const freed = impact.committed
-    ? ` ${plural(impact.committed, 'cadet who had', 'cadets who had')} committed to it ${impact.committed === 1 ? 'is' : 'are'} released to choose again.` : '';
-  return `${what} ${lost}${freed} There is no copy to bring them back from.${kind === 'swap' ? ' If the tutor was only rebuilt, cancel and keep the id: changing just the link keeps every report.' : ''}`;
+    ? ` Every cadet who had committed to it (${impact.committed}) is released and sent back to draft.` +
+      (impact.marked ? ` ${impact.marked} of them already have a mark; the mark stays, and a marked cadet may not be able to send another report.` : ' They can choose again.')
+    : '';
+  const swapNote = kind === 'swap'
+    ? ' If the new id turns out to be used in a course you cannot see, the old tutor is put back, but its reports are not.' +
+      ' If the tutor was only rebuilt, cancel and keep the id: changing just the link keeps every report.' : '';
+  return `${what} ${lost}${freed} There is no copy to bring them back from.${swapNote}`;
 }
 
 /** The warning shown before points change on an assignment that already has grades. */

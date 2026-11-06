@@ -64,7 +64,11 @@ const writesTo = (table, verb) => CALLS.filter(c => c.table === table && (!verb 
 const order = () => CALLS.map(c => `${c.table}.${c.verb}`);
 
 const sections = [{ id: 's-m', code: 'M1A', meeting_days: ['M'] }, { id: 's-t', code: 'T1A', meeting_days: ['T'] }];
-const ctx = { courseId: 'course-1', courseCode: 'gate-entry', courseOfferingId: 'co-1', sections, user: { id: 'user-director' } };
+// What bootstrap() gives a page (site/js/auth.js), and what the page turns it into for a save. The test used to write the save
+// context by hand, with a `user` the real page did not send, so a release of committed cadets passed here and threw there.
+const pageCtx = { currentCourse: 'course-1', currentCourseCode: 'gate-entry', currentOffering: 'co-1',
+  user: { id: 'user-director', email: 'director@example.test' }, instructorRow: { id: 'user-director', is_global_admin: false }, role: 'faculty' };
+const ctx = I.saveContext(pageCtx, sections);
 const kinds = [{ id: 'k1', label: 'K', sort_order: 1, default_delivery: 'typed_response', default_grading: 'human_graded' }];
 const base = (o = {}) => ({ ...I.emptyForm(kinds[0], sections), title: 'Circuits', points: '2', dayDates: { M: '2026-12-10', T: '2026-12-10' }, sameDate: true,
   delivery: 'typed_response', grading: 'human_graded', ...o });
@@ -285,8 +289,8 @@ section('updateItem: remove the tutor, with counts and an unlock first');
   reset(withFresh({ 'submissions.select': committed, 'submission_activities.select': reports }));
   let r = await I.updateItem(db, ctx, duoItem(), base());
   eq('the first call writes nothing and says what would be lost', [r.error, r.needsTutorConfirm, CALLS.length],
-    [null, { kind: 'drop', slug: 'tutor-1', committed: 3, reports: 2 }, 0]);
-  check('the warning states both numbers', /2 reports/.test(I.tutorChangeWarning('drop', 'Circuits', r.needsTutorConfirm)) && /3 cadets/.test(I.tutorChangeWarning('drop', 'Circuits', r.needsTutorConfirm)));
+    [null, { kind: 'drop', slug: 'tutor-1', committed: 3, reports: 2, marked: 0 }, 0]);
+  check('the warning states both numbers', /2 reports/.test(I.tutorChangeWarning('drop', 'Circuits', r.needsTutorConfirm)) && /cadet who had committed to it \(3\)/.test(I.tutorChangeWarning('drop', 'Circuits', r.needsTutorConfirm)));
   r = await I.updateItem(db, ctx, duoItem(), base(), { tutor: { committed: 1, reports: 2 } });
   check('an acknowledgement of other numbers is not enough', !!r.needsTutorConfirm && CALLS.length === 0);
   r = await I.updateItem(db, ctx, duoItem({ typed: 'practice', tutor: 'graded' }), base(), { tutor: { committed: 3, reports: 2 } });
@@ -314,14 +318,14 @@ section('updateItem: replace the tutor with a different id');
 {
   const tutorOnly = () => typedItem({ paths: [{ delivery: 'interactive_tutor', grading: 'effort', modality: 'interactive', role: 'graded', activityId: 'act-t', slug: 'tutor-1', order: 0, availableAfter: 'always', isVisible: true, content: { artifact_url: 'https://example.test/t' } }] });
   const swapForm = (o = {}) => base({ delivery: 'interactive_tutor', grading: 'effort', interactiveSlug: 'tutor-2', interactiveUrl: 'https://example.test/t2', swapTutor: true, ...o });
-  const committed = (st) => (st.opts?.head ? { __count: 4 } : [{ id: 'sub-1' }]);
+  const committed = (st) => (st.opts?.head ? { __count: 4 } : [{ id: 'sub-1' }, { id: 'sub-2' }, { id: 'sub-3' }, { id: 'sub-4' }]);
   reset(withFresh({ 'activities.select': { id: 'taken' } }));
   let r = await I.updateItem(db, ctx, tutorOnly(), swapForm());
   check('a new id that another lesson uses is refused before anything is written', /already used/.test(r.error?.message || '') && writesTo('activities', 'delete').length === 0);
 
   reset(withFresh({ 'submissions.select': committed, 'submission_activities.select': (st) => (st.opts?.head ? { __count: 5 } : []) }));
   r = await I.updateItem(db, ctx, tutorOnly(), swapForm());
-  eq('it asks first, with both numbers, and writes nothing', [r.needsTutorConfirm, CALLS.length], [{ kind: 'swap', slug: 'tutor-1', committed: 4, reports: 5 }, 0]);
+  eq('it asks first, with both numbers, and writes nothing', [r.needsTutorConfirm, CALLS.length], [{ kind: 'swap', slug: 'tutor-1', committed: 4, reports: 5, marked: 0 }, 0]);
   r = await I.updateItem(db, ctx, tutorOnly(), swapForm(), { tutor: { committed: 4, reports: 5 } });
   eq('acknowledged, it replaces', r.error, null);
   const seq = order().filter(x => !x.endsWith('.select'));
@@ -356,6 +360,79 @@ section('the unlock helper names the person and does nothing when nobody chose')
   eq('nobody chose it: nothing released', r, { error: null, unlocked: 0 });
   check('no update was sent', writesTo('submissions', 'update').length === 0);
   eq('no activities named: nothing is read', await I.unlockCommittedTo(db, ctx, 'o-1', []), { error: null, unlocked: 0 });
+}
+
+
+section('the save context is what the page builds from bootstrap, and a release needs the person (review 3, C2)');
+{
+  eq('the context carries the course, the offering, the sections and the person acting',
+    [ctx.courseId, ctx.courseCode, ctx.courseOfferingId, ctx.sections.length, ctx.user.id], ['course-1', 'gate-entry', 'co-1', 2, 'user-director']);
+  eq('it holds nothing else from the page context', Object.keys(ctx).sort(), ['courseCode', 'courseId', 'courseOfferingId', 'sections', 'user']);
+  eq('a page context with no user gives a context with no user, not a throw', I.saveContext({ currentOffering: 'co-1' }, []).user, null);
+  const noUser = I.saveContext({ ...pageCtx, user: undefined }, sections);
+  const committed = (st) => (st.opts?.head ? { __count: 3 } : [{ id: 'sub-1' }, { id: 'sub-2' }, { id: 'sub-3' }]);
+  reset(withFresh({ 'submissions.select': committed }));
+  let r;
+  try { r = await I.updateItem(db, noUser, duoItem(), base(), { tutor: { committed: 3, reports: 0 } }); } catch (e) { r = { threw: String(e) }; }
+  check('removing a tutor with committed cadets, with no person on the context, does not throw', !r.threw, r.threw);
+  check('it says plainly why, and writes nothing at all (not the offering row either)',
+    /who is acting/i.test(r.error?.message || '') && CALLS.filter(c => c.verb !== 'select').length === 0, JSON.stringify(r.error) + order().join());
+  reset(withFresh({ 'submissions.select': committed }));
+  r = await I.updateItem(db, ctx, duoItem(), base(), { tutor: { committed: 3, reports: 0 } });
+  check('the same item with the page\'s own context goes through', r.error === null && writesTo('submissions', 'update').length === 1, JSON.stringify(r.error));
+  reset({ 'submissions.select': [{ id: 's1' }] });
+  let u;
+  try { u = await I.unlockCommittedTo(db, noUser, 'o-1', ['act-t']); } catch (e) { u = { threw: String(e) }; }
+  check('the release helper itself returns an error, it does not throw', !u.threw && !!u.error && u.unlocked === 0 && writesTo('submissions', 'update').length === 0, JSON.stringify(u));
+  // replacing a tutor: the same
+  const tutorOnly = () => typedItem({ paths: [{ delivery: 'interactive_tutor', grading: 'effort', modality: 'interactive', role: 'graded', activityId: 'act-t', slug: 'tutor-1', order: 0, availableAfter: 'always', isVisible: true, content: { artifact_url: 'https://example.test/t' } }] });
+  reset(withFresh({ 'submissions.select': committed }));
+  try { r = await I.updateItem(db, noUser, tutorOnly(), base({ delivery: 'interactive_tutor', grading: 'effort', interactiveSlug: 'tutor-2', interactiveUrl: 'https://example.test/t2', swapTutor: true }), { tutor: { committed: 3, reports: 0 } }); }
+  catch (e) { r = { threw: String(e) }; }
+  check('replacing a tutor with committed cadets and no person: an error, no throw, nothing written', !r.threw && !!r.error && CALLS.filter(c => c.verb !== 'select').length === 0, r.threw || JSON.stringify(r.error));
+}
+
+section('the release counts what it is about to release, and says how many already have a mark (review 3, M5)');
+{
+  const subs = (n) => (st) => (st.opts?.head ? { __count: n } : Array.from({ length: n }, (_, i) => ({ id: 'sub-' + i })));
+  const marked = (n) => (st) => (st.opts?.head ? { __count: n } : []);
+  reset(withFresh({ 'submissions.select': subs(3), 'grades.select': marked(2) }));
+  let r = await I.updateItem(db, ctx, duoItem(), base());
+  eq('the impact carries the number of released cadets who already have a mark', [r.needsTutorConfirm.committed, r.needsTutorConfirm.marked], [3, 2]);
+  const text = I.tutorChangeWarning('drop', 'Circuits', r.needsTutorConfirm);
+  check('the warning says so, and does not promise those cadets a fresh start', /2 of them already have a mark/.test(text) && /mark stays/.test(text), text);
+  const plain = I.tutorChangeWarning('drop', 'Circuits', { slug: 't', committed: 3, reports: 1, marked: 0 });
+  check('with no marks it does not mention them', !/mark/.test(plain.replace(/Remove the tutor/, '')), plain);
+  // A cadet who commits between the count and the release is not released without having been counted.
+  reset({ 'submissions.select': [{ id: 's1' }, { id: 's2' }, { id: 's3' }, { id: 's4' }] });
+  let u = await I.unlockCommittedTo(db, ctx, 'o-1', ['act-t'], 3);
+  check('four are committed now where three were acknowledged: nobody is released', !!u.error && u.unlocked === 0 && writesTo('submissions', 'update').length === 0, JSON.stringify(u));
+  reset({ 'submissions.select': [{ id: 's1' }, { id: 's2' }, { id: 's3' }] });
+  u = await I.unlockCommittedTo(db, ctx, 'o-1', ['act-t'], 3);
+  eq('the acknowledged number releases', [u.error, u.unlocked], [null, 3]);
+  // more than one page of cadets: the read goes on until a short page
+  let page = 0;
+  reset({ 'submissions.select': () => { page++; return page === 1 ? Array.from({ length: 1000 }, (_, i) => ({ id: 'p1-' + i })) : [{ id: 'p2-0' }, { id: 'p2-1' }]; } });
+  u = await I.unlockCommittedTo(db, ctx, 'o-1', ['act-t']);
+  eq('past a thousand cadets the read continues, and all are released', [u.error, u.unlocked], [null, 1002]);
+  check('and the update is split so no request carries a thousand ids', writesTo('submissions', 'update').length > 1 && writesTo('submissions', 'update').every(c => (c.filters.id || []).length <= 200));
+}
+
+section('a replacement that cannot be created puts the old tutor back (review 3, M3)');
+{
+  const tutorOnly = () => typedItem({ paths: [{ delivery: 'interactive_tutor', grading: 'effort', modality: 'interactive', role: 'graded', activityId: 'act-t', slug: 'tutor-1', title: 'Old tutor', order: 0, availableAfter: 'always', isVisible: true, content: { artifact_url: 'https://example.test/t' } }] });
+  const swapForm = (o = {}) => base({ delivery: 'interactive_tutor', grading: 'effort', interactiveSlug: 'tutor-2', interactiveUrl: 'https://example.test/t2', swapTutor: true, ...o });
+  let n = 0;
+  reset(withFresh({ 'submissions.select': { __count: 0 }, 'activities.insert': () => (++n === 1 ? { __error: { code: '23505', message: 'activities_slug_key' } } : undefined) }));
+  const r = await I.updateItem(db, ctx, tutorOnly(), swapForm());
+  const ins = writesTo('activities', 'insert').map(c => c.payload);
+  check('the second insert is the old tutor, with its id, link and title', ins.length === 2 && ins[1].slug === 'tutor-1' && ins[1].content.artifact_url === 'https://example.test/t' && ins[1].title === 'Old tutor', JSON.stringify(ins));
+  check('and it is attached again with its old role', writesTo('offering_activities', 'insert').length === 1 && writesTo('offering_activities', 'insert')[0].payload.grading_role === 'graded');
+  check('the person is told it was put back, and that its reports are gone', /put back/.test(r.error?.message || '') && /reports/.test(r.error?.message || '') && !!r.partial, JSON.stringify(r.error));
+  reset(withFresh({ 'submissions.select': { __count: 0 }, 'activities.insert': () => ({ __error: { code: '23505', message: 'activities_slug_key' } }) }));
+  const r2 = await I.updateItem(db, ctx, tutorOnly(), swapForm());
+  check('if even that fails, the person is told to add the tutor again', /removed/.test(r2.error?.message || '') && /could not be put back|Add the tutor again/.test(r2.error?.message || ''), JSON.stringify(r2.error));
+  check('the swap warning says what happens if the new id turns out to be taken', /put back/.test(I.tutorChangeWarning('swap', 'Circuits', { slug: 'tutor-1', committed: 0, reports: 0 })));
 }
 
 section('updateItem: points that move on an assignment with grades are confirmed first');

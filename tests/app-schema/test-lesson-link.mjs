@@ -242,4 +242,80 @@ section('the policy words and who earns credit');
   eq('an unknown policy falls to the older default, choice', LK.rolesFor('x'), LK.rolesFor('choice'));
 }
 
+section('a link names a course: only a course the person directs counts as found (review 3, M1)');
+{
+  const authorable = LK.authorableOfferings(COURSES, false);
+  const r = LK.resolveOffering(COURSES, 'co-215-spring', 'phys-110', authorable);
+  check('a course the person only teaches is reported as not found', r.matched === false && r.offeringId === 'co-215-spring' && r.requestedCode === 'phys-110');
+  const q = '?new=1&id=lesson-04-x&course=phys-110&title=T';
+  const p = LK.parsePrefill(q, { courses: COURSES, currentOffering: 'co-215-spring', authorable });
+  check('the link says it asked for phys-110 and did not get it', p.requestedCode === 'phys-110' && p.codeMatched === false);
+  check('a course the person directs, in another term, is found', LK.resolveOffering(COURSES, 'co-215-spring', 'phys-215', authorable).offeringId === 'co-215-spring');
+  check('a course in a term the person directs is found', LK.resolveOffering(COURSES, 'co-215-spring', 'phys-310', authorable).offeringId === 'co-310-spring');
+  check('with no list given, the older behaviour holds (the parity test above)', LK.resolveOffering(COURSES, 'co-215-spring', 'phys-110').matched === true);
+}
+
+section('a hostile policy word is ignored, as the older page ignores it (review 3, m1)');
+{
+  for (const word of ['constructor', 'toString', 'valueOf', 'hasOwnProperty', '__proto__', 'banana', '']) {
+    const f = LK.formFromPrefill({ policy: word, title: 'T' }, []);
+    check(`policy=${word || '(empty)'} puts nothing in the form`, !('policy' in f));
+  }
+  eq('a real word still translates', LK.formFromPrefill({ policy: 'interaction' }, []).policy, 'tutor');
+}
+
+section('runPrefill: a link for another course the person directs switches the page first, or refuses, and never opens on the course on screen (review 3, C1)');
+{
+  const mkIo = (over = {}) => {
+    const log = [];
+    let current = over.current || 'co-215-spring';
+    let viewOk = over.viewOk !== undefined ? over.viewOk : true;
+    const io = {
+      log, courses: COURSES,
+      authorable: () => LK.authorableOfferings(COURSES, !!over.admin),
+      currentOffering: () => current,
+      ready: () => viewOk,
+      switchTo: async (id) => { log.push('switch:' + id); current = id; viewOk = over.switchFails ? false : true; return over.switchFails ? { error: { message: 'load failed' } } : { error: null }; },
+      clearAddress: () => log.push('clear'),
+      openChooser: async (prefill) => { log.push('chooser:' + prefill.offeringId + ':current=' + current); },
+      refuse: (text) => log.push('refuse:' + text),
+    };
+    return io;
+  };
+  const link = '?new=1&id=lesson-04-x&course=phys-110&title=T&url=https%3A%2F%2Fclaude.ai%2Fpublic%2Fartifacts%2Fabc';
+  {
+    const io = mkIo({ admin: true });
+    await LK.runPrefill(link, io);
+    eq('director of both, page on 215: the page is switched to 110, then the chooser opens on 110',
+      io.log.filter(x => !x.startsWith('clear')), ['switch:co-110-spring', 'chooser:co-110-spring:current=co-110-spring']);
+  }
+  {
+    const io = mkIo({ admin: true, switchFails: true });
+    await LK.runPrefill(link, io);
+    check('a switch that fails refuses plainly and the chooser never opens', io.log.some(x => x.startsWith('refuse:')) && !io.log.some(x => x.startsWith('chooser')));
+  }
+  {
+    const io = mkIo();
+    await LK.runPrefill(link, io);
+    check('a course the person only teaches: no switch, the chooser says so (codeMatched false), and it names the course on screen',
+      !io.log.some(x => x.startsWith('switch')) && io.log.includes('chooser:co-215-spring:current=co-215-spring'));
+  }
+  {
+    const io = mkIo();
+    await LK.runPrefill('?new=1&id=lesson-04-x&title=T', io);
+    check('no course in the link: no switch', !io.log.some(x => x.startsWith('switch')) && io.log.some(x => x.startsWith('chooser')));
+  }
+  {
+    const io = mkIo({ viewOk: false });
+    await LK.runPrefill('?new=1&id=lesson-04-x&title=T', io);
+    check('a page with nothing loaded (not a director here) refuses, does not open the chooser, and keeps the link in the address',
+      io.log.some(x => x.startsWith('refuse:')) && !io.log.some(x => x.startsWith('chooser')) && !io.log.includes('clear'));
+  }
+  {
+    const io = mkIo();
+    const r = await LK.runPrefill('?a=abc', io);
+    check('a query that is not a prefill link is left alone', r.status === 'not-a-link' && io.log.length === 0);
+  }
+}
+
 process.exit(summary() ? 0 : 1);

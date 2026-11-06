@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8=' 'sha256-q4XctvjL/egQiZSK/8YOTtVbAjg1FqsqntUYv2KFC6s='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8=' 'sha256-OdXBmFEiy57InxQNCp1cWbKpnpTefXMoA1WgDR969ww='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Assignments · PREP</title>
   <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
@@ -163,12 +163,17 @@
     let formSlug = '';           // the assignment id a prefill link names, used when a new assignment is first saved
     let pendingOverlay = null;   // a link's tutor, carried into the form for an existing assignment
 
+    let formOffering = null;     // the course offering the open form was opened on; a save on any other is refused
+
     const $ = (id) => document.getElementById(id);
     const isDirector = () => ctx.isDirectorForCurrent();
+    /* Choosing a course from the menu reloads the page's data, and reads a prefill link still waiting in the address:
+     * a link opened while the page was on a course the person does not direct is kept until they choose one they do. */
+    const onCourseChange = () => load().then(() => (LK.hasPrefill(location.search) ? handleQuery() : undefined));
 
     function init() {
       initTheme();
-      renderNav(ctx, { active: 'items', onCourseChange: () => load() });
+      renderNav(ctx, { active: 'items', onCourseChange });
       fr = mountFreeResponse($('i-written'), { moreHost: $('i-written-more'), aiDrafted: () => $('i-grading').value === 'ai_drafted' });
       loadManifest().then(list => fr.setManifest(list));
       wireForm();
@@ -192,6 +197,7 @@
 
     async function load() {
       const root = $('main');
+      vm = null;      // nothing from the course that was on screen may be read while this one loads, or when it cannot be shown
       const where = `${esc(ctx.courseTitleOf(ctx.currentOffering))}${ctx.currentTermLabel ? ' · ' + esc(ctx.currentTermLabel) : ''}`;
       const head = (extra = '') => `<div class="page-head"><div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:10px">
           <div><h1>Assignments</h1><div class="sub">Everything graded in ${where}.</div></div>${extra}</div></div>`;
@@ -412,6 +418,7 @@
 
     function openForm(item, lay = null, overlay = null) {
       editing = item;
+      formOffering = ctx.currentOffering;
       swapOn = false;
       const err = $('im-error'); err.style.display = 'none'; err.textContent = '';
       const note = $('im-note'); note.style.display = 'none'; note.textContent = '';
@@ -597,6 +604,10 @@
 
     async function save() {
       if (saving) return;
+      if (ctx.currentOffering !== formOffering) {
+        showError('The course on screen changed after this form was opened, so nothing was saved. Close the form and open it again.');
+        return;
+      }
       const form = readForm();
       const locked = isLocked(editing);
       const tutorNow = tutorOf(editing);
@@ -610,8 +621,7 @@
       }
       saving = true; $('im-save').disabled = true;
       try {
-        const c = { courseId: ctx.currentCourse, courseCode: ctx.currentCourseCode,
-                    courseOfferingId: ctx.currentOffering, sections: vm.sections };
+        const c = I.saveContext(ctx, vm.sections);
         let res = editing ? await I.updateItem(db, c, editing, form) : await I.createItem(db, c, form);
         // Each warning is asked in turn, its answer is added to one acknowledgement, and the save is tried again. Nothing
         // has been written while a question is open. A number that changed meanwhile comes back as a new question.
@@ -651,6 +661,12 @@
           window.alert('The assignment was saved, but it is not published. ' + I.publishErrorText(res.publishError));
         }
         if (res.rescored) window.alert(res.rescored + ' grade(s) already given were updated to the new question points.');
+      } catch (e) {
+        // Anything the save did not expect. The form stays open and says so; the list is reloaded because part of the save
+        // may already have been written.
+        console.error('item save threw', e);
+        showError('The save stopped partway: ' + I.plainError(e) + ' Reload the page to see what was saved before trying again.');
+        try { await load(); } catch { /* the message above stands */ }
       } finally { saving = false; $('im-save').disabled = false; }
     }
 
@@ -682,14 +698,31 @@
     /* ── Prefill links ────────────────────────────────────────────────────────
      * The link format is a frozen contract (lesson-link.js): the same query reaches the same destination with the same
      * values as the older page. The link is read once and cleared from the address, so a reload does not reopen it. */
+    const authorable = () => LK.authorableOfferings(ctx.courses, !!ctx.instructorRow?.is_global_admin);
+
+    /* A plain notice at the top of the page, for a link that could not be followed. */
+    function showPageNotice(text) {
+      $('main').insertAdjacentHTML('afterbegin', `<div class="alert alert-warn">${esc(text)}</div>`);
+    }
+
+    /* Move the whole page to another course and term the person directs, and say whether it loaded. The chooser, the form
+     * and the save all read the page's loaded course, so they follow only when this has finished. */
+    async function switchTo(offeringId) {
+      await ctx.setCurrentOffering(offeringId);
+      renderNav(ctx, { active: 'items', onCourseChange });
+      await load();
+      return { error: vm && !vm.error ? null : (vm?.error || { message: 'Nothing was loaded for that course.' }) };
+    }
+
     async function handleQuery() {
       if (!LK.hasPrefill(location.search)) return openFromQuery();
-      if (!vm || vm.error) return;
-      const prefill = LK.parsePrefill(location.search, { courses: ctx.courses, currentOffering: ctx.currentOffering });
-      history.replaceState(null, '', location.pathname);
-      if (prefill) await openDestChooser(prefill);
+      return LK.runPrefill(location.search, {
+        courses: ctx.courses, authorable, currentOffering: () => ctx.currentOffering,
+        ready: () => !!vm && !vm.error, switchTo,
+        clearAddress: () => history.replaceState(null, '', location.pathname),
+        openChooser: openDestChooser, refuse: showPageNotice,
+      });
     }
-    const authorable = () => LK.authorableOfferings(ctx.courses, !!ctx.instructorRow?.is_global_admin);
 
     async function openDestChooser(prefill) {
       const modal = $('dest-modal');
@@ -723,9 +756,13 @@
         const id = sel.value;
         if (id === ctx.currentOffering) { prefill.offeringId = id; return; }
         sel.disabled = true; hint.textContent = 'Switching…';
-        await ctx.setCurrentOffering(id);
-        renderNav(ctx, { active: 'items', onCourseChange: () => load() });
-        await load();
+        const moved = await switchTo(id);
+        if (moved.error) {
+          // Nothing is loaded for that course, so the buttons below would act on the wrong one. Close the chooser.
+          $('dest-modal').classList.remove('open');
+          showPageNotice('That course and term could not be opened, so the link was not followed. Choose it from the menu at the top.');
+          return;
+        }
         prefill.offeringId = id; prefill.codeMatched = true;
         openDestChooser(prefill);
       };
