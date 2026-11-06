@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.4.17/purify.min.js https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.0/marked.min.js 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8=' 'sha256-bu4H5i/ghO11qIx6xy7rQvAGDypXf2ddY1GdG+XGIsQ='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.4.17/purify.min.js https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.0/marked.min.js 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8=' 'sha256-ZWA1i58dRcmOEzB5oLfpnf0ljnQLvpDOSl5KdS15Owg='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Report · PREP</title>
   <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
@@ -15,7 +15,10 @@
 <body>
   <header id="topnav"></header>
   <main class="page-wide" id="main">
-    <a class="report-back" href="dashboard.html">‹ Dashboard</a>
+    <a class="report-back" href="dashboard.html" id="report-back">‹ Dashboard</a>
+
+    <!-- With no ?i= the page lists this course's assignments to pick from. -->
+    <div id="report-picker" hidden></div>
 
     <!-- Lesson rollup as the page body: a single course-wide summary (no per-student list).
          Drill into individual students only through the header flag pills, which open the
@@ -161,7 +164,9 @@
       initTheme();
       // Report is not a nav destination — switching course leaves this lesson's context, so
       // send the user back to the interactions list rather than show a stale cross-course rollup.
-      renderNav(ctx, { active: '', onCourseChange: () => { location.href = 'dashboard.html'; } });
+      // With no assignment in the address this page is the Reports list, and switching course re-reads the list.
+      const picking = !new URLSearchParams(location.search).get('i');
+      renderNav(ctx, { active: picking ? 'report' : '', onCourseChange: () => { if (picking) return start(); location.href = 'dashboard.html'; } });
       wireModals();
       await start();
     }
@@ -187,7 +192,7 @@
       const params = new URLSearchParams(location.search);
       const interactionId = params.get('i');
       const section = params.get('section');
-      if (!interactionId) { location.replace('dashboard.html'); return; }
+      if (!interactionId) { await showPicker(); return; }
       if (!ctx.currentOffering) {
         document.getElementById('rm-title').textContent = 'Report';
         document.getElementById('rm-aggregate').innerHTML = `<div class="alert alert-warn">No course access.</div>`;
@@ -198,6 +203,34 @@
       const it = vm.interactions.find(x => x.id === interactionId);
       if (!it) { location.replace('dashboard.html'); return; }   // not in this course / not visible
       showReport(interactionId, it.title, section);
+    }
+
+    // The Reports list: with no ?i=, every assignment of this course to open a report on. Who may see a report does
+    // not change: the list is whatever loadManager returns for this person, and the database filters that.
+    async function showPicker() {
+      const body = document.getElementById('report-body'), box = document.getElementById('report-picker');
+      body.style.display = 'none'; box.hidden = false;
+      document.getElementById('report-back').style.display = 'none';
+      const head = `<div class="page-head"><h1>Reports</h1><div class="sub">Pick an assignment to see how the class did on it.</div></div>`;
+      if (!ctx.currentOffering) { box.innerHTML = head + `<div class="alert alert-warn">No course access found.</div>`; return; }
+      box.innerHTML = head + `<div class="center-load"><span class="spinner"></span><span>Loading…</span></div>`;
+      try {
+        vm = await I.loadManager(ctx);
+      } catch (err) {
+        console.error('[report] the list could not be read:', err);
+        box.innerHTML = head + `<div class="alert alert-error">Could not load the list of assignments: ${esc(err?.message || String(err))}<div style="margin-top:8px"><button class="btn btn-ghost btn-sm" id="picker-retry">Try again</button></div></div>`;
+        document.getElementById('picker-retry').onclick = () => showPicker();
+        return;
+      }
+      const rows = I.reportPickerRows(vm.interactions);
+      if (!rows.length) { box.innerHTML = head + `<div class="empty-state"><h3>No assignments to report on yet</h3><p>A report needs an assignment with questions or an interactive tutor.</p></div>`; return; }
+      box.innerHTML = head + `<div class="table-wrap"><table id="report-list"><thead><tr><th>Assignment</th><th>Due</th><th>Done</th><th></th></tr></thead><tbody>${rows.map(r => `<tr>
+        <td><strong>${esc(r.title)}</strong></td>
+        <td>${r.dueAt ? esc(new Date(r.dueAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })) : '<span class="muted">no date</span>'}</td>
+        <td>${r.total ? `${r.done} of ${r.total}` : '<span class="muted">-</span>'}</td>
+        <td style="white-space:nowrap">${r.published
+          ? `<a class="btn btn-primary btn-sm" href="report.html?i=${esc(encodeURIComponent(r.id))}">Open report</a>`
+          : `<span class="muted" title="Cadets cannot have done an unpublished assignment, so there is nothing to report yet.">Not published</span>`}</td></tr>`).join('')}</tbody></table></div>`;
     }
 
     // ── Lesson rollup viewer (v3 — matches the test-summary sandbox) ──────────────

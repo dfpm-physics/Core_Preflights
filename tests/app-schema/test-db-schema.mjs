@@ -29,10 +29,10 @@ section('db-schema.js — generated catalogue');
 check('catalogue is non-empty', TABLE_NAMES.length > 0);
 eq('TABLE_NAMES matches DB_SCHEMA keys', TABLE_NAMES.length, Object.keys(DB_SCHEMA).length);
 
-// 46 base tables as the migration files build them (views excluded; the migration ledger is left
+// 49 base tables as the migration files build them (views excluded; the migration ledger is left
 // out because no browser session can reach it). A change here is not automatically a failure — it
 // means a migration landed and the catalogue needs regenerating and this count bumping.
-eq('46 base tables (views excluded)', TABLE_NAMES.length, 46);
+eq('49 base tables (views excluded)', TABLE_NAMES.length, 49);
 
 let missingCols = [], badPk = [], danglingFk = [];
 for (const name of TABLE_NAMES) {

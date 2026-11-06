@@ -183,6 +183,55 @@ export function pathPlan(form) {
 export const wantsTwoPaths = (form) => isTypedResponse(form.delivery) && !!form.withTutor;
 
 /* ══════════════════════════════════════════════════════════════════════════════
+ * "How cadets do this work": the three cards on an assignment's setup
+ * ════════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * The cards are a plain way to set three things the form already had: the delivery, its grading, and whether a tutor sits
+ * beside a typed response. They write the same form fields as before, so a save writes the same data for the same choice.
+ *   questions  the work is answered questions (on the site, or typed): no tutor
+ *   tutor      the work is the interactive tutor alone
+ *   both       a typed response with the tutor beside it; the cadet picks (the policy below says what earns credit)
+ * Nothing here reads a kind to decide what is allowed. A kind only sets which delivery the Questions card starts on.
+ */
+export const SETUP_MODES = ['questions', 'tutor', 'both'];
+
+/** Deliveries the cards describe. In person and done elsewhere are not questions or a tutor, so no card applies. */
+export const cardsApply = (delivery) => ['online_questions', 'typed_response', 'interactive_tutor'].includes(delivery);
+
+/** The card an item starts on: two paths is Both, a lone tutor is Tutor, anything else is Questions. */
+export function modeOfShape(shape) {
+  if (shape?.kind === 'choice') return 'both';
+  if (shape?.kind === 'single' && shape.main.modality === 'interactive') return 'tutor';
+  return 'questions';
+}
+
+/** The card a delivery implies after the delivery box itself is changed. Both survives only on a typed response. */
+export function modeFromDelivery(delivery, previous = 'questions') {
+  if (delivery === 'interactive_tutor') return 'tutor';
+  return delivery === 'typed_response' && previous === 'both' ? 'both' : 'questions';
+}
+
+/**
+ * What choosing a card sets: { delivery, grading, withTutor }. `current` is the form's present delivery and grading;
+ * `kindPrefill` is prefillFromKind(kind) (or null). A choice that keeps the present delivery keeps its grading too.
+ */
+export function applyMode(mode, current, kindPrefill = null) {
+  const d = current.delivery;
+  const fresh = (delivery) => ({ delivery, grading: gradingsFor(delivery)[0] });
+  if (mode === 'tutor') {
+    return d === 'interactive_tutor' ? { delivery: d, grading: current.grading, withTutor: false } : { ...fresh('interactive_tutor'), withTutor: false };
+  }
+  if (mode === 'both') {
+    return d === 'typed_response' ? { delivery: d, grading: current.grading, withTutor: true } : { ...fresh('typed_response'), withTutor: true };
+  }
+  if (d !== 'interactive_tutor') return { delivery: d, grading: current.grading, withTutor: false };
+  const kd = kindPrefill?.delivery;
+  if (kd === 'online_questions' || kd === 'typed_response') return { delivery: kd, grading: kindPrefill.grading, withTutor: false };
+  return { ...fresh('typed_response'), withTutor: false };
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
  * When cadets can see it (the release window), in Mountain time
  * ════════════════════════════════════════════════════════════════════════════ */
 
@@ -718,13 +767,14 @@ export function needsMoreOptions(item, { prefill = null, sections = [], sched = 
   if (String(item.description || '').trim()) return true;
   if (item.lateAllowed === false || item.isBonus || item.progIncluded) return true;
   const paths = item.paths || [];
-  if (paths.length !== 1) return true;                      // two paths, or a path this page does not edit: the note says so
+  // A tutor and a two-path setup are shown on the cards, so they do not open this by themselves. Any other shape does: the note says so.
+  const tutors = paths.filter(x => x.modality === 'interactive');
+  if (!(paths.length === 1 || (paths.length === 2 && tutors.length === 1))) return true;
   if (item.attemptLimit != null) return true;                 // a limit on attempts lives in there
   if (item.position != null || item.opensAt) return true;   // an assignment number or a fixed opening date lives in there
-  const p = paths[0];
-  if (p.modality === 'interactive') return true;            // a tutor id and link live there
-  if (p.delivery === 'typed_response' && p.modality === 'written' && typedFieldsSet(p.content)) return true;   // reading fields, or a switch turned off
-  if (prefill && (p.delivery !== prefill.delivery || p.grading !== prefill.grading)) return true;
+  const p = paths.find(x => x.modality !== 'interactive');   // the typed side; a tutor alone has none
+  if (p && p.delivery === 'typed_response' && p.modality === 'written' && typedFieldsSet(p.content)) return true;   // reading fields, or a switch turned off
+  if (p && prefill && (p.delivery !== prefill.delivery || p.grading !== prefill.grading)) return true;
   if (sched) {
     if (sched.time && sched.time !== DEFAULT_TIME) return true;
     if (Object.values(sched.sectionDates || {}).some(Boolean)) return true;
@@ -1168,9 +1218,13 @@ export async function updateItem(db, ctx, item, form, ack = null) {
   const duo = shape.kind === 'choice' ? shape : null;           // a typed response and a tutor, both editable here
   const wantModality = DELIVERY_MODALITY[form.delivery];
   const wantTwo = wantsTwoPaths(form);
-  const changesPair = !!single && (single.delivery !== form.delivery || single.grading !== form.grading);
+  // A tutor-only assignment moving to "Both" keeps its tutor (id, link and reports) and gains a typed path beside it; a
+  // two-path assignment moving to "Interactive tutor" keeps the tutor and loses the typed path. Neither is a replacement.
+  const tutorToBoth = !!single && single.modality === 'interactive' && wantTwo;
+  const bothToTutor = !!duo && form.delivery === 'interactive_tutor';
+  const changesPair = !!single && !tutorToBoth && (single.delivery !== form.delivery || single.grading !== form.grading);
   const replacesPath = changesPair && wantModality !== single.modality;
-  if (duo && !isTypedResponse(form.delivery)) {
+  if (duo && !isTypedResponse(form.delivery) && !bothToTutor) {
     return { error: { message: 'This assignment offers a typed response and a tutor. Untick "Also offer an interactive tutor" first, then change how the work is done. Nothing was changed.' } };
   }
   if (replacesPath) {
@@ -1193,6 +1247,26 @@ export async function updateItem(db, ctx, item, form, ack = null) {
     }
   }
 
+  if (bothToTutor || tutorToBoth) {
+    const w = await countWork(db, item.offeringId);
+    if (w.error) return { error: w.error };
+    if (bothToTutor && (w.submissions || w.grades)) {
+      return { error: { message: `This assignment already has ${plural(w.submissions, 'submission', 'submissions')} and ` +
+        `${plural(w.grades, 'grade', 'grades')}, so the typed response cannot be removed. Nothing was changed.` } };
+    }
+    if (tutorToBoth && (w.submissions || w.grades) && single.role !== rolesFor(form.policy || 'choice').tutor) {
+      return { error: { message: `This assignment already has ${plural(w.submissions, 'submission', 'submissions')} and ` +
+        `${plural(w.grades, 'grade', 'grades')}, so which path earns credit cannot change now. Nothing was changed.` } };
+    }
+    if (bothToTutor) {
+      const impact = await countQuestionsAndKeys(db, [duo.typed.activityId]);
+      if (impact.error) return { error: impact.error };
+      if ((impact.questions || impact.keys) && !ackCovers(ack, impact)) {
+        return { error: null, needsConfirm: { questions: impact.questions, keys: impact.keys } };
+      }
+    }
+  }
+
   // Who earns credit may not move once cadets have started: a path that stops earning credit under a cadet who chose it
   // would change what they were asked to do. (The tutor's own removal or replacement has its own confirmation below.)
   const wantRoles = wantTwo ? rolesFor(form.policy || 'choice') : null;
@@ -1211,8 +1285,8 @@ export async function updateItem(db, ctx, item, form, ack = null) {
   // Replacing or removing the tutor deletes it, and every report cadets sent through it. Count first, ask, then act.
   const tutorNow = duo ? duo.tutor : (single && single.modality === 'interactive' ? single : null);
   const wantSlug = String(form.interactiveSlug || '').trim();
-  const swapping = !!tutorNow && !!form.swapTutor && !!wantSlug && wantSlug !== tutorNow.slug && (duo ? wantTwo : form.delivery === 'interactive_tutor');
-  const dropping = !!duo && !wantTwo;
+  const swapping = !!tutorNow && !!form.swapTutor && !!wantSlug && wantSlug !== tutorNow.slug && (duo ? (wantTwo || bothToTutor) : (form.delivery === 'interactive_tutor' || tutorToBoth));
+  const dropping = !!duo && !wantTwo && !bothToTutor;
   let tutorCommitted = null;          // how many cadets the person was told would be released; the release checks it again
   if (swapping || dropping) {
     if (swapping) {
@@ -1372,7 +1446,7 @@ export async function updateItem(db, ctx, item, form, ack = null) {
         if (delA.error) return partial(delA.error);
       }
     }
-    if (cur.modality === 'interactive' && wantModality === 'interactive') {
+    if (cur.modality === 'interactive' && (wantModality === 'interactive' || tutorToBoth)) {
       const e = swapping ? await swapTutorPath(db, ctx, item, form, cur, tutorCommitted) : await updateTutorInPlace(db, item, form, cur);
       if (e) return partial(e);
     }
@@ -1384,9 +1458,24 @@ export async function updateItem(db, ctx, item, form, ack = null) {
       const e = await addTutorPath(db, item, form, single);
       if (e) return partial(e);
     }
+    if (tutorToBoth) {
+      const e = await addTypedPath(db, ctx, item, form, cur);
+      if (e) return partial(e);
+    }
     if (ownershipMoves && !pointsOwnedByQuestions(form.grading)) {
       const p = await db.from('assignment_offerings').update({ points_possible: Number(form.points) }).eq('id', item.offeringId);
       if (p.error) return partial(p.error);
+    }
+  } else if (duo && bothToTutor) {
+    const { typed, tutor } = duo;
+    const e = swapping ? await swapTutorPath(db, ctx, item, form, tutor, tutorCommitted) : await updateTutorInPlace(db, item, form, tutor);
+    if (e) return partial(e);
+    const del = await db.from('activities').delete().eq('id', typed.activityId);
+    if (del.error) return partial(del.error);
+    if (tutor.role !== 'graded') {
+      const u = await db.from('offering_activities').update({ grading_role: 'graded' })
+        .eq('assignment_offering_id', item.offeringId).eq('activity_id', tutor.activityId);
+      if (u.error) return partial(u.error);
     }
   } else if (duo) {
     const { typed, tutor } = duo;
@@ -1623,6 +1712,34 @@ async function addTutorPath(db, item, form, typed) {
   if (typed.role !== roles.typed) {
     const u = await db.from('offering_activities').update({ grading_role: roles.typed })
       .eq('assignment_offering_id', item.offeringId).eq('activity_id', typed.activityId);
+    if (u.error) return u.error;
+  }
+  return null;
+}
+
+/** Add a typed response beside a saved tutor, with the roles the form asks for. Returns an error or null. */
+async function addTypedPath(db, ctx, item, form, tutor) {
+  const roles = rolesFor(form.policy || 'choice');
+  // The tutor moves to the second place first, so the typed response can take the first.
+  if (tutor.order !== 1) {
+    const m = await db.from('offering_activities').update({ position: 1 })
+      .eq('assignment_offering_id', item.offeringId).eq('activity_id', tutor.activityId);
+    if (m.error) return m.error;
+  }
+  const ins = await db.from('activities').insert({
+    assignment_id: item.assignmentId, modality: 'written', slug: pathSlug(ctx.courseCode, item.slug, 'written'),
+    title: String(form.title).trim(), content: newPathContent(form), position: 0,
+  }).select('id').single();
+  if (ins.error) return ins.error;
+  const oa = await db.from('offering_activities').insert({
+    assignment_offering_id: item.offeringId, activity_id: ins.data.id,
+    grading_role: roles.typed, available_after: 'always', is_visible: true, position: 0,
+    delivery: 'typed_response', grading: form.grading, warn_earns_full: warnEarnsFull('typed_response', form.grading),
+  });
+  if (oa.error) { await db.from('activities').delete().eq('id', ins.data.id); return oa.error; }
+  if (tutor.role !== roles.tutor) {
+    const u = await db.from('offering_activities').update({ grading_role: roles.tutor })
+      .eq('assignment_offering_id', item.offeringId).eq('activity_id', tutor.activityId);
     if (u.error) return u.error;
   }
   return null;

@@ -172,6 +172,7 @@ const MAY_NAME_PRODUCTION = new Set([
   'tests/app-schema/target.mjs', 'tests/app-schema/staging_guard.py',
   'tests/app-schema/test-target-guard.mjs', 'tests/app-schema/test-config.mjs',
   'tests/browser-harness/env.mjs',
+  'tests/walk/lib.mjs',
 ]);
 const forbidden = [PRODUCTION_REF, prodEntry?.[2], 'admin/.env', 'app_tier_check', 'admin/config.json']
   .filter(Boolean);

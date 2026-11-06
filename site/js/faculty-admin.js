@@ -93,7 +93,7 @@ export async function loadStaff(ctx) {
       .eq('course_offering_id', ctx.currentOffering),
     db.from('instructors').select('id, name').eq('is_global_admin', true),
     db.from('instructors').select('id, name').order('name'),
-    db.from('sections').select('id, code').eq('course_offering_id', ctx.currentOffering).order('code'),
+    db.from('sections').select('id, code, meeting_days').eq('course_offering_id', ctx.currentOffering).order('code'),
   ]);
 
   const codeOf = Object.fromEntries((sections || []).map(s => [s.id, s.code]));

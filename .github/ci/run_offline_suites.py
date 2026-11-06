@@ -43,6 +43,7 @@ OFFLINE = [
     "test-faculty-questions.mjs",
     "test-faculty-scale.mjs",
     "test-faculty-terms.mjs",
+    "test-course-days.mjs",
     "test-student-view.mjs",
     "test-student-loader.mjs",
 
@@ -68,6 +69,7 @@ OFFLINE = [
     "test-lesson-link.mjs",
     "test-items-page.mjs",
     "test-items-paths.mjs",
+    "test-items-setup.mjs",
 ]
 # Python tests that make no network call and need no database (each stubs or never opens a connection).
 PY_OFFLINE = [

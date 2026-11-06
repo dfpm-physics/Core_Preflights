@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8=' 'sha256-serxPQtfhSm1B79jg/djanijAHBZJvUb6f77aIW2EpA='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8=' 'sha256-VpIzdvg7aSCe+3q+hz4AzKMdLFCikMho2w4sGxM+FP4='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Course administration · PREP</title>
   <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
@@ -135,6 +135,8 @@
     import * as A from '../js/faculty-admin.js';
     import * as R from '../js/faculty-roster.js';
     import * as RI from '../js/roster-import.js';
+    import * as CD from '../js/course-days.js';
+    import { db } from '../js/supabase.js';
     import * as BB from '../js/blackboard-fill.js';
 
     /* ── One page, four tabs: Students · Staff · Extensions · Export ─────────────
@@ -173,6 +175,7 @@
     let staged = null;            // the import, between preview and commit
     let pwTarget = null;          // { studentId, name } for the reset modal
     let offeringSections = [];    // [{ id (uuid), code, meeting_days, period }]
+    let courseDays = { days: [...CD.DEFAULT_DAYS], assumed: true, error: null };   // this course's own list of meeting days
     let editSid = null;           // enrollment id being moved
     let roster = [];              // active enrollments, filtered client-side by the search box
     let droppedRoster = [];       // enrollments marked dropped — kept, but no longer in the course
@@ -502,6 +505,7 @@
      * around, so the decisions are carried across by student id and enrollment id.
      */
     async function previewImport(text, filename, carry = {}) {
+      courseDays = await CD.loadCourseDays(db, ctx.currentCourse);
       const approved = carry.approved instanceof Set ? carry.approved : new Set();
       /* ALWAYS pass the section map, even when it is EMPTY (director, 2026-07-28).
        *
@@ -686,8 +690,11 @@
           </div>
           <div class="muted" style="font-size:0.85em;margin-top:6px">Each new section starts with:
             ${parsed.unknownSections.map(c => `<code>${esc(c)}</code> ${esc(RI.describeSectionDefaults(c))}`).join('; ')}.
-            A code that is not a day letter followed by a digit (such as <code>M1A</code>) gets no meeting days, which is
-            right for a course without M and T days. You can correct either on the Staff tab afterwards.</div>
+            A code that is not a day letter followed by a digit (such as <code>LAB-3</code>) gets no meeting days, which is
+            right for a course without M and T days. You can correct either on the Staff tab afterwards.
+            ${(() => { if (courseDays.error) return `<div class="alert alert-error" id="imp-days-error" style="margin-top:6px">Could not read this course's meeting days (${esc(courseDays.error.message)}), so the days in this file were not checked against them.</div>`;
+              const n = RI.outsideDaysNote(parsed.unknownSections, courseDays.days);
+              return n ? `<div class="alert alert-info" id="imp-days-note" style="margin-top:6px">${esc(n)}</div>` : ''; })()}</div>
         </div>` : '';
 
       // Group B.
@@ -1286,6 +1293,7 @@
       const panel = document.getElementById('panel');
       cache = await A.loadStaff(ctx);
       const { staff, sections } = cache;
+      courseDays = await CD.loadCourseDays(db, ctx.currentCourse);
       const meId = ctx.user.id;
 
       const rows = staff.map(s => {
@@ -1343,7 +1351,7 @@
           </td></tr>`;
       }).join('');
 
-      panel.innerHTML = `
+      panel.innerHTML = (courseDays.error ? `<div class="alert alert-error" id="sec-days-error">Could not read this course's meeting days (${esc(courseDays.error.message)}), so the days on the sections below are not checked against them.</div>` : '') + `
         <div class="card">
           <div class="row wrap" style="justify-content:space-between;gap:10px">
             <div>
@@ -1395,6 +1403,15 @@
      * The old modal survives as the per-person view (its copy is fixed below); this is the
      * per-section one, and they write the same rows.
      */
+    // What days a section meets, from its own stored days. A day the course's list does not carry is still shown, and says so.
+    function dayLine(sec) {
+      const held = CD.cleanDays(sec.meeting_days);
+      if (!held.length) return '<div class="muted" style="font-size:0.8em">No meeting day set</div>';
+      const outside = courseDays.error ? [] : CD.daysOutsideList(held, courseDays.days);
+      return `<div class="muted" style="font-size:0.8em">Meets ${esc(held.join(', '))}${outside.length
+        ? ` <span title="This course's list of meeting days is ${esc(CD.describeDays(courseDays.days))}. The section keeps this day.">(not in the course's list)</span>` : ''}</div>`;
+    }
+
     function sectionCoverage(staff, sections) {
       // Everyone who could hold a teaching assignment. Implicit rows are global admins with no
       // staff_assignments row at all — assigning one CREATES their row, which is a real action, so
@@ -1432,6 +1449,7 @@
         const free = pool.filter(s => !named.some(n => n.instructorId === s.instructorId));
         return `<div class="sec-assign cov-tile" data-section="${esc(sec.id)}">
           <div class="sec-tag">${esc(sec.code)}</div>
+          ${dayLine(sec)}
           <div class="cov-holders">${named.length
             ? named.map(s => `<span class="cov-held">${esc(s.name)}
                 <button class="cov-x" data-drop-person="${esc(s.instructorId)}"
@@ -1483,10 +1501,19 @@
      * the operator exactly what it is about to write and lets them fix it before it is written,
      * which is cheaper than discovering it one lesson later.
      */
-    function openAddSection() {
-      const dayBoxes = ['M', 'T', 'W', 'R', 'F'].map(d =>
+    async function openAddSection() {
+      // Only the days this course meets are offered. A code that reads as another day (W1A in an M and T course)
+      // is still accepted: its day is shown ticked and marked, so the section is made as typed.
+      const cd = await CD.loadCourseDays(db, ctx.currentCourse);
+      courseDays = cd;
+      const offered = cd.error ? CD.ALL_DAYS : CD.cleanDays(cd.days);
+      const dayBoxes = offered.map(d =>
         `<label class="check-inline" style="margin-right:10px">
            <input type="checkbox" class="ns-day" value="${d}"> ${d}</label>`).join('');
+      const dayErr = cd.error
+        ? `<div class="alert alert-error" id="ns-days-error">Could not read this course's meeting days (${esc(cd.error.message)}), so all five are shown.</div>`
+        : '';
+      const dayLead = cd.error ? '' : `This course meets ${esc(CD.describeDays(offered))}. `;
       openModal('Add a section',
         `<div class="form-grid" style="--fg-min:200px">
          <div class="field"><label for="ns-code">Section code</label>
@@ -1495,7 +1522,8 @@
              this course and term, and it is what a roster import matches rows against.</div></div>
          <div class="field"><label>Meeting days</label>
            <div id="ns-days" style="padding-top:4px">${dayBoxes}</div>
-           <div class="field-hint">Which day this section meets, so its deadlines land on its own
+           ${dayErr}
+           <div class="field-hint" id="ns-days-hint">${dayLead}Which day this section meets, so its deadlines land on its own
              day rather than on the assignment's default.</div></div>
          <div class="field"><label for="ns-period">Period</label>
            <input id="ns-period" type="number" min="1" max="9" step="1" placeholder="1"></div>
@@ -1530,6 +1558,12 @@
       code.addEventListener('input', () => {
         if (touched) return;
         const d = R.sectionDefaultsFrom(code.value);
+        const wrap = document.getElementById('ns-days');
+        document.querySelectorAll('.ns-day-extra').forEach(el => el.remove());
+        for (const day of CD.daysOutsideList(d.meeting_days, offered)) {
+          wrap.insertAdjacentHTML('beforeend', `<label class="check-inline ns-day-extra" style="margin-right:10px">
+            <input type="checkbox" class="ns-day" value="${day}"> ${day} <span class="muted">(not in the course's list)</span></label>`);
+        }
         document.querySelectorAll('.ns-day').forEach(b => { b.checked = d.meeting_days.includes(b.value); });
         period.value = d.period ?? '';
       });

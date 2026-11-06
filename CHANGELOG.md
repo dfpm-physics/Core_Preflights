@@ -74,6 +74,71 @@ the question page or the student page (the page script's hash in its security po
 problem-file and CSV uploads do not carry the new type: it needs new columns in the file format, the import function and its
 tests, so it is not a small change. `site/js/db-schema.js` was not regenerated, because that needs the migration applied to a
 database. Nothing committed or pushed.
+## 2026-11-06 — Matthew Recker via Claude (clickthrough walk, `tests/walk/`; branch `v2-cf-grade`, local, uncommitted)
+
+Added an optional, repeatable browser walk (own `package.json`, git-ignored `node_modules/`, see `tests/walk/README.md`) that signs in as the seeded staging logins, clicks the Assignments, Grade assignments, Reports, Admin and cadet pages, and checks both the page and the database. It runs against the local staging site only and creates and removes `ZZ walk` data. The walk found three faults, fixed in the same change: (1) on a saved assignment, the Both card on a tutor-only assignment replaced the tutor with a typed path instead of adding one beside it (`site/js/faculty-items.js`, `updateItem`); it now keeps the tutor's row, id, link and reports and adds the typed path, and the Both-to-Tutor change, which was refused, now removes the typed path when no cadet has work on the assignment (refused with the counts otherwise); the six card changes are held by `tests/app-schema/test-items-paths.mjs` and walk group H; (2) the cadet dashboard counted online homework as "0 questions"; the line now comes from one helper, `modeLabel` in `site/js/student-view.js`, used by the dashboard and the assignments page; (3) the roster preview's example of a code with no meeting days was `M1A`, which does hold a day; it is now `LAB-3`. Page script hashes were rebuilt. Not done: it was not run against production, it changes no seeded login, and it cannot cover a live claude.ai tutor session or the AI grading run.
+
+---
+
+## 2026-11-06 — Matthew Recker via Claude (catalogue rebuilt after step 2 and 086; branch `v2-cf-grade`, local)
+
+`site/js/db-schema.js` is rebuilt from staging: 49 tables, up from 46. `gen_db_schema.py` now reads permissive policies only, because a restrictive policy grants nothing and was making read-only tables show as writable on the System page. `CURATED_COLUMNS` covers the three new tables. Deliberately not done: no policy or grant changed.
+
+## 2026-11-06 — Matthew Recker via Claude (Grade assignments and Reports; branch `v2-cf-grade`, local, uncommitted)
+
+From the click-through feedback. Change C of three.
+
+- **"Enter scores" is now "Grade assignments"** (`site/faculty/entry.html` keeps its name). With nothing selected it lists
+  every assignment of the term that still needs something: how it is graded, what is waiting (drafted scores to approve,
+  AI-suggested drafts a person has not reviewed, cadets with no score yet, work handed in and not graded, date problems,
+  not published). The counts are the Backlog page's own cells (`gradebook_cells` through `groupBacklog`) plus one count of
+  unfinalized AI drafts; nothing is added up from scores. A failed read shows an error with a retry, never an empty list. A
+  tick box shows finished assignments too.
+- **Where an assignment opens** is decided by `openWith(paths)`, from delivery and grading only: typed-in or imported
+  scores open the table on this page; work a person grades or reviews opens the Grade page on that assignment with a link
+  back (`grade.html?a=...&back=entry`); work the system checks has nothing for a person to grade.
+- **The table takes a dropped file** anywhere on it, and keeps a Choose button for the keyboard. **WebAssign** joins Teams
+  and Gradescope (`faculty-entry-parse.js`; read from the comparison gradebook's importer as a layout spec only). The
+  format is detected, shown, and can be corrected from a menu; a file that does not fit the chosen format is refused in
+  words. The preview and every hold before a write are unchanged. Deliberate difference from that importer: WebAssign's
+  NS and ND are left blank, not stored as 0, as Gradescope's Missing already is.
+- **Reports** is on the staff bar. `report.html` with no `?i=` lists the course's assignments to pick from instead of
+  sending the person to the dashboard; with `?i=` it behaves as before, and who may see a report did not change. Each row on
+  the Assignments page has a Report link (off, with the reason, for an unpublished assignment). A director found no report
+  because the only routes were a dashboard link and the Older assignments list.
+- `parseDelimited` gained an optional keep-empty-rows argument (WebAssign is read by line position).
+- Page hashes in the Content-Security-Policy meta tags were rebuilt for the edited pages (`csp_pages.py --write`).
+- **Review fixes (same day):** table assignments with cadets who have no score entered are listed whatever their date (the overdue count stays its own line); the AI-draft count now uses counted cadets, assignments that still have an AI-drafted path, and the Grade page's own tutor-path test (`isEffortGraded`), with a Review link when the assignment opens as a table; `loadCourseDays` returns an error when a course id gives no row, and the Sections tab shows it; changing assignment with unsaved scores asks first and restores the select on cancel.
+- **Not done:** no write to staging, no save or import was clicked, nothing committed. Backlog is left in place: its piles
+  are now also visible in the new list, but it still carries near-a-line cadets and the exports.
+## 2026-11-06 — Matthew Recker via Claude (Assignments: "How cadets do this work" cards; branch `v2-cf-items`, local, uncommitted)
+
+An assignment that exists now shows a visible section above More options with three cards, in the same look as the cadets' chooser: Questions, Interactive tutor, Both (cadets choose). The selected card shows only what it needs: Questions links to the questions page with a count (or says the typed questions are in the box below), Tutor shows the tutor id, link, title and description, Both shows both plus what earns credit and the commit rule. The "Also offer an interactive tutor" checkbox is gone. A new assignment still asks the same short form; saving it creates it unpublished and opens it for setup with a plain line saying what to do next. A locked shape (several paths) shows why instead of the cards; in-person and done-elsewhere assignments say no cards apply. The card styles moved from the cadets' page into `styles.css` so there is one look.
+
+- What a save writes did not change: the cards set the same delivery, grading and tutor flag the old controls set, and `pathPlan`, `createItem` and `updateItem` are untouched, so every refusal and warning for work already done is as before. `test-items-setup.mjs` (new) shows this for each card.
+- Did not: move the grading box (it stays under More options), change `needsMoreOptions` (a saved tutor assignment still opens More options), touch the frozen lesson page or contract, write to staging, or commit.
+
+---
+## 2026-11-06 — Matthew Recker via Claude (the days a course meets; branch `v2-cf-days`, local, not committed)
+
+**What.** A course now has its own list of meeting days, M and T by default. Migration `app/086` adds `courses.meeting_days`
+(with its rollback). The list is on the course, not the term, so a term copy shares it with no copy step. Where it shows:
+the course forms on the courses-and-terms page (guided setup and the one-form-at-a-time form) have a closed "More options" box
+that says M and T is the split schedule; the Add a section form on the Staff tab offers only the course's days; each section
+tile shows the day it meets and says so when the course does not list it; the roster import preview adds one line, and never
+blocks, when a new section's day is outside the list.
+
+**Why.** The pages listed M, T, W, R, F everywhere, on a split schedule that only uses M and T.
+
+**Proved.** Migration, rollback and re-apply on a scratch database (schema fingerprints match before/rollback and
+first apply/re-apply); a new offline suite `test-course-days.mjs`. Before the column exists the pages read M and T and say
+nothing; any other failed read of the list shows an error.
+
+The inline-script hashes of `admin.html` and `terms.html` were rebuilt with `scripts/checks/csp_pages.py --write`.
+
+**Deliberately not done.** Not applied to any shared database. `db-schema.js` is not regenerated (it comes from a database
+that has the column). `TRACK_ORDER`, due-date logic and the Health page are unchanged. An existing course's list cannot be
+edited from a page yet (only a site administrator may write `courses`; there is no edit form).
 
 ## 2026-11-05 — Matthew Recker via Claude (small faults from the roll-in walk, and the parts that stayed unwalked; branch `v2-step2-rollin`, local)
 

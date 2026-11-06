@@ -74,10 +74,16 @@ section('a new assignment opens short, and the new fields sit behind More option
   const more = modal.slice(modal.indexOf('<details'), modal.indexOf('</details>'));
   const before = modal.slice(0, modal.indexOf('<details'));
   for (const id of ['i-title', 'i-kind', 'i-points', 'i-alldate']) check(`#${id} is in the short form`, before.includes(`id="${id}"`));
-  for (const id of ['i-withtutor', 'i-policy', 'i-switch', 'i-ititle', 'i-idesc', 'i-swap', 'i-num', 'i-release', 'i-opens', 'i-openst'])
+  for (const id of ['i-num', 'i-release', 'i-opens', 'i-openst'])
     check(`#${id} is under More options`, more.includes(`id="${id}"`) && !before.includes(`id="${id}"`));
+  // The tutor, credit and choice controls moved out of More options into the setup section (2026-11-06).
+  const setup = modal.slice(modal.indexOf('id="i-setup"'), modal.indexOf('id="i-written"'));
+  for (const id of ['i-policy', 'i-switch', 'i-islug', 'i-iurl', 'i-ititle', 'i-idesc', 'i-swap'])
+    check(`#${id} is in the setup section, in view and not under More options`, setup.includes(`id="${id}"`) && !more.includes(`id="${id}"`));
+  check('the "Also offer an interactive tutor" checkbox is gone', !/i-withtutor|Also offer an interactive tutor/.test(html));
   check('More options starts closed', /<details[^>]*id="i-more"(?![^>]*\bopen\b)/.test(modal));
-  check('the tutor controls start hidden', /id="i-twopath-row" style="display:none/.test(more) && /id="i-twopath"[^>]*display:none/.test(more) && /id="i-interactive"[^>]*display:none/.test(more));
+  check('the setup section starts hidden and sits above More options', /id="i-setup" style="display:none/.test(modal) && modal.indexOf('id="i-setup"') < modal.indexOf('<details'));
+  check('the tutor controls start hidden', /id="i-twopath"[^>]*display:none/.test(setup) && /id="i-interactive"[^>]*display:none/.test(setup));
   check('the release boxes start hidden', /id="i-opens-wrap" style="display:none/.test(more) && /id="i-openst-wrap" style="display:none/.test(more));
 }
 

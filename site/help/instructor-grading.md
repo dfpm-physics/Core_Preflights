@@ -11,6 +11,10 @@ you browse to, so the routes to it are the places that already know you have som
 - **Grade** on any assignment card on the **Assignments** page, which opens that assignment already
   loaded. This is the route to use when you want a specific lesson rather than whatever is waiting —
   the boxes above only show you assignments that currently need something;
+- **Grade assignments** in the top navigation, which lists every assignment that still has work waiting
+  (drafted scores to approve, AI-suggested drafts to review, cadets with no score yet). **Review answers** on a row
+  opens this page on that assignment, with a link back to the list. Assignments whose scores are typed in or
+  imported open a table on the Grade assignments page instead, where a grade file can be dropped in;
 - a student's name in the **gradebook**.
 
 **One student, one assignment: grade them from their own page instead.** Every assignment row on a

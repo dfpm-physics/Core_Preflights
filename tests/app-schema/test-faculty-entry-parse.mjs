@@ -83,7 +83,7 @@ check('feedback is reported as dropped', g.notes.some(n => /feedback/i.test(n)))
 
 section('parseGradeFile: refusals and shape');
 check('empty file', P.parseGradeFile('').error);
-check('wrong header', /not a Gradescope or Teams/.test(P.parseGradeFile('a,b\n1,2\n').error));
+check('wrong header', /not a WebAssign, Teams or Gradescope/.test(P.parseGradeFile('a,b\n1,2\n').error));
 eq('a byte-order mark and CRLF are fine', P.parseGradeFile('﻿' + gsAFile.replace(/\n/g, '\r\n')).rows.length, 3);
 eq('blank spacer rows are dropped', P.parseGradeFile(gsAFile + '\n\n').rows.length, 3);
 
@@ -290,6 +290,64 @@ section('A2-M4: a mixed maximum is held in every format, and the formats say it 
   const t = P.parseGradeFile(teamsMixed);
   eq('teams keeps every maximum too', t.columns[0].maxList, [2000, 1000]);
   check('a uniform maximum equal to the item is not held', P.buildImportPlan({ ...base, mapping: { c0: q1 }, parsed: P.parseGradeFile(course.replace('20', '10')) }).canApply);
+}
+
+/* ── WebAssign (Change C, 2026-11-06). The spec is the comparison gradebook's importer; the file below is invented. ── */
+section('WebAssign: a synthetic export is detected, read, and planned');
+const waRows = [
+  ['Class export', '', '', '', '', '', '', '', ''],
+  ['Section', 'Demo 101', '', '', '', '', '', '', ''],
+  ['', '', '', '', '', '', '', '', ''],
+  ['', '', '', '', '', '', '', '', ''],
+  ['Full Name', 'Username', 'Student ID', 'Section', 'Total', 'Pct', 'Lesson 1 Homework', 'Lesson 2 Homework', 'Lesson 3 Homework'],
+  ['', '', '', '', '', '', '"Thursday, January  8, 2026  11:59 PM MST"', '"Friday, January  9, 2026  11:59 PM MST"', ''],
+  ['', '', '', '', '', '', '10', '12.5', '8'],
+  ['', '', '', '', '', '', '', '', ''],
+  ['', '', '', '', '', '', '', '', ''],
+  ['"Test, Ada"', 'ada.test@x.example', '3000000001', 'A', '', '', '9', 'NS', '7'],
+  ['"Sample, Bo"', 'bo.sample@x.example', '3000000002', 'A', '', '', 'ND', '11.5', ''],
+  ['"Nobody, Nina"', 'nina@x.example', '3000000099', 'A', '', '', '10', '10', '8'],
+];
+const waCsv = waRows.map(r => r.join(',')).join('\r\n') + '\r\n';
+{
+  const w = P.parseGradeFile(waCsv);
+  check('no error', !w.error, w.error);
+  eq('format is webassign', w.format, 'webassign');
+  eq('three assignment columns by name', w.columns.map(c => c.name), ['Lesson 1 Homework', 'Lesson 2 Homework', 'Lesson 3 Homework']);
+  eq('maximum points come from the points row', w.columns.map(c => c.maxCents), [1000, 1250, 800]);
+  eq('three cadet rows, numbered by file line', w.rows.map(r => r.rowNo), [10, 11, 12]);
+  eq('the cadet ID and the sign-in address are read', [w.rows[0].sid, w.rows[0].email, w.rows[0].name], ['3000000001', 'ada.test@x.example', 'Test, Ada']);
+  eq('NS and ND are left blank, not set to 0', [w.rows[0].cells[1], w.rows[1].cells[0]], ['', '']);
+  check('a note says NS and ND were left blank', w.notes.some(n => /NS|ND/.test(n) && /blank/.test(n)), JSON.stringify(w.notes));
+  const I1 = { id: 'q1', title: 'Lesson 1 Homework', pointsCents: 1000, bonus: false };
+  const I2 = { id: 'q2', title: 'Lesson 2 Homework', pointsCents: 1250, bonus: false };
+  eq('guessItem pairs a column with the assignment of the same title', P.guessItem(w.columns[0].name, [I1, I2])?.id, 'q1');
+  const p = P.buildImportPlan({ parsed: w, mapping: { c0: I1, c1: I2 }, roster, existing: {}, options: { skipUnmatched: true } });
+  eq('plan: Ada L1=9, Bo L2=11.5; the blanks and the stranger add nothing', p.changes.map(c => [c.enrollmentId, c.itemId, c.cents]), [['e1', 'q1', 900], ['e2', 'q2', 1150]]);
+  check('the stranger is reported as unmatched', p.unmatched.length === 1, JSON.stringify(p.unmatched));
+  check('plan can apply once the unmatched row is skipped', p.canApply);
+  const p2 = P.buildImportPlan({ parsed: w, mapping: { c0: I1 }, roster, existing: {}, options: {} });
+  check('without the skip the import is held', !p2.canApply && p2.held.some(h => /match nobody/.test(h)));
+  const wrongMax = P.buildImportPlan({ parsed: w, mapping: { c0: { ...I1, pointsCents: 2000 } }, roster, existing: {}, options: { skipUnmatched: true } });
+  check('a column out of 10 into an assignment worth 20 is held', !wrongMax.canApply && wrongMax.held.some(h => /out of 10/.test(h)));
+}
+check('a file without the leading rows is not mistaken for WebAssign', !!P.parseGradeFile(waRows.slice(4).map(r => r.join(',')).join('\n')).error);
+
+section('format detection: the person can correct it, and a wrong file is refused in plain words');
+{
+  const gsFile = gsA + 'Ada Test,Ada,Test,3000000001,a@x.example,A,8,10,Graded,1\n';
+  eq('gradescope still detects', P.parseGradeFile(gsFile).format, 'gradescope-assignment');
+  eq('family names', [P.formatFamily('gradescope-course'), P.formatFamily('teams'), P.formatFamily('webassign'), P.formatFamily(null)], ['gradescope', 'teams', 'webassign', null]);
+  const asTeams = P.parseGradeFile(gsFile, { format: 'teams' });
+  check('forcing Teams on a Gradescope file is refused, and says what the file looks like', asTeams.error && /Teams/.test(asTeams.error) && /Gradescope/.test(asTeams.error), asTeams.error);
+  const asWa = P.parseGradeFile(gsFile, { format: 'webassign' });
+  check('forcing WebAssign on a Gradescope file is refused', !!asWa.error && /WebAssign/.test(asWa.error), asWa.error);
+  check('forcing the right format works', P.parseGradeFile(waCsv, { format: 'webassign' }).format === 'webassign');
+  check('forcing Gradescope on a Gradescope file works', P.parseGradeFile(gsFile, { format: 'gradescope' }).format === 'gradescope-assignment');
+  const junk = P.parseGradeFile('Name,Colour\nAda,red\n');
+  check('a wrong file says it is not a grade export and names the three formats', /WebAssign/.test(junk.error) && /Teams/.test(junk.error) && /Gradescope/.test(junk.error), junk.error);
+  check('an empty file says so', /empty/.test(P.parseGradeFile('   ').error));
+  check('a WebAssign file with no cadet rows is refused, not read as empty', !!P.parseGradeFile(waRows.slice(0, 9).map(r => r.join(',')).join('\n') + '\n').error);
 }
 
 process.exit(summary() ? 0 : 1);

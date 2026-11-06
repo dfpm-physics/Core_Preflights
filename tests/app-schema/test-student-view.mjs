@@ -143,4 +143,15 @@ for (const p of ['site/student/schedule.html', 'site/student/grades.html', 'site
 }
 check('the student grade select names instructor_note (a my_grades column) and never diagnostic', /GRADE_SELECT_STUDENT\s*=[^;]*instructor_note/.test(read('site/js/schema.js')) && !/GRADE_SELECT_STUDENT\s*=[^;]*diagnostic/.test(read('site/js/schema.js')));
 
+section('the list line under an assignment: online homework is named, never counted as "0 questions"');
+{
+  const { modeLabel } = await import('../../site/js/student-view.js');
+  eq('online homework', modeLabel({ autoChecked: true, preflight: { questions: [] } }), 'Homework, checked as you answer');
+  eq('three questions', modeLabel({ completion_policy: 'preflight', preflight: { questions: [1, 2, 3] } }), '3 questions');
+  eq('one question', modeLabel({ completion_policy: 'preflight', preflight: { questions: [1] } }), '1 question');
+  eq('a choice of format', modeLabel({ completion_policy: 'choice', preflight: {}, interaction: {} }), 'Your choice of format');
+  eq('a tutor only, in the page own word', [modeLabel({ completion_policy: 'interaction' }), modeLabel({ completion_policy: 'interaction' }, 'Interactive lesson')], ['Interactive', 'Interactive lesson']);
+  check('both pages use the shared helper and keep no copy', ['site/student/dashboard.html', 'site/student/lessons.html'].every(f => !/function modeLabel\(/.test(read(f)) && /modeLabel/.test(read(f))));
+}
+
 summary();

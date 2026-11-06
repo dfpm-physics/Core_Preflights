@@ -32,6 +32,7 @@
 // NO NODE, NO BUILD STEP. Every function that touches the database is handed the client, so a
 // test can pass a recording stub (tests/app-schema/test-faculty-terms.mjs).
 
+import { cleanDays, daysProblem, sameDays, DEFAULT_DAYS } from './course-days.js';
 import { zoneWallToInstant, instantToZone, pathSlug, isRealDate, isLostResponse, isTwoTrack, meetingDays } from './faculty-items.js';
 
 /* ══════════════════════════════════════════════════════════════════════════════
@@ -86,6 +87,8 @@ export function checkCourse(form) {
   if (!String(form.title || '').trim()) out.push('Give the course a title, such as Physics 310.');
   if (String(form.title || '').length > 120) out.push('Keep the title under 120 characters.');
   if (String(form.department || '').length > 80) out.push('Keep the department under 80 characters.');
+  // The meeting days are optional: a form that never mentions them gets the default (M and T) from the database.
+  if (form.meetingDays !== undefined) { const p = daysProblem(form.meetingDays); if (p) out.push(p); }
   return out;
 }
 
@@ -510,6 +513,8 @@ export async function createCourse(db, form) {
   const r = await db.from('courses').insert({
     code: String(form.code).trim(), title: String(form.title).trim(),
     department: String(form.department || '').trim() || null,
+    // Named only when the person changed it, so a course left on the default is written exactly as it always was.
+    ...(form.meetingDays !== undefined && !sameDays(form.meetingDays, DEFAULT_DAYS) ? { meeting_days: cleanDays(form.meetingDays) } : {}),
   }).select('id').single();
   return r.error ? { error: r.error } : { error: null, id: r.data.id };
 }

@@ -1,0 +1,9 @@
+{
+  "name": "prep-walk",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "OPTIONAL developer tool: drives the staging site in a real browser and checks what the database then holds. Not part of the site.",
+  "scripts": { "walk": "node walk.mjs" },
+  "dependencies": { "puppeteer-core": "^23.11.1" }
+}

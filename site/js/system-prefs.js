@@ -111,6 +111,10 @@ export const CURATED_COLUMNS = {
   offering_activities:   ['assignment_offering_id', 'activity_id', 'grading_role', 'is_visible'],
   assignment_due_dates:  ['assignment_offering_id', 'section_id', 'due_at'],
 
+  // Migration audit and carry-over rows (step 2)
+  closure_carry:         ['enrollment_id', 'assignment_offering_id', 'closed', 'from_section_id', 'carried_at'],
+  content_key_archive:   ['source', 'row_id', 'moved_at'],
+  credential_events:     ['event', 'actor', 'course_offering_id', 'at'],
   // Work and grades
   submissions:           ['enrollment_id', 'assignment_offering_id', 'status', 'committed_at'],
   submission_activities: ['submission_id', 'activity_id', 'is_final', 'payload_bytes'],
