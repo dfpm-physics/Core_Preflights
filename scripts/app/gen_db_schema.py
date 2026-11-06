@@ -152,6 +152,8 @@ Q_POLICIES = """
 SELECT tablename, cmd, policyname
 FROM pg_policies
 WHERE schemaname = %s
+  -- A restrictive policy only narrows access. The forced password rule is one on every table, and it grants nothing.
+  AND permissive = 'PERMISSIVE'
 ORDER BY tablename, cmd;
 """
 

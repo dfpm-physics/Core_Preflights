@@ -11,6 +11,7 @@ import { fetchAll, isPersonGraded } from './schema.js';
 import { dbCents, centsText } from './faculty-entry-parse.js';
 import { groupBacklog } from './faculty-backlog.js';
 import { loadCells } from './faculty-totals.js';
+import { isEffortGraded } from './faculty-grade.js';
 
 /** An item is entered by hand when any of its paths is graded by hand entry or by import. */
 export const isHandEntered = (paths) => (paths || []).some(p => p.grading === 'hand_entered' || p.grading === 'imported');
@@ -88,23 +89,71 @@ export function openWith(paths) {
 }
 
 /**
- * One row per assignment, unfinished first.
- *   items    [{ id, title, dueAt, published, paths }]
- *   cells    gradebook_cells rows (published assignments only, which is what the database returns)
- *   aiCounts { [assignmentId]: number of AI-suggested drafts a person has not yet finalized }
+ * Cadets with no score entered yet, for each assignment that opens as the table, whatever its date.
+ * Counted cadets only (active or completed). A cadet is not counted when they hold a score, are excused, or sit in a
+ * section whose column is closed (a closed column counts a blank as 0 by the database's own rule).
+ *   items [{ id, paths }]   enrollments [{ id, section_id, status }]   grades [{ enrollment_id, assignment_offering_id, points_earned }]
+ *   excusals [{ enrollment_id, assignment_offering_id }] (active only)   closures [{ section_id, assignment_offering_id }] (open only)
  */
-export function buildGradeList({ items, cells, aiCounts = {} }) {
+export function countUnentered({ items, enrollments, grades, excusals = [], closures = [] }) {
+  const counted = enrollments.filter(e => e.status === 'active' || e.status === 'completed');
+  const has = new Set(grades.filter(g => g.points_earned != null).map(g => `${g.enrollment_id}|${g.assignment_offering_id}`));
+  const excused = new Set(excusals.map(x => `${x.enrollment_id}|${x.assignment_offering_id}`));
+  const closed = new Set(closures.map(c => `${c.section_id}|${c.assignment_offering_id}`));
+  const out = {};
+  for (const it of items) {
+    if (openWith(it.paths) !== 'table') continue;
+    out[it.id] = counted.filter(e => !has.has(`${e.id}|${it.id}`) && !excused.has(`${e.id}|${it.id}`) && !closed.has(`${e.section_id}|${it.id}`)).length;
+  }
+  return out;
+}
+
+/**
+ * AI-suggested drafts a person has not finalized, per assignment, over the set the Grade page works on:
+ * counted cadets, an assignment that still has an ai_drafted path, and not a cadet who committed to the other path of a
+ * Choice assignment (the Grade page's own test, isEffortGraded, against the written activity).
+ *   items [{ id, paths: [{ grading, activity_id, activities: { modality } }] }]
+ */
+export function countAiDrafts({ items, enrollments, grades, submissions }) {
+  const counted = new Set(enrollments.filter(e => e.status === 'active' || e.status === 'completed').map(e => e.id));
+  const writtenOf = {}, aiItems = new Set();
+  for (const it of items) {
+    if ((it.paths || []).some(p => p.grading === 'ai_drafted')) aiItems.add(it.id);
+    writtenOf[it.id] = (it.paths || []).find(p => p.activities?.modality === 'written')?.activity_id || null;
+  }
+  const chosen = new Map(submissions.map(s => [`${s.enrollment_id}|${s.assignment_offering_id}`, s.chosen_activity_id || null]));
+  const out = {};
+  for (const g of grades) {
+    if (g.source !== 'ai_suggested' || g.is_finalized || !aiItems.has(g.assignment_offering_id) || !counted.has(g.enrollment_id)) continue;
+    const c = chosen.get(`${g.enrollment_id}|${g.assignment_offering_id}`);
+    if (isEffortGraded({ written: { id: writtenOf[g.assignment_offering_id] } }, { chosenActivityId: c })) continue;
+    out[g.assignment_offering_id] = (out[g.assignment_offering_id] || 0) + 1;
+  }
+  return out;
+}
+
+/**
+ * One row per assignment, unfinished first.
+ *   items      [{ id, title, dueAt, published, paths }]
+ *   cells      gradebook_cells rows (published assignments only, which is what the database returns)
+ *   aiCounts   { [assignmentId]: AI-suggested drafts a person has not yet finalized }  (countAiDrafts)
+ *   unentered  { [assignmentId]: cadets with no score entered yet }                    (countUnentered, table work only)
+ */
+export function buildGradeList({ items, cells, aiCounts = {}, unentered = {} }) {
   const piles = groupBacklog(cells);
   const count = (key, id) => piles[key].find(e => e.itemId === id)?.count || 0;
   const rows = items.map(it => {
     const waiting = count('toPublish', it.id), noScore = count('toEnter', it.id), toGrade = count('toGrade', it.id);
-    const badDate = count('badDate', it.id), ai = aiCounts[it.id] || 0;
+    const badDate = count('badDate', it.id), ai = aiCounts[it.id] || 0, notEntered = unentered[it.id] || 0;
     const notPublished = !it.published;
+    const opensWith = openWith(it.paths);
     return {
       id: it.id, title: it.title, dueAt: it.dueAt || null, published: it.published, notPublished,
       howGraded: (it.paths || []).map(p => HOW_GRADED[p.grading] || p.grading || '').filter(Boolean).join(' / '),
-      opensWith: openWith(it.paths), waiting, noScore, toGrade, badDate, aiDrafts: ai,
-      finished: !notPublished && !waiting && !noScore && !toGrade && !badDate && !ai,
+      opensWith, waiting, noScore, toGrade, badDate, aiDrafts: ai, notEntered,
+      // An assignment that opens as a table but also carries AI drafts is reviewed on the Grade page too.
+      alsoReview: opensWith !== 'review' && ai > 0,
+      finished: !notPublished && !waiting && !noScore && !toGrade && !badDate && !ai && !notEntered,
     };
   });
   return rows.sort((a, b) => (a.finished - b.finished)
@@ -120,7 +169,8 @@ export function waitingParts(r) {
   if (r.waiting) out.push(`${n(r.waiting, 'score is', 'scores are')} drafted and waiting for approval`);
   if (r.aiDrafts) out.push(`${n(r.aiDrafts, 'AI-suggested draft needs', 'AI-suggested drafts need')} a person to review`);
   if (r.toGrade) out.push(`${n(r.toGrade, 'cadet has', 'cadets have')} handed in work that is not graded`);
-  if (r.noScore) out.push(`${n(r.noScore, 'cadet has', 'cadets have')} no score yet`);
+  if (r.notEntered) out.push(`${n(r.notEntered, 'cadet has', 'cadets have')} no score entered yet`);
+  if (r.noScore) out.push(`${n(r.noScore, 'cadet with no score is', 'cadets with no score are')} past the due date`);
   if (r.badDate) out.push(`${n(r.badDate, 'cadet has', 'cadets have')} a due date that cannot be worked out`);
   return out;
 }
@@ -128,7 +178,7 @@ export function waitingParts(r) {
 /** -> { items: rows } | { error }. Any failed read is an error: a short list would read as "all done". */
 export async function loadGradeList(db, courseOfferingId) {
   const itemsR = await db.from('assignment_offerings')
-    .select('id,is_published,due_at,position,assignments!inner(slug,title),offering_activities(delivery,grading)')
+    .select('id,is_published,due_at,position,assignments!inner(slug,title),offering_activities(delivery,grading,activity_id,activities(id,modality))')
     .eq('course_offering_id', courseOfferingId);
   if (itemsR.error) return { error: itemsR.error };
   const items = (itemsR.data || []).map(r => ({
@@ -137,12 +187,27 @@ export async function loadGradeList(db, courseOfferingId) {
   if (!items.length) return { items: [] };
   const cR = await loadCells(db, courseOfferingId, 'final');
   if (cR.error) return { error: cR.error };
-  const aiR = await fetchAll(() => db.from('grades').select('id,assignment_offering_id')
-    .eq('source', 'ai_suggested').eq('is_finalized', false).in('assignment_offering_id', items.map(i => i.id)));
-  if (aiR.error) return { error: aiR.error };
-  const aiCounts = {};
-  for (const g of aiR.data || []) aiCounts[g.assignment_offering_id] = (aiCounts[g.assignment_offering_id] || 0) + 1;
-  return { items: buildGradeList({ items, cells: cR.data, aiCounts }) };
+  const ids = items.map(i => i.id);
+  const secR = await db.from('sections').select('id').eq('course_offering_id', courseOfferingId);
+  if (secR.error) return { error: secR.error };
+  const secIds = (secR.data || []).map(s => s.id);
+  let enrollments = [];
+  if (secIds.length) {
+    const eR = await fetchAll(() => db.from('enrollments').select('id,section_id,status').in('section_id', secIds));
+    if (eR.error) return { error: eR.error };
+    enrollments = eR.data || [];
+  }
+  const gR = await fetchAll(() => db.from('grades').select('id,enrollment_id,assignment_offering_id,points_earned,is_finalized,source').in('assignment_offering_id', ids));
+  if (gR.error) return { error: gR.error };
+  const sR = await fetchAll(() => db.from('submissions').select('id,enrollment_id,assignment_offering_id,chosen_activity_id').in('assignment_offering_id', ids));
+  if (sR.error) return { error: sR.error };
+  const xR = await fetchAll(() => db.from('grade_excusals').select('id,enrollment_id,assignment_offering_id').in('assignment_offering_id', ids).is('revoked_at', null));
+  if (xR.error) return { error: xR.error };
+  const clR = await fetchAll(() => db.from('column_closures').select('id,assignment_offering_id,section_id').in('assignment_offering_id', ids).is('reopened_at', null));
+  if (clR.error) return { error: clR.error };
+  const aiCounts = countAiDrafts({ items, enrollments, grades: gR.data || [], submissions: sR.data || [] });
+  const unentered = countUnentered({ items, enrollments, grades: gR.data || [], excusals: xR.data || [], closures: clR.data || [] });
+  return { items: buildGradeList({ items, cells: cR.data, aiCounts, unentered }) };
 }
 
 /** Turn a database or network error into a sentence a person can act on. */

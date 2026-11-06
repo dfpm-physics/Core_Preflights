@@ -8,6 +8,10 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-11-06 — Matthew Recker via Claude (catalogue rebuilt after step 2 and 086; branch `v2-cf-grade`, local)
+
+`site/js/db-schema.js` is rebuilt from staging: 49 tables, up from 46. `gen_db_schema.py` now reads permissive policies only, because a restrictive policy grants nothing and was making read-only tables show as writable on the System page. `CURATED_COLUMNS` covers the three new tables. Deliberately not done: no policy or grant changed.
+
 ## 2026-11-06 — Matthew Recker via Claude (Grade assignments and Reports; branch `v2-cf-grade`, local, uncommitted)
 
 From the click-through feedback. Change C of three.
@@ -32,6 +36,7 @@ From the click-through feedback. Change C of three.
   because the only routes were a dashboard link and the Older assignments list.
 - `parseDelimited` gained an optional keep-empty-rows argument (WebAssign is read by line position).
 - Page hashes in the Content-Security-Policy meta tags were rebuilt for the edited pages (`csp_pages.py --write`).
+- **Review fixes (same day):** table assignments with cadets who have no score entered are listed whatever their date (the overdue count stays its own line); the AI-draft count now uses counted cadets, assignments that still have an AI-drafted path, and the Grade page's own tutor-path test (`isEffortGraded`), with a Review link when the assignment opens as a table; `loadCourseDays` returns an error when a course id gives no row, and the Sections tab shows it; changing assignment with unsaved scores asks first and restores the select on cancel.
 - **Not done:** no write to staging, no save or import was clicked, nothing committed. Backlog is left in place: its piles
   are now also visible in the new list, but it still carries near-a-line cadets and the exports.
 ## 2026-11-06 — Matthew Recker via Claude (Assignments: "How cadets do this work" cards; branch `v2-cf-items`, local, uncommitted)

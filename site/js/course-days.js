@@ -65,5 +65,7 @@ export async function loadCourseDays(db, courseId) {
     return { days: [...DEFAULT_DAYS], assumed: false, error: r.error };
   }
   const days = cleanDays(r.data?.meeting_days);
-  return { days: days.length ? days : [...DEFAULT_DAYS], assumed: !r.data, error: null };
+  // A course id was given and no row came back: the course is not readable here. That is a failure to say, not M and T.
+  if (!r.data) return { days: [...DEFAULT_DAYS], assumed: false, error: new Error('This course was not found, or you may not read it.') };
+  return { days: days.length ? days : [...DEFAULT_DAYS], assumed: false, error: null };
 }

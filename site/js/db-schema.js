@@ -262,10 +262,9 @@ export const DB_SCHEMA = {
         ]
       },
       "policyCommands": [
-        "ALL",
         "SELECT"
       ],
-      "writable": true
+      "writable": false
     },
     "analysis_runs": {
       "name": "analysis_runs",
@@ -469,10 +468,9 @@ export const DB_SCHEMA = {
         ]
       },
       "policyCommands": [
-        "ALL",
         "SELECT"
       ],
-      "writable": true
+      "writable": false
     },
     "assignment_due_dates": {
       "name": "assignment_due_dates",
@@ -1252,10 +1250,9 @@ export const DB_SCHEMA = {
         ]
       },
       "policyCommands": [
-        "ALL",
         "SELECT"
       ],
-      "writable": true
+      "writable": false
     },
     "closure_carry": {
       "name": "closure_carry",
@@ -1508,7 +1505,6 @@ export const DB_SCHEMA = {
       ],
       "enums": {},
       "policyCommands": [
-        "ALL",
         "INSERT",
         "SELECT",
         "UPDATE"
@@ -1609,10 +1605,8 @@ export const DB_SCHEMA = {
           "assignment_offerings"
         ]
       },
-      "policyCommands": [
-        "ALL"
-      ],
-      "writable": true
+      "policyCommands": [],
+      "writable": false
     },
     "course_grade_history": {
       "name": "course_grade_history",
@@ -2854,7 +2848,6 @@ export const DB_SCHEMA = {
         ]
       },
       "policyCommands": [
-        "ALL",
         "INSERT",
         "SELECT",
         "UPDATE"
@@ -3074,10 +3067,9 @@ export const DB_SCHEMA = {
       ],
       "enums": {},
       "policyCommands": [
-        "ALL",
         "SELECT"
       ],
-      "writable": true
+      "writable": false
     },
     "grade_checkpoint_runs": {
       "name": "grade_checkpoint_runs",
@@ -3290,10 +3282,9 @@ export const DB_SCHEMA = {
         ]
       },
       "policyCommands": [
-        "ALL",
         "SELECT"
       ],
-      "writable": true
+      "writable": false
     },
     "grade_events": {
       "name": "grade_events",
@@ -3396,10 +3387,9 @@ export const DB_SCHEMA = {
       "foreignKeys": [],
       "enums": {},
       "policyCommands": [
-        "ALL",
         "SELECT"
       ],
-      "writable": true
+      "writable": false
     },
     "grade_excusal_events": {
       "name": "grade_excusal_events",
@@ -3508,10 +3498,9 @@ export const DB_SCHEMA = {
         ]
       },
       "policyCommands": [
-        "ALL",
         "SELECT"
       ],
-      "writable": true
+      "writable": false
     },
     "grade_excusals": {
       "name": "grade_excusals",
@@ -3670,7 +3659,6 @@ export const DB_SCHEMA = {
       ],
       "enums": {},
       "policyCommands": [
-        "ALL",
         "INSERT",
         "SELECT",
         "UPDATE"
@@ -4144,10 +4132,9 @@ export const DB_SCHEMA = {
       ],
       "enums": {},
       "policyCommands": [
-        "ALL",
         "SELECT"
       ],
-      "writable": true
+      "writable": false
     },
     "letter_scales": {
       "name": "letter_scales",
@@ -4708,10 +4695,9 @@ export const DB_SCHEMA = {
       ],
       "enums": {},
       "policyCommands": [
-        "ALL",
         "SELECT"
       ],
-      "writable": true
+      "writable": false
     },
     "question_keys": {
       "name": "question_keys",
@@ -5510,7 +5496,6 @@ export const DB_SCHEMA = {
       ],
       "enums": {},
       "policyCommands": [
-        "ALL",
         "INSERT",
         "SELECT"
       ],
@@ -6546,10 +6531,9 @@ export const DB_SCHEMA = {
       ],
       "enums": {},
       "policyCommands": [
-        "ALL",
         "SELECT"
       ],
-      "writable": true
+      "writable": false
     },
     "submissions": {
       "name": "submissions",
@@ -6727,7 +6711,6 @@ export const DB_SCHEMA = {
         ]
       },
       "policyCommands": [
-        "ALL",
         "INSERT",
         "SELECT",
         "UPDATE"
@@ -7084,10 +7067,9 @@ export const DB_SCHEMA = {
       "foreignKeys": [],
       "enums": {},
       "policyCommands": [
-        "ALL",
         "SELECT"
       ],
-      "writable": true
+      "writable": false
     },
     "user_preferences": {
       "name": "user_preferences",
@@ -7135,7 +7117,6 @@ export const DB_SCHEMA = {
       "foreignKeys": [],
       "enums": {},
       "policyCommands": [
-        "ALL",
         "DELETE",
         "INSERT",
         "SELECT",

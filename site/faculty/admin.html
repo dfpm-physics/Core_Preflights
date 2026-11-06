@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8=' 'sha256-pwK7Eo5HId3CpiLyuwDIXOwKk1SgNI6PYr1CunKOpL0='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8=' 'sha256-zRdrAHNUD7DJpHkizJzq0Q5IvW53nf12hX78DTHCR84='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Course administration · PREP</title>
   <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
@@ -1351,7 +1351,7 @@
           </td></tr>`;
       }).join('');
 
-      panel.innerHTML = `
+      panel.innerHTML = (courseDays.error ? `<div class="alert alert-error" id="sec-days-error">Could not read this course's meeting days (${esc(courseDays.error.message)}), so the days on the sections below are not checked against them.</div>` : '') + `
         <div class="card">
           <div class="row wrap" style="justify-content:space-between;gap:10px">
             <div>
@@ -1407,7 +1407,7 @@
     function dayLine(sec) {
       const held = CD.cleanDays(sec.meeting_days);
       if (!held.length) return '<div class="muted" style="font-size:0.8em">No meeting day set</div>';
-      const outside = CD.daysOutsideList(held, courseDays.days);
+      const outside = courseDays.error ? [] : CD.daysOutsideList(held, courseDays.days);
       return `<div class="muted" style="font-size:0.8em">Meets ${esc(held.join(', '))}${outside.length
         ? ` <span title="This course's list of meeting days is ${esc(CD.describeDays(courseDays.days))}. The section keeps this day.">(not in the course's list)</span>` : ''}</div>`;
     }

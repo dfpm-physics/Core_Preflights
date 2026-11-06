@@ -57,12 +57,16 @@ section('reading a course: default, missing column, and a real failure');
   const ok = await CD.loadCourseDays(stubRead({ data: { meeting_days: ['W', 'F'] }, error: null }), 'c1');
   eq('a stored list is returned', ok.days, ['W', 'F']);
   const none = await CD.loadCourseDays(stubRead({ data: null, error: null }), 'c1');
-  eq('a course with no row reads as the default', none.days, ['M', 'T']);
+  check('a course id with no row returned is an error, not an assumed M and T', !!none.error && !none.assumed, JSON.stringify(none));
+  check('no course id at all still reads as the default', (await CD.loadCourseDays(stubRead({ data: null, error: null }), null)).assumed);
   const missing = await CD.loadCourseDays(stubRead({ data: null, error: { code: '42703', message: 'column courses.meeting_days does not exist' } }), 'c1');
   check('before migration 086 the answer is M and T, assumed, with no error', missing.assumed && !missing.error && CD.sameDays(missing.days, ['M', 'T']));
   const cache = await CD.loadCourseDays(stubRead({ data: null, error: { code: 'PGRST204', message: "Could not find the 'meeting_days' column of 'courses' in the schema cache" } }), 'c1');
   check('the REST cache wording for a missing column is recognised too', cache.assumed && !cache.error);
   const bad = await CD.loadCourseDays(stubRead({ data: null, error: { code: '42501', message: 'permission denied' } }), 'c1');
+  const adminHtml = (await import('node:fs')).readFileSync(new URL('../../site/faculty/admin.html', import.meta.url), 'utf8');
+  check('all three screens that read the days show a failed read (import preview, Sections tab, add a section)',
+    /id="imp-days-error"/.test(adminHtml) && /id="sec-days-error"/.test(adminHtml) && /id="ns-days-error"/.test(adminHtml));
   check('any other failed read is an error, never a quiet default', !!bad.error && !bad.assumed, JSON.stringify(bad));
 }
 

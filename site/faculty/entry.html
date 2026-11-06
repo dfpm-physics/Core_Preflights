@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8=' 'sha256-gzkewUTWIgGyZwgkI87RiDOPx+vzN4tqiReCBzE/4Lw='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8=' 'sha256-XXAQAbd8yqANpbB6VwrpVFevMMAPVgtPcHdQnsUeDbg='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Grade assignments · PREP</title>
   <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
@@ -92,6 +92,8 @@
 
     function render() { return itemId ? renderTable() : renderList(); }
 
+    const UNSAVED_LOSE = 'You have scores typed that are not saved. Leave this assignment and lose them?';
+
     /* ── The list: every assignment that still needs grading ───────────────── */
     function renderList() {
       const rows = listRows || [];
@@ -101,16 +103,19 @@
         : r.opensWith === 'review'
           ? `<a class="btn btn-primary btn-sm" href="grade.html?a=${encodeURIComponent(r.id)}&amp;back=entry">Review answers</a>`
           : `<span class="muted">Checked automatically</span>`;
+      // Typed-in work that also holds AI drafts has its drafts reviewed on the Grade page.
+      const review = (r) => r.alsoReview
+        ? ` <a class="btn btn-ghost btn-sm" href="grade.html?a=${encodeURIComponent(r.id)}&amp;back=entry">Review AI drafts</a>` : '';
       const body = shown.map(r => `<tr>
         <td><strong>${esc(r.title)}</strong></td>
         <td>${r.dueAt ? esc(fmtDateTime(r.dueAt)) : '<span class="muted">no date</span>'}</td>
         <td>${esc(r.howGraded)}</td>
         <td>${r.finished ? '<span class="muted">Nothing waiting</span>' : E.waitingParts(r).map(t => `<div>${esc(t)}</div>`).join('')}</td>
-        <td style="white-space:nowrap">${open(r)}</td></tr>`).join('');
+        <td style="white-space:nowrap">${open(r)}${review(r)}</td></tr>`).join('');
       const table = listError ? '' : !rows.length
         ? `<div class="empty-state"><div class="es-ic">✏️</div><h3>No assignments yet</h3><p>A Director adds assignments on the Assignments page.</p></div>`
         : !shown.length
-          ? `<div class="alert alert-success">Nothing is waiting. Every assignment is fully graded.</div>`
+          ? `<div class="alert alert-success">Nothing is waiting: no scores to enter, approve or review.</div>`
           : `<div class="table-wrap"><table id="grade-list"><thead><tr><th>Assignment</th><th>Due</th><th>How it is graded</th><th>What is waiting</th><th></th></tr></thead><tbody>${body}</tbody></table></div>`;
       $('main').innerHTML = head() + `
         ${note ? `<div class="alert alert-${note.kind}" id="note">${esc(note.text)}</div>` : ''}
@@ -212,10 +217,14 @@
 
     function wire() {
       $('back-btn').onclick = () => {
-        if (Object.keys(gridInputs()).length && !confirm('You have scores typed that are not saved. Go back to the list and lose them?')) return;
+        if (Object.keys(gridInputs()).length && !confirm(UNSAVED_LOSE)) return;
         typed = {}; setItem(null); render();
       };
-      $('f-item').onchange = (e) => { typed = {}; setItem(e.target.value); render(); };
+      $('f-item').onchange = (e) => {
+        // Typed scores belong to the assignment on screen. Switching without asking would drop them silently.
+        if (Object.keys(gridInputs()).length && !confirm(UNSAVED_LOSE)) { e.target.value = itemId; return; }
+        typed = {}; setItem(e.target.value); render();
+      };
       // The whole table area takes a dropped file. The "Import a file" button below is the keyboard route.
       const dz = $('drop-area');
       let depth = 0;

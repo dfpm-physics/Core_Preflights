@@ -5,7 +5,9 @@ import { check, eq, section, installBrowser, summary } from './harness.mjs';
 import { readFileSync } from 'node:fs';
 
 installBrowser({ pathname: '/site/faculty/entry.html' });
-const E = await import('../../site/js/faculty-entry.js');
+// faculty-grade.js (imported for the Grade page's own cadet test) binds the page's db at import. The tests below pass their own stub.
+globalThis.window.db = { from: () => { throw new Error('the stub client is passed in, not this one'); } };
+const E =await import('../../site/js/faculty-entry.js');
 
 const stub = (impl) => {
   const calls = [];
@@ -162,12 +164,63 @@ section('buildGradeList: counts come from the database cells; nothing is added u
   eq('plain words for how it is graded', [by.a.howGraded, by.d.howGraded], ['Scores typed in by staff', 'Free response: AI drafts overnight, a person reviews']);
 }
 
+section('review fix 1: a table assignment with scores not entered is unfinished whatever its date');
+{
+  const tablePaths = [{ delivery: 'in_person', grading: 'hand_entered' }];
+  const enr = [{ id: 'e1', section_id: 's1', status: 'active' }, { id: 'e2', section_id: 's1', status: 'completed' },
+    { id: 'e3', section_id: 's1', status: 'dropped' }, { id: 'e4', section_id: 's2', status: 'active' }, { id: 'e5', section_id: 's1', status: 'active' }];
+  const items = [{ id: 'a', paths: tablePaths }, { id: 'r', paths: [{ delivery: 'typed_response', grading: 'human_graded' }] }];
+  const u = E.countUnentered({ items, enrollments: enr,
+    grades: [{ enrollment_id: 'e1', assignment_offering_id: 'a', points_earned: '2.00' }],
+    excusals: [{ enrollment_id: 'e5', assignment_offering_id: 'a' }], closures: [{ section_id: 's2', assignment_offering_id: 'a' }] });
+  eq('counted cadets only; a score, an excusal or a closed section removes a cadet; review work is not counted here', u, { a: 1 });
+  const rows = E.buildGradeList({ items: [{ id: 'a', title: 'A', dueAt: '2099-01-01T00:00:00Z', published: true, paths: tablePaths }], cells: [], unentered: { a: 3 } });
+  check('a published table item due in the future with no scores is NOT finished', rows[0].finished === false && rows[0].notEntered === 3);
+  eq('the words say the scores are not entered yet', E.waitingParts(rows[0]), ['3 cadets have no score entered yet']);
+  const both = E.waitingParts({ notEntered: 3, noScore: 2 });
+  eq('the overdue count stays its own line', both, ['3 cadets have no score entered yet', '2 cadets with no score are past the due date']);
+  const done = E.buildGradeList({ items: [{ id: 'a', title: 'A', dueAt: null, published: true, paths: tablePaths }], cells: [], unentered: { a: 0 } });
+  check('with every score entered it is finished', done[0].finished === true);
+  const html = readFileSync(new URL('../../site/faculty/entry.html', import.meta.url), 'utf8');
+  check('the empty-state wording no longer claims more than the list checks', !/Every assignment is fully graded/.test(html) && /Nothing is waiting/.test(html));
+}
+
+section('review fix 2: AI drafts are counted over the set the Grade page works on, and can be reached');
+{
+  const W = 'w1', T = 't1';
+  const aiPaths = [{ grading: 'ai_drafted', activity_id: W, activities: { modality: 'written' } }, { grading: 'effort', activity_id: T, activities: { modality: 'interactive' } }];
+  const items = [{ id: 'a', paths: aiPaths }, { id: 'h', paths: [{ grading: 'human_graded', activity_id: 'x', activities: { modality: 'written' } }] }];
+  const enr = [{ id: 'e1', status: 'active' }, { id: 'e2', status: 'dropped' }, { id: 'e3', status: 'active' }, { id: 'e4', status: 'completed' }, { id: 'e5', status: 'active' }];
+  const g = (e, i, over = {}) => ({ enrollment_id: e, assignment_offering_id: i, source: 'ai_suggested', is_finalized: false, ...over });
+  const grades = [g('e1', 'a'), g('e2', 'a'), g('e3', 'a'), g('e4', 'a'), g('e5', 'a', { is_finalized: true }), g('e1', 'h'), g('e1', 'a', { source: 'instructor' })];
+  const submissions = [{ enrollment_id: 'e3', assignment_offering_id: 'a', chosen_activity_id: T }, { enrollment_id: 'e4', assignment_offering_id: 'a', chosen_activity_id: W }];
+  eq('dropped, tutor-path, finalized, other-source and non-AI-path rows are left out', E.countAiDrafts({ items, enrollments: enr, grades, submissions }), { a: 2 });
+  const src = readFileSync(new URL('../../site/js/faculty-entry.js', import.meta.url), 'utf8');
+  check('it uses the Grade page\'s own test rather than a second rule', /isEffortGraded/.test(src) && /from '\.\/faculty-grade\.js'/.test(src));
+  const rows = E.buildGradeList({ items: [{ id: 'a', title: 'A', dueAt: null, published: true, paths: [...aiPaths, { grading: 'hand_entered' }] }], cells: [], aiCounts: { a: 2 } });
+  check('a table item that also holds AI drafts offers the review route too', rows[0].opensWith === 'table' && rows[0].alsoReview === true);
+  const rv = E.buildGradeList({ items: [{ id: 'a', title: 'A', dueAt: null, published: true, paths: aiPaths }], cells: [], aiCounts: { a: 2 } });
+  check('a review item has its own button and no extra one', rv[0].opensWith === 'review' && rv[0].alsoReview === false);
+  const html = readFileSync(new URL('../../site/faculty/entry.html', import.meta.url), 'utf8');
+  check('the page draws the extra review link', /r\.alsoReview/.test(html));
+}
+
+section('review fix 4: switching assignment does not drop typed scores silently');
+{
+  const html = readFileSync(new URL('../../site/faculty/entry.html', import.meta.url), 'utf8');
+  const at = html.indexOf("$('f-item').onchange");
+  const h = html.slice(at, at + 700);
+  check('the select change asks first, with the Back button\'s wording', /confirm\(UNSAVED_LOSE\)/.test(h) && /gridInputs\(\)/.test(h), h);
+  check('and puts the select back when the person cancels', /e\.target\.value = itemId/.test(h), h);
+  check('the Back button uses the same question', /confirm\(UNSAVED_LOSE\)/.test(html.slice(html.indexOf("$('back-btn').onclick"), html.indexOf("$('back-btn').onclick") + 300)));
+}
+
 section('waitingParts: plain words, singular and plural');
 {
   eq('nothing waiting says nothing', E.waitingParts({}), []);
   eq('one of each reads as one', E.waitingParts({ waiting: 1, noScore: 1, aiDrafts: 1 }),
-    ['1 score is drafted and waiting for approval', '1 AI-suggested draft needs a person to review', '1 cadet has no score yet']);
-  check('several read as several', E.waitingParts({ waiting: 4, noScore: 2, toGrade: 3 }).join('|').includes('4 scores are drafted') && E.waitingParts({ noScore: 2 })[0] === '2 cadets have no score yet');
+    ['1 score is drafted and waiting for approval', '1 AI-suggested draft needs a person to review', '1 cadet with no score is past the due date']);
+  check('several read as several', E.waitingParts({ waiting: 4, noScore: 2, toGrade: 3 }).join('|').includes('4 scores are drafted') && E.waitingParts({ noScore: 2 })[0] === '2 cadets with no score are past the due date');
   eq('not published comes first', E.waitingParts({ notPublished: true, noScore: 1 })[0], 'Not published to cadets yet');
 }
 
@@ -184,6 +237,11 @@ section('loadGradeList: a failed read is an error, never an empty list');
   const aiFail = { from: (t) => chain(t === 'grades' ? { data: null, error: { message: 'grades down' } } : { data: t === 'assignment_offerings' ? [itemRow] : [], error: null }), rpc: () => { const q = { order: () => q, range: async () => ({ data: [], error: null }) }; return q; } };
   const c = await E.loadGradeList(aiFail, 'co1');
   check('AI-draft read fails -> { error }', !!c.error && !c.items);
+  for (const table of ['enrollments', 'submissions', 'grade_excusals', 'column_closures']) {
+    const bad = { from: (t) => chain(t === table ? { data: null, error: { message: `${table} down` } } : { data: t === 'assignment_offerings' ? [itemRow] : t === 'sections' ? [{ id: 's1' }] : [], error: null }), rpc: () => { const q = { order: () => q, range: async () => ({ data: [], error: null }) }; return q; } };
+    const r = await E.loadGradeList(bad, 'co1');
+    check(`a failed ${table} read is an error, not a short list`, !!r.error && !r.items);
+  }
   const ok = { from: (t) => chain({ data: t === 'assignment_offerings' ? [itemRow] : [], error: null }), rpc: () => { const q = { order: () => q, range: async () => ({ data: [], error: null }) }; return q; } };
   const d = await E.loadGradeList(ok, 'co1');
   check('a good read returns the rows', !d.error && d.items.length === 1 && d.items[0].finished === true, JSON.stringify(d));
