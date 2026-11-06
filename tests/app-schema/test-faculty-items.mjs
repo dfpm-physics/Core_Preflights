@@ -194,6 +194,10 @@ section('form checks');
   const base = { kindId: 'homework', title: 'T', description: '', delivery: 'online_questions', grading: 'human_graded',
                  points: '10', time: '23:59', allDate: '', sectionDates: {} };
   eq('a good form has no problems', I.checkForm(base, { kinds }), []);
+  const online = { ...base, grading: 'auto_checked', points: '', publish: true };
+  check('an auto-checked item with no questions cannot be published', I.checkForm(online, { kinds, noQuestions: true }).some(p => /Add the questions first/.test(p)));
+  eq('... but may be saved unpublished', I.checkForm({ ...online, publish: false }, { kinds, noQuestions: true }), []);
+  eq('... and publishes once it has questions', I.checkForm(online, { kinds, noQuestions: false }), []);
   check('no title', I.checkForm({ ...base, title: '  ' }, { kinds }).length === 1);
   check('a pair the database refuses', I.checkForm({ ...base, delivery: 'typed_response', grading: 'hand_entered' }, { kinds }).length === 1);
   check('a third decimal in points', I.checkForm({ ...base, points: '2.555' }, { kinds }).length === 1);

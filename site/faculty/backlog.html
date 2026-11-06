@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8=' 'sha256-sMlutB2HZR9E/5NnIEOEcd4m4YyQzUVtTZhzP2axpDg='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8=' 'sha256-qNhWpig4Fqxj4xRA1QrsTxoXngy+rCFXnGfzFZbMSZQ='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Backlog and export · PREP</title>
   <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
@@ -71,7 +71,7 @@
           <div class="field-hint">Every number comes from the same database total the students and the reports use.</div>
           <div class="row wrap" style="gap:10px;margin:8px 0">
             <button class="btn btn-ghost" data-gb="final">Gradebook (CSV)</button>
-            <button class="btn btn-ghost" data-gb="prog">Gradebook, Prog items only (CSV)</button>
+            <button class="btn btn-ghost" data-gb="prog">Gradebook, Prog assignments only (CSV)</button>
           </div><div id="export-msg"></div>
           ${ctx.isDirectorForCurrent() ? `<h3 style="margin-top:18px">Fill a Blackboard file</h3>
             <div class="field-hint">Download the gradebook from Blackboard and drop it here, one file per Blackboard course. Scores are written into the columns that already exist and the file comes back in the same shape. Cadets are matched by cadet ID only. An assignment is matched by its exact title (a preflight by PF and the lesson number). The Prog and Final columns are matched by the names saved in the course settings, and a column with the same name plus <em>letter</em> takes the letter. Nothing is added, renamed or reordered, a column nothing was written to is left out of the file, and a blank stays a blank, never a zero. Totals are the same ones students and reports read.</div>

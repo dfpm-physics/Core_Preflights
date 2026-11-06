@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8=' 'sha256-O2r6T8g/yVE64a77EB8CmrEmfLPINXJ0HyLF2Pm2AvM='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8=' 'sha256-ovxI0L+42VKjKm2BTgv7QqcGOdWwgbH3PIULst6TE/s='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Enter scores · PREP</title>
   <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
@@ -284,7 +284,7 @@
     }
 
     async function doExcuse(enrollmentId) {
-      const reason = prompt('Why is this cadet excused from this item? A reason is required and is logged with your name.');
+      const reason = prompt('Why is this cadet excused from this assignment? A reason is required and is logged with your name.');
       if (reason == null) return;
       const res = await E.excuse(db, enrollmentId, itemId, reason);
       note = res.error ? { kind: 'error', text: E.plainEntryError(res.error) } : { kind: 'success', text: 'Excused. The assignment no longer counts in this cadet\'s total.' };
@@ -360,7 +360,7 @@
           const res = await E.enterGrades(db, iid, list2, { source: 'imported', allowPublished: plan.overwritesPublished > 0 });
           if (res.error) {
             busy = false;
-            note = { kind: 'error', text: `${E.plainEntryError(res.error)} ${done ? `${done} item(s) were already saved before this one.` : 'Nothing was saved.'}` };
+            note = { kind: 'error', text: `${E.plainEntryError(res.error)} ${done ? `${done} assignment(s) were already saved before this one.` : 'Nothing was saved.'}` };
             if (done) await reloadKeep(); else render();
             return;
           }

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-ApoF+TaP/YnUZntVCUB+LcQWRt3ysIVA9J3+hwse1no=' 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8=' 'sha256-ne1N2jrmq4meZl44oM2VqX3psYtC4DD4ya2dFLueGKI='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Assignments · PREP</title>
   <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
@@ -626,7 +626,8 @@
       const tutorNow = tutorOf(editing);
       const problems = I.checkForm(form, { kinds: vm.kinds, sections: vm.sections, slugFrozen: !!tutorNow && !swapOn
           && ($('i-islug').disabled || form.interactiveSlug.trim() === tutorNow.slug), lockedPath: locked,
-        pointsLocked: locked && pointsOwned() });
+        pointsLocked: locked && pointsOwned(),
+        noQuestions: form.delivery === 'online_questions' && I.pointsOwnedByQuestions(form.grading) && !(editing && editing.points > 0) });
       if (problems.length) {
         const opened = revealHidden(problems);
         showError(problems.join(' ') + (opened ? ' (The field is under More options, which is now open.)' : ''));

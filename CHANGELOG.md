@@ -8,6 +8,18 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-11-05 — Matthew Recker via Claude (roll-in walked on the staging project in a browser; branch `v2-step2-rollin`, local)
+
+Migrations 077, 078 and 079 were applied to the STAGING project only, one at a time as the schema owner, each with its verify queries and a ledger row, and the schema fingerprint matched a scratch build from the same files. The edge function `remark-question` was redeployed there. The pages were then walked on staging with seeded logins and made-up test data, and the three migrations were rolled back newest first and applied again; the fingerprint after the rollback equalled the one from before the first apply, and the one after the re-apply equalled the first apply.
+
+What was seen working: a new assignment opens short and More options opens when a field there is in use; a free-response assignment saved, read back and published with the Published box; a two-path assignment with a tutor; an online-questions assignment with a multiple-choice and a numeric question and an attempt limit; a link carrying a full query opens the chooser with its values and saves nothing, and a link for a course the person does not run is refused with a sentence; the points-change warning; the homework page for wrong, unclear and right answers and for the limit (also refused by the function when called directly); the cadet totals equal the staff gradebook; the written overnight path (a draft the cadet cannot read, the data role unable to finalize it, finalized by staff, the total moving only then); a key correction and a re-mark by a director, which a second preview shows changes nothing further; a password reset on a made-up staff account; Health, Report, the Grade picker and the dashboard with the new items present.
+
+Fixed: an assignment answered on the site could be published with no questions, after which its questions could not be changed. The form now refuses that and says why (test added). Four staff-page strings said "item" where the rest of the pages say "assignment"; the page security-policy hashes were rebuilt for them.
+
+Not done: no production project was touched or read. The fixtures were removed (their audit rows, the 063 added rows in the grade audit table, and the made-up staff account stay, because those are append-only or live in the sign-in service). The roster import screen groups, the tutor-removal confirm for a cadet committed to a tutor, a late answer on a closed assignment and the export file were not walked.
+
+---
+
 ## 2026-11-05 — Matthew Recker via Claude (third fix round on the roll-in: prefill link, tutor changes, key reads, wording; branch `v2-step2-rollin`, local, not applied anywhere)
 
 **What.**

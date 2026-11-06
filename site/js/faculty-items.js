@@ -580,8 +580,11 @@ export const emptyForm = (kind, sections) => ({
 });
 
 /** Problems with a form, as plain sentences. An empty list means it may be saved. */
-export function checkForm(form, { kinds = [], sections = [], slugFrozen = false, lockedPath = false, pointsLocked = false } = {}) {
+export function checkForm(form, { kinds = [], sections = [], slugFrozen = false, lockedPath = false, pointsLocked = false, noQuestions = false } = {}) {
   const out = [];
+  // Questions answered on the site cannot be added once the assignment is published, so publishing one that has none
+  // leaves cadets an empty page that staff cannot fill. Saving it unpublished is fine.
+  if (noQuestions && form.publish === true) out.push('Add the questions first, then publish: an assignment with no questions cannot be published, and its questions cannot be changed once it is.');
   const pointsOwned = lockedPath ? !!pointsLocked : pointsOwnedByQuestions(form.grading);
   if (!String(form.title || '').trim()) out.push('Give the assignment a title.');
   if (String(form.title || '').length > 200) out.push('Keep the title under 200 characters.');
