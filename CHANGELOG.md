@@ -8,6 +8,12 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-11-06 — Matthew Recker via Claude (clickthrough walk, `tests/walk/`; branch `v2-cf-grade`, local, uncommitted)
+
+Added an optional, repeatable browser walk (own `package.json`, git-ignored `node_modules/`, see `tests/walk/README.md`) that signs in as the seeded staging logins, clicks the Assignments, Grade assignments, Reports, Admin and cadet pages, and checks both the page and the database. It runs against the local staging site only and creates and removes `ZZ walk` data. The walk found three faults, fixed in the same change: (1) on a saved assignment, the Both card on a tutor-only assignment replaced the tutor with a typed path instead of adding one beside it (`site/js/faculty-items.js`, `updateItem`); it now keeps the tutor's row, id, link and reports and adds the typed path, and the Both-to-Tutor change, which was refused, now removes the typed path when no cadet has work on the assignment (refused with the counts otherwise); the six card changes are held by `tests/app-schema/test-items-paths.mjs` and walk group H; (2) the cadet dashboard counted online homework as "0 questions"; the line now comes from one helper, `modeLabel` in `site/js/student-view.js`, used by the dashboard and the assignments page; (3) the roster preview's example of a code with no meeting days was `M1A`, which does hold a day; it is now `LAB-3`. Page script hashes were rebuilt. Not done: it was not run against production, it changes no seeded login, and it cannot cover a live claude.ai tutor session or the AI grading run.
+
+---
+
 ## 2026-11-06 — Matthew Recker via Claude (catalogue rebuilt after step 2 and 086; branch `v2-cf-grade`, local)
 
 `site/js/db-schema.js` is rebuilt from staging: 49 tables, up from 46. `gen_db_schema.py` now reads permissive policies only, because a restrictive policy grants nothing and was making read-only tables show as writable on the System page. `CURATED_COLUMNS` covers the three new tables. Deliberately not done: no policy or grant changed.

@@ -1218,9 +1218,13 @@ export async function updateItem(db, ctx, item, form, ack = null) {
   const duo = shape.kind === 'choice' ? shape : null;           // a typed response and a tutor, both editable here
   const wantModality = DELIVERY_MODALITY[form.delivery];
   const wantTwo = wantsTwoPaths(form);
-  const changesPair = !!single && (single.delivery !== form.delivery || single.grading !== form.grading);
+  // A tutor-only assignment moving to "Both" keeps its tutor (id, link and reports) and gains a typed path beside it; a
+  // two-path assignment moving to "Interactive tutor" keeps the tutor and loses the typed path. Neither is a replacement.
+  const tutorToBoth = !!single && single.modality === 'interactive' && wantTwo;
+  const bothToTutor = !!duo && form.delivery === 'interactive_tutor';
+  const changesPair = !!single && !tutorToBoth && (single.delivery !== form.delivery || single.grading !== form.grading);
   const replacesPath = changesPair && wantModality !== single.modality;
-  if (duo && !isTypedResponse(form.delivery)) {
+  if (duo && !isTypedResponse(form.delivery) && !bothToTutor) {
     return { error: { message: 'This assignment offers a typed response and a tutor. Untick "Also offer an interactive tutor" first, then change how the work is done. Nothing was changed.' } };
   }
   if (replacesPath) {
@@ -1243,6 +1247,26 @@ export async function updateItem(db, ctx, item, form, ack = null) {
     }
   }
 
+  if (bothToTutor || tutorToBoth) {
+    const w = await countWork(db, item.offeringId);
+    if (w.error) return { error: w.error };
+    if (bothToTutor && (w.submissions || w.grades)) {
+      return { error: { message: `This assignment already has ${plural(w.submissions, 'submission', 'submissions')} and ` +
+        `${plural(w.grades, 'grade', 'grades')}, so the typed response cannot be removed. Nothing was changed.` } };
+    }
+    if (tutorToBoth && (w.submissions || w.grades) && single.role !== rolesFor(form.policy || 'choice').tutor) {
+      return { error: { message: `This assignment already has ${plural(w.submissions, 'submission', 'submissions')} and ` +
+        `${plural(w.grades, 'grade', 'grades')}, so which path earns credit cannot change now. Nothing was changed.` } };
+    }
+    if (bothToTutor) {
+      const impact = await countQuestionsAndKeys(db, [duo.typed.activityId]);
+      if (impact.error) return { error: impact.error };
+      if ((impact.questions || impact.keys) && !ackCovers(ack, impact)) {
+        return { error: null, needsConfirm: { questions: impact.questions, keys: impact.keys } };
+      }
+    }
+  }
+
   // Who earns credit may not move once cadets have started: a path that stops earning credit under a cadet who chose it
   // would change what they were asked to do. (The tutor's own removal or replacement has its own confirmation below.)
   const wantRoles = wantTwo ? rolesFor(form.policy || 'choice') : null;
@@ -1261,8 +1285,8 @@ export async function updateItem(db, ctx, item, form, ack = null) {
   // Replacing or removing the tutor deletes it, and every report cadets sent through it. Count first, ask, then act.
   const tutorNow = duo ? duo.tutor : (single && single.modality === 'interactive' ? single : null);
   const wantSlug = String(form.interactiveSlug || '').trim();
-  const swapping = !!tutorNow && !!form.swapTutor && !!wantSlug && wantSlug !== tutorNow.slug && (duo ? wantTwo : form.delivery === 'interactive_tutor');
-  const dropping = !!duo && !wantTwo;
+  const swapping = !!tutorNow && !!form.swapTutor && !!wantSlug && wantSlug !== tutorNow.slug && (duo ? (wantTwo || bothToTutor) : (form.delivery === 'interactive_tutor' || tutorToBoth));
+  const dropping = !!duo && !wantTwo && !bothToTutor;
   let tutorCommitted = null;          // how many cadets the person was told would be released; the release checks it again
   if (swapping || dropping) {
     if (swapping) {
@@ -1422,7 +1446,7 @@ export async function updateItem(db, ctx, item, form, ack = null) {
         if (delA.error) return partial(delA.error);
       }
     }
-    if (cur.modality === 'interactive' && wantModality === 'interactive') {
+    if (cur.modality === 'interactive' && (wantModality === 'interactive' || tutorToBoth)) {
       const e = swapping ? await swapTutorPath(db, ctx, item, form, cur, tutorCommitted) : await updateTutorInPlace(db, item, form, cur);
       if (e) return partial(e);
     }
@@ -1434,9 +1458,24 @@ export async function updateItem(db, ctx, item, form, ack = null) {
       const e = await addTutorPath(db, item, form, single);
       if (e) return partial(e);
     }
+    if (tutorToBoth) {
+      const e = await addTypedPath(db, ctx, item, form, cur);
+      if (e) return partial(e);
+    }
     if (ownershipMoves && !pointsOwnedByQuestions(form.grading)) {
       const p = await db.from('assignment_offerings').update({ points_possible: Number(form.points) }).eq('id', item.offeringId);
       if (p.error) return partial(p.error);
+    }
+  } else if (duo && bothToTutor) {
+    const { typed, tutor } = duo;
+    const e = swapping ? await swapTutorPath(db, ctx, item, form, tutor, tutorCommitted) : await updateTutorInPlace(db, item, form, tutor);
+    if (e) return partial(e);
+    const del = await db.from('activities').delete().eq('id', typed.activityId);
+    if (del.error) return partial(del.error);
+    if (tutor.role !== 'graded') {
+      const u = await db.from('offering_activities').update({ grading_role: 'graded' })
+        .eq('assignment_offering_id', item.offeringId).eq('activity_id', tutor.activityId);
+      if (u.error) return partial(u.error);
     }
   } else if (duo) {
     const { typed, tutor } = duo;
@@ -1673,6 +1712,34 @@ async function addTutorPath(db, item, form, typed) {
   if (typed.role !== roles.typed) {
     const u = await db.from('offering_activities').update({ grading_role: roles.typed })
       .eq('assignment_offering_id', item.offeringId).eq('activity_id', typed.activityId);
+    if (u.error) return u.error;
+  }
+  return null;
+}
+
+/** Add a typed response beside a saved tutor, with the roles the form asks for. Returns an error or null. */
+async function addTypedPath(db, ctx, item, form, tutor) {
+  const roles = rolesFor(form.policy || 'choice');
+  // The tutor moves to the second place first, so the typed response can take the first.
+  if (tutor.order !== 1) {
+    const m = await db.from('offering_activities').update({ position: 1 })
+      .eq('assignment_offering_id', item.offeringId).eq('activity_id', tutor.activityId);
+    if (m.error) return m.error;
+  }
+  const ins = await db.from('activities').insert({
+    assignment_id: item.assignmentId, modality: 'written', slug: pathSlug(ctx.courseCode, item.slug, 'written'),
+    title: String(form.title).trim(), content: newPathContent(form), position: 0,
+  }).select('id').single();
+  if (ins.error) return ins.error;
+  const oa = await db.from('offering_activities').insert({
+    assignment_offering_id: item.offeringId, activity_id: ins.data.id,
+    grading_role: roles.typed, available_after: 'always', is_visible: true, position: 0,
+    delivery: 'typed_response', grading: form.grading, warn_earns_full: warnEarnsFull('typed_response', form.grading),
+  });
+  if (oa.error) { await db.from('activities').delete().eq('id', ins.data.id); return oa.error; }
+  if (tutor.role !== roles.tutor) {
+    const u = await db.from('offering_activities').update({ grading_role: roles.tutor })
+      .eq('assignment_offering_id', item.offeringId).eq('activity_id', tutor.activityId);
     if (u.error) return u.error;
   }
   return null;

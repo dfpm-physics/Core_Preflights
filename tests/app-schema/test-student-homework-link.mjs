@@ -87,7 +87,10 @@ section('the lesson page renders the link');
   check('the page has a homework block that links to l.homeworkHref', /function homeworkBlock\(l\)/.test(html) && /href="\$\{esc\(l\.homeworkHref\)\}"/.test(html));
   check('openLesson shows it before any written or interactive block', html.indexOf('if (l.homeworkHref)') > 0
     && html.indexOf('if (l.homeworkHref)') < html.indexOf('const bothOpen'));
-  check('the list label says homework', /if \(l\.autoChecked\) return 'Homework/.test(html));
+  const view = readFileSync(resolve(ROOT, 'site/js/student-view.js'), 'utf8');
+  check('the list label says homework (the shared helper, which the assignments page uses)', /if \(l\.autoChecked\) return 'Homework/.test(view) && /sharedModeLabel\(l,/.test(html));
+  const dash = readFileSync(resolve(ROOT, 'site/student/dashboard.html'), 'utf8');
+  check('the dashboard list uses the same helper', /modeLabel/.test(dash) && !/function modeLabel\(/.test(dash));
 }
 
 section('the homework page reads the student view of grades');

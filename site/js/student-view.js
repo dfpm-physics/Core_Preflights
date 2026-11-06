@@ -18,6 +18,19 @@
 //     possible, and "Not submitted" once the database has counted it as a zero.
 import { percentShown } from './percent-shown.js';
 
+/**
+ * The short line under an assignment's title in a list: how the work is done. One copy for the dashboard and the assignments
+ * page, so they cannot disagree. An online homework set (checked as the cadet answers) has no written path, so it is named and
+ * never counted as "0 questions". `interactiveWord` is the page's own name for a tutor-only assignment.
+ */
+export function modeLabel(l, interactiveWord = 'Interactive') {
+  if (l.autoChecked) return 'Homework, checked as you answer';
+  if (l.completion_policy === 'choice' && l.preflight && l.interaction) return 'Your choice of format';
+  if (l.completion_policy === 'interaction') return interactiveWord;
+  const n = l.preflight?.questions?.length ?? 0;
+  return `${n} question${n === 1 ? '' : 's'}`;
+}
+
 /** Student-facing words for the seven database states (docs/decisions/V2-DATA-MODEL.md section 7). */
 const STATE_WORDS = {
   excused:            { word: 'Excused',                 tone: 'grey',  note: 'Left out of your total.' },

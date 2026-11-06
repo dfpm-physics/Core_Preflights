@@ -307,6 +307,77 @@ section('updateItem: edit both paths of a two-path item');
   check('with grades given, it is refused and says how many', /3 grades/.test(r.error?.message || '') && CALLS.length === 0, JSON.stringify(r.error));
 }
 
+section('updateItem: the six card changes on a saved assignment each do what the card says, or refuse in plain words');
+{
+  const tutorItem = (o = {}) => typedItem({ paths: [{ delivery: 'interactive_tutor', grading: 'effort', modality: 'interactive', role: 'graded', activityId: 'act-t',
+    slug: 'tutor-1', order: 0, availableAfter: 'always', isVisible: true, content: { artifact_url: 'https://example.test/t' } }], ...o });
+  const tutorForm = (o = {}) => base({ delivery: 'interactive_tutor', grading: 'effort', interactiveSlug: 'tutor-1', interactiveUrl: 'https://example.test/t', ...o });
+  const dels = (table) => writesTo(table, 'delete').map(c => c.filters.id || c.filters.activity_id);
+  const newPaths = () => writesTo('offering_activities', 'insert').map(c => c.payload.delivery);
+
+  // 1. Tutor -> Both: the tutor keeps its id, link and reports; a typed path is added beside it. (This is the P1 fault.)
+  reset(withFresh());
+  let r = await I.updateItem(db, ctx, tutorItem(), twoPath());
+  eq('Tutor to Both: saves', r.error, null);
+  eq('Tutor to Both: the tutor activity is never deleted', dels('activities'), []);
+  eq('Tutor to Both: a typed response path is added, no tutor is added', newPaths(), ['typed_response']);
+  eq('Tutor to Both: the added activity is a written one', writesTo('activities', 'insert').map(c => c.payload.modality), ['written']);
+  eq('Tutor to Both: the commit rule is stored', writesTo('assignment_offerings', 'update')[0].payload.switch_policy, 'lock_on_commit');
+  eq('Tutor to Both: the tutor row keeps its slug (nothing renames it)', writesTo('activities', 'update').filter(c => c.filters.id === 'act-t').map(c => c.payload.slug), [undefined]);
+
+  // 1b. with cadet work and a rule that would make the tutor practice, it is refused
+  reset(withFresh({ 'submissions.select': { __count: 2 } }));
+  r = await I.updateItem(db, ctx, tutorItem(), twoPath({ policy: 'typed' }));
+  check('Tutor to Both with work, tutor losing credit: refused, nothing written', /credit cannot change/.test(r.error?.message || '') && CALLS.length === 0, JSON.stringify(r.error));
+  reset(withFresh({ 'submissions.select': { __count: 2 } }));
+  r = await I.updateItem(db, ctx, tutorItem(), twoPath());
+  eq('Tutor to Both with work, both earning credit: allowed', r.error, null);
+  eq('... and the tutor stays', dels('activities'), []);
+
+  // 2. Tutor -> Questions: replaced, as the card says; refused once cadets have work.
+  reset(withFresh());
+  r = await I.updateItem(db, ctx, tutorItem(), base());
+  eq('Tutor to Questions: saves', r.error, null);
+  eq('Tutor to Questions: a written path is added and the tutor removed', [writesTo('activities', 'insert').map(c => c.payload.modality), dels('activities')], [['written'], ['act-t']]);
+  reset(withFresh({ 'submissions.select': { __count: 1 } }));
+  r = await I.updateItem(db, ctx, tutorItem(), base());
+  check('Tutor to Questions with work: refused, nothing written', /cannot change/.test(r.error?.message || '') && CALLS.length === 0, JSON.stringify(r.error));
+
+  // 3. Questions -> Tutor
+  reset(withFresh());
+  r = await I.updateItem(db, ctx, typedItem(), tutorForm({ interactiveSlug: 'tutor-2' }));
+  eq('Questions to Tutor: saves', r.error, null);
+  eq('Questions to Tutor: a tutor is added and the typed path removed', [writesTo('activities', 'insert').map(c => c.payload.modality), dels('activities')], [['interactive'], ['act-w']]);
+  reset(withFresh({ 'grades.select': { __count: 1 } }));
+  r = await I.updateItem(db, ctx, typedItem(), tutorForm({ interactiveSlug: 'tutor-2' }));
+  check('Questions to Tutor with work: refused, nothing written', /cannot change/.test(r.error?.message || '') && CALLS.length === 0, JSON.stringify(r.error));
+
+  // 4. Both -> Questions: the tutor goes (this is the removal the page already confirms)
+  reset(withFresh());
+  r = await I.updateItem(db, ctx, duoItem(), base());
+  eq('Both to Questions: saves', r.error, null);
+  eq('Both to Questions: the tutor is removed and the typed path stays', dels('activities'), ['act-t']);
+
+  // 5. Both -> Tutor: the typed path goes, the tutor keeps its id, link and reports
+  reset(withFresh());
+  r = await I.updateItem(db, ctx, duoItem(), tutorForm());
+  eq('Both to Tutor: saves', r.error, null);
+  eq('Both to Tutor: the typed path is removed and the tutor stays', dels('activities'), ['act-w']);
+  eq('Both to Tutor: nothing is added', [writesTo('activities', 'insert').length, newPaths()], [0, []]);
+  reset(withFresh({ 'submissions.select': { __count: 3 } }));
+  r = await I.updateItem(db, ctx, duoItem(), tutorForm());
+  check('Both to Tutor with work: refused, nothing written', /typed response cannot be removed/.test(r.error?.message || '') && CALLS.length === 0, JSON.stringify(r.error));
+  reset(withFresh({ 'questions.select': { __count: 2 } }));
+  r = await I.updateItem(db, ctx, duoItem({ typed: 'graded', tutor: 'graded' }, { paths: duoItem().paths.map((p, i) => i === 0 ? { ...p, content: { questions: [{ id: 'q1' }] } } : p) }), tutorForm());
+  check('Both to Tutor never silently drops stored questions: either it asks or it saves with none', r.needsConfirm !== undefined || r.error === null, JSON.stringify(r));
+
+  // 6. Questions -> Both
+  reset(withFresh());
+  r = await I.updateItem(db, ctx, typedItem(), twoPath());
+  eq('Questions to Both: saves', r.error, null);
+  eq('Questions to Both: a tutor is added and nothing is removed', [newPaths(), dels('activities')], [['interactive_tutor'], []]);
+}
+
 section('updateItem: remove the tutor, with counts and an unlock first');
 {
   const committed = (st) => (st.opts?.head ? { __count: 3 } : [{ id: 'sub-1' }, { id: 'sub-2' }, { id: 'sub-3' }]);
