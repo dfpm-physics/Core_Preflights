@@ -82,6 +82,18 @@ import {
  * ════════════════════════════════════════════════════════════════════════════ */
 
 /**
+ * The rows of the Reports list (report.html with no ?i=), from what loadManager returned. Newest due date first, an
+ * assignment with no date last. It only reshapes: the completion numbers are loadManager's own.
+ */
+export function reportPickerRows(interactions) {
+  return (interactions || []).map(i => ({
+    id: i.id, title: i.title || i.assignmentSlug || i.id, dueAt: i.due_at || null,
+    published: !!i.is_published, done: i.done || 0, total: i.total || 0,
+  })).sort((a, b) => (a.dueAt && b.dueAt ? new Date(b.dueAt) - new Date(a.dueAt) : (a.dueAt ? -1 : b.dueAt ? 1 : 0))
+    || a.title.localeCompare(b.title));
+}
+
+/**
  * Every scheduled lesson in ctx.currentOffering that can be worked at all — interactive,
  * written, or both — with completion broken down by section, plus the section rosters the
  * report viewer needs.

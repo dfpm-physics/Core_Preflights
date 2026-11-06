@@ -40,7 +40,7 @@ const MAX_CELL = 200;
  * `""` escape for a literal quote. CRLF is normalised because the export is Windows-authored
  * and a trailing \r would end up inside the last field of every row.
  */
-export function parseDelimited(text, delimiter = ',') {
+export function parseDelimited(text, delimiter = ',', keepEmpty = false) {
   const rows = [];
   let field = '';
   let row = [];
@@ -68,7 +68,8 @@ export function parseDelimited(text, delimiter = ',') {
 
   // Drop rows that are entirely empty — trailing newlines, and the blank spacer rows Excel
   // leaves behind when a sheet is exported from a larger selection.
-  return rows.filter(r => r.some(c => c.trim() !== ''));
+  // `keepEmpty` leaves them in, for a file whose meaning depends on the line a row sits on (a WebAssign export).
+  return keepEmpty ? rows : rows.filter(r => r.some(c => c.trim() !== ''));
 }
 
 /**

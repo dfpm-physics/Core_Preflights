@@ -51,6 +51,12 @@ check('nor System — it is in the user dropdown now', !keys.includes('system'))
 check('Course Admin is, and is director-gated', linkFor('admin').directorOnly === true);
 check('…pointing at the page that carries all four tabs', linkFor('admin').href === 'admin.html');
 
+// 2026-11-06: "Enter scores" became "Grade assignments", and the rollup got a bar entry. A director could not find a
+// report because the only routes were a dashboard link and the older assignments list.
+eq('Enter scores is now Grade assignments, and still opens entry.html', [linkFor('entry').label, linkFor('entry').href], ['Grade assignments', 'entry.html']);
+check('Reports is on the bar, for every staff member (the database decides who sees a report)',
+      linkFor('report')?.label === 'Reports' && linkFor('report').href === 'report.html' && !linkFor('report').directorOnly && !linkFor('report').adminOnly);
+
 // Every href must be a page that exists. This is the check that would have caught a nav entry
 // left pointing at a deleted file — the failure mode of every page merge.
 const PAGES = new Set(readdirSync(new URL('../../site/faculty/', import.meta.url)));

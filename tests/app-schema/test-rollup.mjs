@@ -1128,4 +1128,29 @@ check('…keeps it out of the AI picks',
 check('…and out of the random sample, into the Show-all list only',
       /refl\.low \? hidden : pool/.test(reportSrc));
 
+/* ── The Reports list (Change C, 2026-11-06) ─────────────────────────────────── */
+section('report picker — report.html with no ?i= lists the course instead of bouncing to the dashboard');
+{
+  const { reportPickerRows } = await import('../../site/js/faculty-rollup.js');
+  const rows = reportPickerRows([
+    { id: 'a', title: 'Alpha', due_at: '2026-10-01T00:00:00Z', is_published: true, done: 3, total: 5 },
+    { id: 'b', title: 'Bravo', due_at: '2026-11-01T00:00:00Z', is_published: true, done: 0, total: 5 },
+    { id: 'c', title: 'Charlie', due_at: null, is_published: false },
+    { id: 'd', assignmentSlug: 'delta-slug', due_at: '2026-09-01T00:00:00Z', is_published: true, done: 5, total: 5 },
+  ]);
+  eq('newest due date first, no date last', rows.map(r => r.id), ['b', 'a', 'd', 'c']);
+  eq('completion numbers are passed through, not recomputed', [rows[1].done, rows[1].total], [3, 5]);
+  eq('a draft is marked as not published', rows.find(r => r.id === 'c').published, false);
+  eq('a title falls back to the slug', rows.find(r => r.id === 'd').title, 'delta-slug');
+  eq('nothing in, nothing out', reportPickerRows(null), []);
+  const page = readFileSync(new URL('../../site/faculty/report.html', import.meta.url), 'utf8');
+  const start = page.slice(page.indexOf('async function start()'), page.indexOf('async function start()') + 900);
+  check('no ?i= shows the picker and no longer redirects to the dashboard', /showPicker\(\)/.test(start) && !/if \(!interactionId\) \{ location\.replace/.test(start), start);
+  check('?i= for a lesson that is not here still goes to the dashboard (today\'s behaviour)', /if \(!it\) \{ location\.replace\('dashboard\.html'\)/.test(page));
+  check('a failed list read shows an error and a retry, not an empty list', /Could not load the list of assignments/.test(page) && /picker-retry/.test(page));
+  check('the picker takes its rows from loadManager, which is what limits who sees what', /vm = await I\.loadManager\(ctx\);\s*\}\s*catch/.test(page));
+  const items = readFileSync(new URL('../../site/faculty/items.html', import.meta.url), 'utf8');
+  check('the Assignments page has a Report link on each row', /report\.html\?i=\$\{encodeURIComponent\(it\.offeringId\)\}/.test(items));
+}
+
 process.exitCode = summary() ? 0 : 1;

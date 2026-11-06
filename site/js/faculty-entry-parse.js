@@ -121,17 +121,104 @@ function maxInfo(set) {
   return { maxCents: list.length === 1 ? list[0] : null, maxList: list };
 }
 
-export function parseGradeFile(text) {
+/** The three exports a person can choose between. */
+export const FORMAT_CHOICES = [
+  { id: 'webassign', label: 'WebAssign' },
+  { id: 'teams', label: 'Teams' },
+  { id: 'gradescope', label: 'Gradescope' },
+];
+
+/** 'gradescope-course' -> 'gradescope'; null for anything not one of the three. */
+export function formatFamily(format) {
+  if (format === 'teams' || format === 'webassign') return format;
+  if (format === 'gradescope-assignment' || format === 'gradescope-course') return 'gradescope';
+  return null;
+}
+export const formatLabel = (format) => FORMAT_CHOICES.find(f => f.id === formatFamily(format))?.label || '';
+
+// WebAssign keeps its class details in the first rows: assignment names on file line 5, due dates on 6, points on 7,
+// cadets from line 10, and the assignment columns start at the seventh column. (The comparison gradebook's importer
+// reads exactly these places, and so does this.)
+const WA = { names: 4, due: 5, points: 6, firstCadet: 9, firstCol: 6 };
+const DATE_TEXT = /(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d{1,2},?\s+(19|20)\d{2}/i;
+
+/** Does this grid of rows have the WebAssign layout? Looks at structure, not at any one word. */
+export function looksLikeWebAssign(rows) {
+  if (!rows || rows.length <= WA.firstCadet) return false;
+  const tail = (r) => (rows[r] || []).slice(WA.firstCol).map(clean);
+  const names = tail(WA.names), dues = tail(WA.due), pts = tail(WA.points);
+  if (!names.some(Boolean)) return false;
+  if (!dues.some(d => DATE_TEXT.test(d))) return false;
+  const pointCells = pts.filter(Boolean);
+  if (!pointCells.length || !pointCells.every(p => { const s = parseScore(p); return s.ok && !s.blank; })) return false;
+  return true;
+}
+
+function parseWebAssign(rows) {
+  const notes = [];
+  const names = (rows[WA.names] || []).map(clean), dues = (rows[WA.due] || []).map(clean), pts = (rows[WA.points] || []).map(clean);
+  const columns = [];
+  for (let i = WA.firstCol; i < names.length; i++) {
+    if (!names[i]) continue;
+    const m = parseScore(pts[i]);
+    const maxCents = m.ok && !m.blank ? m.cents : null;
+    columns.push({ key: `c${columns.length}`, name: names[i], maxCents, maxList: maxCents == null ? [] : [maxCents], dueText: dues[i] || '', idx: i });
+  }
+  if (!columns.length) return { error: 'This looks like a WebAssign export but no assignment names were found in it.' };
+  const out = [];
+  let blanked = 0;
+  for (let r = WA.firstCadet; r < rows.length; r++) {
+    const row = rows[r];
+    const name = clean(row[0]), email = clean(row[1]), sidRaw = clean(row[2]);
+    if (!name && !email) continue;
+    const sid = normalizeId(sidRaw);
+    // NS and ND mean "not started / not done". They are left BLANK, as Gradescope's Missing is: in this system a blank
+    // becomes 0 when the column is closed, and a stored 0 now would stop late work from meaning anything.
+    const cells = columns.map(c => {
+      const v = clean(row[c.idx]);
+      if (/^(ns|nd)$/i.test(v)) { blanked++; return ''; }
+      return v;
+    });
+    out.push({ rowNo: r + 1, sid, sidRaw, email, first: '', last: '', name, cells });
+  }
+  if (!out.length) return { error: 'This looks like a WebAssign export but it has no cadet rows (they start on line 10).' };
+  if (blanked) notes.push(`${blanked} score(s) marked NS or ND were left blank rather than set to 0. A blank becomes 0 when you close the column.`);
+  return { format: 'webassign', columns: columns.map(({ idx, ...c }) => c), rows: out, notes };
+}
+
+const NOT_A_GRADE_FILE = 'This is not a WebAssign, Teams or Gradescope grade export. WebAssign has assignment names, due dates and points in its first rows and cadets from line 10. Gradescope needs "SID" and "Total Score" columns (or "SID" and "<name> - Max Points" columns). Teams needs "First Name, Last Name, Email Address" followed by "<name>, Points, Feedback" columns.';
+
+/**
+ * `options.format` ('webassign' | 'teams' | 'gradescope') is the person's correction of what was detected. A file that
+ * does not fit the format chosen is refused in words, never forced through.
+ */
+export function parseGradeFile(text, options = {}) {
   const src = String(text ?? '').replace(/^﻿/, '');
   if (!src.trim()) return { error: 'The file is empty.' };
   const rows = parseDelimited(src, sniffDelimiter(src));
   if (!rows.length) return { error: 'The file is empty.' };
   const header = rows[0];
   const body = rows.slice(1);
-  const format = detectFormat(header);
-  if (!format) {
-    return { error: 'This is not a Gradescope or Teams grade export. Gradescope needs "SID" and "Total Score" columns (or "SID" and "<name> - Max Points" columns). Teams needs "First Name, Last Name, Email Address" followed by "<name>, Points, Feedback" columns.' };
+  let format = detectFormat(header);
+  // WebAssign has no header row to read, so it is judged by its layout, with every line kept where it sits.
+  let waRows = null;
+  if (!format || options.format === 'webassign') {
+    for (const d of [sniffDelimiter(src), ',', '\t']) {
+      const grid = parseDelimited(src, d, true);
+      if (looksLikeWebAssign(grid)) { waRows = grid; break; }
+    }
   }
+  if (!format && waRows) format = 'webassign';
+  const want = options.format || null;
+  if (want) {
+    const found = formatFamily(format);
+    if (found !== want) {
+      const wantLabel = FORMAT_CHOICES.find(f => f.id === want)?.label || want;
+      return { error: `This file does not look like a ${wantLabel} export. ${found ? `It looks like ${formatLabel(format)}.` : 'It does not look like any of the three formats.'} Choose ${found ? formatLabel(format) : 'the right format'} above, or pick a different file.` };
+    }
+  }
+  if (!format) return { error: NOT_A_GRADE_FILE };
+  if (format === 'webassign') return parseWebAssign(waRows);
   const notes = [];
   const h = header.map(norm);
   const cell = (r, i) => (i == null || i < 0 ? '' : clean(r[i]));

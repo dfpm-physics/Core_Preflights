@@ -1350,6 +1350,8 @@ tr:last-child td { border-bottom: none; }
 
 .dropzone { border: 2px dashed var(--border); border-radius: var(--radius); padding: 28px; text-align: center; color: var(--muted); cursor: pointer; transition: border-color 0.15s, background 0.15s; }
 .dropzone:hover, .dropzone.drag-over { border-color: var(--blue-lt); background: var(--mc-hover-bg); }
+.drop-target { border-radius: var(--radius); }
+.drop-target.drop-active { outline: 2px dashed var(--blue-lt); outline-offset: 6px; background: var(--mc-hover-bg); }
 .dropzone .dz-ic { font-size: 1.8em; margin-bottom: 6px; }
 .dropzone strong { color: var(--blue-lt); }
 

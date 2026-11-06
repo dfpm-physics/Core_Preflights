@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8=' 'sha256-SPXacuXZa/yH5MNxbb2QJCE1v9cuobSO46DLvnDjIqQ='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-61OisB8/VGFrAyYpewRyKue060/zptK+H+tVwtLthEA=' 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Assignments · PREP</title>
   <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
@@ -250,15 +250,22 @@
       return `<a class="btn btn-ghost btn-sm" data-questions="${esc(it.offeringId)}" href="questions.html?a=${encodeURIComponent(it.offeringId)}">Questions</a> `;
     }
 
+    /* The class report for one assignment. A draft has nothing to report yet, so it is shown off, with the reason. */
+    function reportLink(it) {
+      return it.isPublished
+        ? `<a class="btn btn-ghost btn-sm" href="report.html?i=${encodeURIComponent(it.offeringId)}" title="See how the class did on this assignment">Report</a> `
+        : `<button class="btn btn-ghost btn-sm" disabled title="Cadets cannot have done an unpublished assignment, so there is no report yet.">Report</button> `;
+    }
+
     function rowHtml(it) {
       const state = it.isNew
         ? `<span class="score-badge ${it.isPublished ? 'full' : 'pending'}">${it.isPublished ? 'Published' : 'Unpublished'}</span>`
         : `<span class="score-badge ${it.isPublished ? 'full' : 'pending'}">${it.isPublished ? 'Published' : 'Unpublished'}</span>
            <div class="muted" style="font-size:0.78em;margin-top:3px">Entered on the older page</div>`;
       const actions = it.isNew
-        ? `${questionsLink(it)}<button class="btn btn-ghost btn-sm" data-edit="${esc(it.offeringId)}">Edit</button>
+        ? `${questionsLink(it)}${reportLink(it)}<button class="btn btn-ghost btn-sm" data-edit="${esc(it.offeringId)}">Edit</button>
            <button class="btn btn-ghost btn-sm" style="color:var(--red)" data-remove="${esc(it.offeringId)}">Remove</button>`
-        : `<a class="btn btn-ghost btn-sm" href="lessons.html" title="This assignment was entered on the older page. It is read-only here.">Open in the older editor</a>`;
+        : `${reportLink(it)}<a class="btn btn-ghost btn-sm" href="lessons.html" title="This assignment was entered on the older page. It is read-only here.">Open in the older editor</a>`;
       return `<tr data-item="${esc(it.offeringId)}" data-new="${it.isNew ? '1' : '0'}">
         <td><div style="font-weight:600">${esc(it.title)}</div><div class="muted" style="font-size:0.78em"><code>${esc(it.slug)}</code></div>
             <div style="margin-top:4px">${flags(it)}</div></td>

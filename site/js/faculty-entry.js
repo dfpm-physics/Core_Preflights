@@ -7,8 +7,10 @@
 // WRITE PATHS THAT NEED A REAL RUN ON STAGING, once the freeze ends (each is proven offline or on a
 // scratch database only): enterGrades, publishColumn, reopenColumn, excuse, revokeExcusal.
 
-import { fetchAll } from './schema.js';
+import { fetchAll, isPersonGraded } from './schema.js';
 import { dbCents, centsText } from './faculty-entry-parse.js';
+import { groupBacklog } from './faculty-backlog.js';
+import { loadCells } from './faculty-totals.js';
 
 /** An item is entered by hand when any of its paths is graded by hand entry or by import. */
 export const isHandEntered = (paths) => (paths || []).some(p => p.grading === 'hand_entered' || p.grading === 'imported');
@@ -60,6 +62,87 @@ export async function loadEntry(db, courseOfferingId) {
     for (const c of cR.data || []) closures[`${c.section_id}|${c.assignment_offering_id}`] = c.id;
   }
   return { sections: secR.data || [], items, roster, grades, excused, closures };
+}
+
+/* ── The list of assignments to grade ────────────────────────────────────────────
+ * Every count here is the database's own: the cells say which cadets have a drafted score, which have nothing
+ * yet, and which have work handed in and not graded (the same cells the Backlog page sorts into piles, through the
+ * same groupBacklog). This file adds no scores and decides no state. */
+
+/** Plain words for a grading method. The Assignments page has the same words; this module may not import that page's code. */
+const HOW_GRADED = {
+  auto_checked: 'Checked automatically', human_graded: 'Graded by a person',
+  ai_drafted: 'Free response: AI drafts overnight, a person reviews', effort: 'Effort',
+  hand_entered: 'Scores typed in by staff', imported: 'Scores imported',
+};
+
+/**
+ * Where an assignment is graded. The rule reads how it is delivered and how it is graded, never what kind of work it is:
+ *   a path graded by typed-in or imported scores        -> 'table'   (numbers entered here, one row per cadet)
+ *   else a path a person grades or reviews (the Grade page's own test, isPersonGraded) -> 'review' (the Grade page)
+ *   else (the system checks it)                          -> 'auto'    (nothing for a person to grade)
+ */
+export function openWith(paths) {
+  if (isHandEntered(paths)) return 'table';
+  return isPersonGraded(paths) ? 'review' : 'auto';
+}
+
+/**
+ * One row per assignment, unfinished first.
+ *   items    [{ id, title, dueAt, published, paths }]
+ *   cells    gradebook_cells rows (published assignments only, which is what the database returns)
+ *   aiCounts { [assignmentId]: number of AI-suggested drafts a person has not yet finalized }
+ */
+export function buildGradeList({ items, cells, aiCounts = {} }) {
+  const piles = groupBacklog(cells);
+  const count = (key, id) => piles[key].find(e => e.itemId === id)?.count || 0;
+  const rows = items.map(it => {
+    const waiting = count('toPublish', it.id), noScore = count('toEnter', it.id), toGrade = count('toGrade', it.id);
+    const badDate = count('badDate', it.id), ai = aiCounts[it.id] || 0;
+    const notPublished = !it.published;
+    return {
+      id: it.id, title: it.title, dueAt: it.dueAt || null, published: it.published, notPublished,
+      howGraded: (it.paths || []).map(p => HOW_GRADED[p.grading] || p.grading || '').filter(Boolean).join(' / '),
+      opensWith: openWith(it.paths), waiting, noScore, toGrade, badDate, aiDrafts: ai,
+      finished: !notPublished && !waiting && !noScore && !toGrade && !badDate && !ai,
+    };
+  });
+  return rows.sort((a, b) => (a.finished - b.finished)
+    || (a.dueAt && b.dueAt ? new Date(a.dueAt) - new Date(b.dueAt) : (a.dueAt ? -1 : b.dueAt ? 1 : 0))
+    || a.title.localeCompare(b.title));
+}
+
+/** The lines of "what is waiting" for one row, in plain words. A finished row has none. */
+export function waitingParts(r) {
+  const n = (k, one, many) => `${k} ${k === 1 ? one : many}`;
+  const out = [];
+  if (r.notPublished) out.push('Not published to cadets yet');
+  if (r.waiting) out.push(`${n(r.waiting, 'score is', 'scores are')} drafted and waiting for approval`);
+  if (r.aiDrafts) out.push(`${n(r.aiDrafts, 'AI-suggested draft needs', 'AI-suggested drafts need')} a person to review`);
+  if (r.toGrade) out.push(`${n(r.toGrade, 'cadet has', 'cadets have')} handed in work that is not graded`);
+  if (r.noScore) out.push(`${n(r.noScore, 'cadet has', 'cadets have')} no score yet`);
+  if (r.badDate) out.push(`${n(r.badDate, 'cadet has', 'cadets have')} a due date that cannot be worked out`);
+  return out;
+}
+
+/** -> { items: rows } | { error }. Any failed read is an error: a short list would read as "all done". */
+export async function loadGradeList(db, courseOfferingId) {
+  const itemsR = await db.from('assignment_offerings')
+    .select('id,is_published,due_at,position,assignments!inner(slug,title),offering_activities(delivery,grading)')
+    .eq('course_offering_id', courseOfferingId);
+  if (itemsR.error) return { error: itemsR.error };
+  const items = (itemsR.data || []).map(r => ({
+    id: r.id, title: r.assignments?.title || r.id, dueAt: r.due_at, published: !!r.is_published, paths: r.offering_activities || [],
+  }));
+  if (!items.length) return { items: [] };
+  const cR = await loadCells(db, courseOfferingId, 'final');
+  if (cR.error) return { error: cR.error };
+  const aiR = await fetchAll(() => db.from('grades').select('id,assignment_offering_id')
+    .eq('source', 'ai_suggested').eq('is_finalized', false).in('assignment_offering_id', items.map(i => i.id)));
+  if (aiR.error) return { error: aiR.error };
+  const aiCounts = {};
+  for (const g of aiR.data || []) aiCounts[g.assignment_offering_id] = (aiCounts[g.assignment_offering_id] || 0) + 1;
+  return { items: buildGradeList({ items, cells: cR.data, aiCounts }) };
 }
 
 /** Turn a database or network error into a sentence a person can act on. */

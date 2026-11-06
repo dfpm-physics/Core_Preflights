@@ -59,7 +59,7 @@
       "doc": "site/help/instructor-grading.md",
       "kind": "help",
       "tier": "instructor",
-      "reviewed": "2026-11-04",
+      "reviewed": "2026-11-06",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/instructions/PROJECT.md",
@@ -107,7 +107,7 @@
       "doc": "site/help/README.md",
       "kind": "reference",
       "tier": null,
-      "reviewed": "2026-07-28",
+      "reviewed": "2026-11-06",
       "sources": [
         "site/js/help.js",
         "site/help/MANIFEST.json"
@@ -192,7 +192,7 @@
       "doc": "site/help/director-schema-reference.md",
       "kind": "help",
       "tier": "director",
-      "reviewed": "2026-11-03",
+      "reviewed": "2026-11-06",
       "sources": [
         "supabase/migrations/app/001_core_model.sql",
         "supabase/migrations/app/002_rls.sql",
@@ -224,7 +224,7 @@
       "doc": "site/help/instructor-accounts.md",
       "kind": "help",
       "tier": "instructor",
-      "reviewed": "2026-11-05",
+      "reviewed": "2026-11-06",
       "sources": [
         ".ai/instructions/PROJECT.md",
         "site/js/roster-import.js",

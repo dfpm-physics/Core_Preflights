@@ -8,6 +8,33 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-11-06 — Matthew Recker via Claude (Grade assignments and Reports; branch `v2-cf-grade`, local, uncommitted)
+
+From the click-through feedback. Change C of three.
+
+- **"Enter scores" is now "Grade assignments"** (`site/faculty/entry.html` keeps its name). With nothing selected it lists
+  every assignment of the term that still needs something: how it is graded, what is waiting (drafted scores to approve,
+  AI-suggested drafts a person has not reviewed, cadets with no score yet, work handed in and not graded, date problems,
+  not published). The counts are the Backlog page's own cells (`gradebook_cells` through `groupBacklog`) plus one count of
+  unfinalized AI drafts; nothing is added up from scores. A failed read shows an error with a retry, never an empty list. A
+  tick box shows finished assignments too.
+- **Where an assignment opens** is decided by `openWith(paths)`, from delivery and grading only: typed-in or imported
+  scores open the table on this page; work a person grades or reviews opens the Grade page on that assignment with a link
+  back (`grade.html?a=...&back=entry`); work the system checks has nothing for a person to grade.
+- **The table takes a dropped file** anywhere on it, and keeps a Choose button for the keyboard. **WebAssign** joins Teams
+  and Gradescope (`faculty-entry-parse.js`; read from the comparison gradebook's importer as a layout spec only). The
+  format is detected, shown, and can be corrected from a menu; a file that does not fit the chosen format is refused in
+  words. The preview and every hold before a write are unchanged. Deliberate difference from that importer: WebAssign's
+  NS and ND are left blank, not stored as 0, as Gradescope's Missing already is.
+- **Reports** is on the staff bar. `report.html` with no `?i=` lists the course's assignments to pick from instead of
+  sending the person to the dashboard; with `?i=` it behaves as before, and who may see a report did not change. Each row on
+  the Assignments page has a Report link (off, with the reason, for an unpublished assignment). A director found no report
+  because the only routes were a dashboard link and the Older assignments list.
+- `parseDelimited` gained an optional keep-empty-rows argument (WebAssign is read by line position).
+- Page hashes in the Content-Security-Policy meta tags were rebuilt for the edited pages (`csp_pages.py --write`).
+- **Not done:** no write to staging, no save or import was clicked, nothing committed. Backlog is left in place: its piles
+  are now also visible in the new list, but it still carries near-a-line cadets and the exports.
+
 ## 2026-11-05 — Matthew Recker via Claude (small faults from the roll-in walk, and the parts that stayed unwalked; branch `v2-step2-rollin`, local)
 
 Five small faults found in the roll-in walk are closed, each with a failing test first, and the screens the walk could not reach were walked in a browser against the staging project only.
