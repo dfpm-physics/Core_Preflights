@@ -10,7 +10,7 @@
 //
 // tests/app-schema/test-db-schema.mjs fails when this file drifts from staging.
 //
-// Source: scripts/app/gen_db_schema.py · schema `app` · 46 tables
+// Source: scripts/app/gen_db_schema.py · schema `app` · 49 tables
 // Shape per table: { name, comment, rls, primaryKey[], labelColumn, columns[], foreignKeys[],
 //                    enums{col:[values]}, policyCommands[], writable }
 //
@@ -262,9 +262,10 @@ export const DB_SCHEMA = {
         ]
       },
       "policyCommands": [
+        "ALL",
         "SELECT"
       ],
-      "writable": false
+      "writable": true
     },
     "analysis_runs": {
       "name": "analysis_runs",
@@ -468,9 +469,10 @@ export const DB_SCHEMA = {
         ]
       },
       "policyCommands": [
+        "ALL",
         "SELECT"
       ],
-      "writable": false
+      "writable": true
     },
     "assignment_due_dates": {
       "name": "assignment_due_dates",
@@ -916,7 +918,7 @@ export const DB_SCHEMA = {
           "default": "false",
           "maxLength": null,
           "generated": false,
-          "comment": "Says which page owns a row: true means entered on a v2 page. TEMPORARY, removed at step 2 with the three step 1 rules. It says who owns the row, never what kind of work it is.",
+          "comment": "Says which page created a row: true means entered on a v2 page. It no longer restricts publishing or finalizing (migration 079). Kept until no page reads it.",
           "pk": false
         },
         {
@@ -1250,8 +1252,114 @@ export const DB_SCHEMA = {
         ]
       },
       "policyCommands": [
+        "ALL",
         "SELECT"
       ],
+      "writable": true
+    },
+    "closure_carry": {
+      "name": "closure_carry",
+      "comment": "A transferred cadet's closed-or-open state for one item, kept when it differs from the state of the section they moved into. Removed when a person closes or reopens that column in the cadet's current section. Written only by triggers.",
+      "rls": true,
+      "primaryKey": [
+        "enrollment_id",
+        "assignment_offering_id"
+      ],
+      "labelColumn": "enrollment_id",
+      "columns": [
+        {
+          "name": "enrollment_id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": true
+        },
+        {
+          "name": "assignment_offering_id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": true
+        },
+        {
+          "name": "closed",
+          "type": "boolean",
+          "udt": "bool",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "from_section_id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "carried_at",
+          "type": "timestamp with time zone",
+          "udt": "timestamptz",
+          "nullable": false,
+          "default": "now()",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        }
+      ],
+      "foreignKeys": [
+        {
+          "name": "closure_carry_assignment_offering_id_fkey",
+          "columns": [
+            "assignment_offering_id"
+          ],
+          "refTable": "assignment_offerings",
+          "refColumns": [
+            "id"
+          ],
+          "onDelete": "cascade"
+        },
+        {
+          "name": "closure_carry_enrollment_id_fkey",
+          "columns": [
+            "enrollment_id"
+          ],
+          "refTable": "enrollments",
+          "refColumns": [
+            "id"
+          ],
+          "onDelete": "cascade"
+        },
+        {
+          "name": "closure_carry_from_section_id_fkey",
+          "columns": [
+            "from_section_id"
+          ],
+          "refTable": "sections",
+          "refColumns": [
+            "id"
+          ],
+          "onDelete": "set null"
+        }
+      ],
+      "enums": {},
+      "policyCommands": [],
       "writable": false
     },
     "column_closures": {
@@ -1339,6 +1447,17 @@ export const DB_SCHEMA = {
           "generated": false,
           "comment": null,
           "pk": false
+        },
+        {
+          "name": "closed_by_publish",
+          "type": "boolean",
+          "udt": "bool",
+          "nullable": false,
+          "default": "false",
+          "maxLength": null,
+          "generated": false,
+          "comment": "True only when publish_column inserted this row. Unpublish reopens only these; a closure made any other way stays closed. Set by the trigger from a transaction-local setting, never from the row a caller sends.",
+          "pk": false
         }
       ],
       "foreignKeys": [
@@ -1389,9 +1508,109 @@ export const DB_SCHEMA = {
       ],
       "enums": {},
       "policyCommands": [
+        "ALL",
         "INSERT",
         "SELECT",
         "UPDATE"
+      ],
+      "writable": true
+    },
+    "content_key_archive": {
+      "name": "content_key_archive",
+      "comment": "Per row changed by migration 047: the content (or snapshot) exactly as it was, and the question and key rows the move made. Staff-only through the database owner and service role; no policy for the web roles. Used by the rollback; drop it after the move has been through one cycle.",
+      "rls": true,
+      "primaryKey": [
+        "id"
+      ],
+      "labelColumn": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": true
+        },
+        {
+          "name": "source",
+          "type": "text",
+          "udt": "text",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "row_id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "original",
+          "type": "jsonb",
+          "udt": "jsonb",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "created_question_ids",
+          "type": "ARRAY",
+          "udt": "_uuid",
+          "nullable": false,
+          "default": "'{}'::uuid[]",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "created_key_ids",
+          "type": "ARRAY",
+          "udt": "_uuid",
+          "nullable": false,
+          "default": "'{}'::uuid[]",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "moved_at",
+          "type": "timestamp with time zone",
+          "udt": "timestamptz",
+          "nullable": false,
+          "default": "now()",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        }
+      ],
+      "foreignKeys": [],
+      "enums": {
+        "source": [
+          "activities",
+          "assignment_offerings"
+        ]
+      },
+      "policyCommands": [
+        "ALL"
       ],
       "writable": true
     },
@@ -1823,6 +2042,17 @@ export const DB_SCHEMA = {
           "generated": false,
           "comment": "Report heading, for example 215. Provisional until the report copies arrive.",
           "pk": false
+        },
+        {
+          "name": "meeting_days",
+          "type": "ARRAY",
+          "udt": "_text",
+          "nullable": false,
+          "default": "ARRAY['M'::text, 'T'::text]",
+          "maxLength": null,
+          "generated": false,
+          "comment": "The days of the week this course meets: M, T, W, R (Thursday), F. Default M and T, the split schedule. What the pages offer for a new section and what the roster import checks a section's day against. Not enforced on sections.meeting_days: a section that holds another day keeps it.",
+          "pk": false
         }
       ],
       "foreignKeys": [],
@@ -1832,6 +2062,107 @@ export const DB_SCHEMA = {
         "SELECT"
       ],
       "writable": true
+    },
+    "credential_events": {
+      "name": "credential_events",
+      "comment": "Append-only. A password reset is logged when it is requested and again when it is done, by the reset function, with the caller it verified from the sign-in token. No foreign keys, so the log outlives the people in it. Migration 049.",
+      "rls": true,
+      "primaryKey": [
+        "id"
+      ],
+      "labelColumn": "event",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": true
+        },
+        {
+          "name": "event",
+          "type": "text",
+          "udt": "text",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "actor",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "course_offering_id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "target_student",
+          "type": "bigint",
+          "udt": "int8",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "target_staff",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "at",
+          "type": "timestamp with time zone",
+          "udt": "timestamptz",
+          "nullable": false,
+          "default": "now()",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        }
+      ],
+      "foreignKeys": [],
+      "enums": {
+        "event": [
+          "student_reset_requested",
+          "student_reset_done",
+          "staff_reset_requested",
+          "staff_reset_done"
+        ]
+      },
+      "policyCommands": [
+        "SELECT"
+      ],
+      "writable": false
     },
     "ei_sessions": {
       "name": "ei_sessions",
@@ -2523,6 +2854,7 @@ export const DB_SCHEMA = {
         ]
       },
       "policyCommands": [
+        "ALL",
         "INSERT",
         "SELECT",
         "UPDATE"
@@ -2742,9 +3074,10 @@ export const DB_SCHEMA = {
       ],
       "enums": {},
       "policyCommands": [
+        "ALL",
         "SELECT"
       ],
-      "writable": false
+      "writable": true
     },
     "grade_checkpoint_runs": {
       "name": "grade_checkpoint_runs",
@@ -2957,9 +3290,10 @@ export const DB_SCHEMA = {
         ]
       },
       "policyCommands": [
+        "ALL",
         "SELECT"
       ],
-      "writable": false
+      "writable": true
     },
     "grade_events": {
       "name": "grade_events",
@@ -3062,9 +3396,10 @@ export const DB_SCHEMA = {
       "foreignKeys": [],
       "enums": {},
       "policyCommands": [
+        "ALL",
         "SELECT"
       ],
-      "writable": false
+      "writable": true
     },
     "grade_excusal_events": {
       "name": "grade_excusal_events",
@@ -3173,9 +3508,10 @@ export const DB_SCHEMA = {
         ]
       },
       "policyCommands": [
+        "ALL",
         "SELECT"
       ],
-      "writable": false
+      "writable": true
     },
     "grade_excusals": {
       "name": "grade_excusals",
@@ -3334,6 +3670,7 @@ export const DB_SCHEMA = {
       ],
       "enums": {},
       "policyCommands": [
+        "ALL",
         "INSERT",
         "SELECT",
         "UPDATE"
@@ -3807,9 +4144,10 @@ export const DB_SCHEMA = {
       ],
       "enums": {},
       "policyCommands": [
+        "ALL",
         "SELECT"
       ],
-      "writable": false
+      "writable": true
     },
     "letter_scales": {
       "name": "letter_scales",
@@ -4035,7 +4373,7 @@ export const DB_SCHEMA = {
           "default": null,
           "maxLength": null,
           "generated": false,
-          "comment": "How the work is graded. See offering_activities_delivery_grading_ck for the allowed pairs.",
+          "comment": "How the work is graded. See offering_activities_delivery_grading_ck for the allowed pairs. ai_drafted: the overnight job writes a suggested mark and a person finalizes it (migration 077, rule in 078).",
           "pk": false
         },
         {
@@ -4046,7 +4384,7 @@ export const DB_SCHEMA = {
           "default": null,
           "maxLength": null,
           "generated": false,
-          "comment": "Whether a yellow (warn) mark earns full credit. True only with human_graded. New items write false; backfilled preflights write true.",
+          "comment": "Whether a yellow (warn) mark earns full credit. True only with human_graded or ai_drafted. New items write false unless ai_drafted; backfilled preflights write true.",
           "pk": false
         }
       ],
@@ -4083,6 +4421,10 @@ export const DB_SCHEMA = {
         "grading_role": [
           "graded",
           "practice"
+        ],
+        "grading": [
+          "human_graded",
+          "ai_drafted"
         ]
       },
       "policyCommands": [
@@ -4366,9 +4708,10 @@ export const DB_SCHEMA = {
       ],
       "enums": {},
       "policyCommands": [
+        "ALL",
         "SELECT"
       ],
-      "writable": false
+      "writable": true
     },
     "question_keys": {
       "name": "question_keys",
@@ -5167,6 +5510,7 @@ export const DB_SCHEMA = {
       ],
       "enums": {},
       "policyCommands": [
+        "ALL",
         "INSERT",
         "SELECT"
       ],
@@ -6202,9 +6546,10 @@ export const DB_SCHEMA = {
       ],
       "enums": {},
       "policyCommands": [
+        "ALL",
         "SELECT"
       ],
-      "writable": false
+      "writable": true
     },
     "submissions": {
       "name": "submissions",
@@ -6382,6 +6727,7 @@ export const DB_SCHEMA = {
         ]
       },
       "policyCommands": [
+        "ALL",
         "INSERT",
         "SELECT",
         "UPDATE"
@@ -6518,7 +6864,7 @@ export const DB_SCHEMA = {
     },
     "tutor_error_log": {
       "name": "tutor_error_log",
-      "comment": "One row per tutor request failure a cadet actually saw, written by the log-tutor-error edge function. Contains no conversation text by construction (CORE.md section 3).",
+      "comment": "Tutor request failures a cadet saw. Written only by the log-tutor-error function. Rows for unregistered lessons and rows over the per-minute caps are dropped by trigger (051). Identity columns are claims, not identity.",
       "rls": true,
       "primaryKey": [
         "id"
@@ -6738,9 +7084,10 @@ export const DB_SCHEMA = {
       "foreignKeys": [],
       "enums": {},
       "policyCommands": [
+        "ALL",
         "SELECT"
       ],
-      "writable": false
+      "writable": true
     },
     "user_preferences": {
       "name": "user_preferences",
@@ -6788,6 +7135,7 @@ export const DB_SCHEMA = {
       "foreignKeys": [],
       "enums": {},
       "policyCommands": [
+        "ALL",
         "DELETE",
         "INSERT",
         "SELECT",
