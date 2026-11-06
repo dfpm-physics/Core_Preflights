@@ -221,6 +221,12 @@ The form derives the meeting days and period from the code as you type them and 
 either before it saves. The import is the tool for starting a term; this is the one for the section
 that appears in week three.
 
+**Which days a course meets.** A course meets on M and T by default, the split schedule. **Add a section** offers
+only the days the course meets. A section that already holds another day keeps it and is shown with it. When a roster
+file names a new section whose day is not one of the course's days, the preview adds one line saying so; the section is
+still created and the rows still import. A site administrator sets the days under **More options** when making a course
+on **Courses and terms**.
+
 *(Corrected 2026-07-28. These two screens used to point at each other: Section coverage said
 sections were created by a roster import, and the import refused any file naming a section that did
 not exist — so a new course could not be set up at all. Both routes work now.)*

@@ -901,3 +901,22 @@ export function describeSectionDefaults(code) {
   const days = d.meeting_days.length ? `meets ${d.meeting_days.join(', ')}` : 'no meeting days';
   return d.period != null ? `${days}, period ${d.period}` : days;
 }
+
+/**
+ * One plain sentence for the import preview when a new section's day (read from its code the way
+ * sectionDefaultsFrom() does) is not one of the days the course meets. Returns '' when nothing is outside
+ * the list. It is a note, never a block: the section is still created and the rows still import.
+ *
+ * @param {string[]} codes       the section codes the file names that the course does not have yet
+ * @param {string[]} courseDays  the course's own list, for example ['M', 'T']
+ */
+export function outsideDaysNote(codes, courseDays) {
+  const listed = new Set((courseDays || []).map(d => String(d).toUpperCase()));
+  const names = { M: 'Monday', T: 'Tuesday', W: 'Wednesday', R: 'Thursday', F: 'Friday' };
+  const out = (codes || []).map(c => ({ code: String(c), day: sectionDefaultsFrom(c).meeting_days[0] }))
+    .filter(x => x.day && !listed.has(x.day));
+  if (!out.length) return '';
+  const days = [...listed].join(', ') || 'none';
+  return out.map(x => `${x.code} would meet on ${names[x.day]} (${x.day}), which is not one of this course's meeting days (${days}).`).join(' ')
+    + ' It will still be created and imported. If that day is not right, ask a site administrator to check the meeting days set for this course.';
+}

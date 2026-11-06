@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8=' 'sha256-qxL1b3a13rsDd7YhMwDVkaavbCD5w9QvRN+IH47j4B8='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8=' 'sha256-pndskYfb4Llv0Mln1+G4OKhNkgxWS0lhddXF2+ggsUc='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Courses and terms · PREP</title>
   <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
@@ -23,6 +23,7 @@
     import { db } from '../js/supabase.js';
     import { esc, runPage } from '../js/util.js';
     import * as T from '../js/faculty-terms.js';
+    import * as CD from '../js/course-days.js';
     import { setPref, flushPrefs } from '../js/prefs.js';
 
     const ctx = await bootstrap({ require: 'faculty' });
@@ -72,6 +73,17 @@
     }
 
     /* ── Set up a course for a term (administrators) ─────────────────────── */
+    // The meeting days of a course, under a closed "More options". M and T is the split schedule and the default; the box
+    // opens by itself only when the saved choice is something else, so a person who changed it never sees it hidden.
+    function daysOptionsHtml(prefix, selected) {
+      const sel = CD.cleanDays(selected === undefined ? CD.DEFAULT_DAYS : selected);
+      const boxes = CD.ALL_DAYS.map(d => `<label class="check-inline" style="margin-right:12px"><input type="checkbox" class="${prefix}-day" value="${d}"${sel.includes(d) ? ' checked' : ''}> ${d} <span class="muted">${CD.DAY_NAMES[d]}</span></label>`).join('');
+      return `<details class="more-options" id="${prefix}-more"${CD.sameDays(sel, CD.DEFAULT_DAYS) ? '' : ' open'} style="grid-column:1/-1"><summary style="cursor:pointer;font-weight:600">More options</summary>
+        <div class="field" style="margin-top:8px"><label>Days this course meets</label><div>${boxes}</div>
+          <div class="field-hint">M and T is the split schedule used today: some sections meet on M-days and the rest on T-days. Change it only if this course meets on other days of the week. It applies to the course in every term.</div></div></details>`;
+    }
+    const readDays = (prefix) => [...document.querySelectorAll(`.${prefix}-day:checked`)].map(b => b.value);
+
     function setupHtml() {
       const d = draft || { course: { mode: state.courses.length ? 'existing' : 'new' }, term: { mode: state.terms.length ? 'existing' : 'new' }, directorId: '' };
       const cm = d.course.mode, tm = d.term.mode;
@@ -96,6 +108,7 @@
             <div class="field-hint">Lowercase letters, numbers and hyphens.</div></div>
           <div class="field"><label for="su-ctitle">Title</label><input id="su-ctitle" type="text" placeholder="Physics 310" maxlength="120" value="${v(d.course.title)}"></div>
           <div class="field"><label for="su-cdept">Department (optional)</label><input id="su-cdept" type="text" maxlength="80" value="${v(d.course.department)}"></div>
+          ${daysOptionsHtml('su-c', d.course.meetingDays)}
         </div>
 
         <h3>2. Term</h3>
@@ -129,7 +142,7 @@
     function readSetup() {
       const mode = (name) => (document.querySelector(`input[name="${name}"]:checked`) || {}).value || 'existing';
       return {
-        course: { mode: mode('su-cm'), id: $('su-course').value, code: $('su-ccode').value, title: $('su-ctitle').value, department: $('su-cdept').value },
+        course: { mode: mode('su-cm'), id: $('su-course').value, code: $('su-ccode').value, title: $('su-ctitle').value, department: $('su-cdept').value, meetingDays: readDays('su-c') },
         term: { mode: mode('su-tm'), id: $('su-term').value, code: $('su-tcode').value, label: $('su-tlabel').value, startsOn: $('su-tstart').value, endsOn: $('su-tend').value },
         directorId: $('su-director').value,
       };
@@ -241,6 +254,7 @@
           <div class="field"><label for="c-code">Code</label><input id="c-code" type="text" placeholder="phys-310" maxlength="40"></div>
           <div class="field"><label for="c-title">Title</label><input id="c-title" type="text" placeholder="Physics 310" maxlength="120"></div>
           <div class="field"><label for="c-dept">Department (optional)</label><input id="c-dept" type="text" maxlength="80"></div>
+          ${daysOptionsHtml('c')}
           <div class="field-action"><button class="btn btn-primary" id="c-save">Create course</button></div>
         </div>
 
@@ -278,7 +292,7 @@
     }
 
     async function saveCourse() {
-      const form = { code: $('c-code').value, title: $('c-title').value, department: $('c-dept').value };
+      const form = { code: $('c-code').value, title: $('c-title').value, department: $('c-dept').value, meetingDays: readDays('c') };
       const problems = T.checkCourse(form);
       if (problems.length) { showCreateError(problems.join(' ')); return; }
       const r = await T.createCourse(db, form);
