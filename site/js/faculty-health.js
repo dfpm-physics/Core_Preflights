@@ -425,8 +425,9 @@ export function shapeHealth(raw, { offeringId = 'all' } = {}) {
         isPublished: !!a.is_published,
         dueAt: a.due_at,
         dueByDay: a.due_by_day,
-        // An item made on the Assignments page with one path cannot be given a second there, so the written-fallback
-        // check has nothing for the person to do on it.
+        // The Assignments page adds a tutor beside a typed response, never a typed response beside a tutor, so on a one-path item
+        // made there the written-fallback check has no action for the person to take, and it is skipped. A tutor-only item made
+        // there is therefore not flagged for lacking a graded typed response; that gap is accepted until the page can add one.
         soloNewPage: a.entered_on_new_page === true && acts.length < 2,
         hasInteractive: !!interactive,
         artifactUrl: interactive?.activities?.content?.artifact_url || null,

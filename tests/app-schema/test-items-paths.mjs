@@ -116,12 +116,37 @@ section('the form refuses what it cannot store, and points at the field');
   check('an opening time that is not real', bad({ opensDate: '2026-12-07', opensTime: '25:00' }).length === 1 && I.moreOptionsTarget(bad({ opensDate: '2026-12-07', opensTime: '25:00' })[0]) === 'i-opens');
   check('an opening time the clocks skip', bad({ opensDate: '2027-03-14', opensTime: '02:30' }).length === 1);
   eq('a tutor beside a typed response needs its id', bad({ withTutor: true, interactiveSlug: '' }).length, 1);
-  eq('... and passes with one', bad({ withTutor: true, interactiveSlug: 'tutor-1' }), []);
+  eq('... and passes with one', bad({ withTutor: true, interactiveSlug: 'tutor-1' }), []);   // a draft: no link is needed until it is published
   eq('a tutor id already saved is not asked for again', I.checkForm(base({ withTutor: true, interactiveSlug: '' }), { kinds, sections, slugFrozen: true }), []);
   const p = bad({ withTutor: true, interactiveSlug: 'tutor-1', policy: 'tutor', grading: 'ai_drafted' });
   check('an AI draft cannot sit on a practice-only typed response', p.length === 1 && I.moreOptionsTarget(p[0]) === 'i-policy', p.join());
   eq('an AI draft can sit on a typed response that earns credit', bad({ withTutor: true, interactiveSlug: 't', policy: 'typed', grading: 'ai_drafted' }), []);
   check('an unknown policy is refused', bad({ withTutor: true, interactiveSlug: 't', policy: 'both' }).length === 1);
+  // review 3, m2: a tutor a cadet can open needs a link before the assignment is published; a draft may wait for it
+  {
+    const t = (o) => bad({ withTutor: true, interactiveSlug: 't', interactiveUrl: '', ...o });
+    eq('a draft whose tutor has no link yet is fine (the link can be added later)', t({ publish: false, policy: 'choice' }), []);
+    const choice = t({ publish: true, policy: 'choice' });
+    check('publishing a tutor cadets can open, with no link, is refused and points at the link box', choice.length === 1 && I.moreOptionsTarget(choice[0]) === 'i-iurl', choice.join());
+    check('so is a tutor that earns credit', t({ publish: true, policy: 'tutor' }).length === 1);
+    eq('a tutor that is only practice beside a typed response earning credit is not offered to cadets as the work, so no link is demanded', t({ publish: true, policy: 'typed' }), []);
+    check('a tutor-only assignment is published with a link or not at all', bad({ delivery: 'interactive_tutor', grading: 'effort', interactiveSlug: 't', interactiveUrl: '', publish: true }).length === 1);
+    eq('... and with a link it passes', bad({ delivery: 'interactive_tutor', grading: 'effort', interactiveSlug: 't', interactiveUrl: 'https://claude.ai/public/artifacts/abc', publish: true }), []);
+    const scheme = t({ publish: false, interactiveUrl: 'javascript:alert(1)' });
+    check('a link that is not http or https is refused, published or not', scheme.length === 1 && I.moreOptionsTarget(scheme[0]) === 'i-iurl', scheme.join());
+    check('so is ftp', t({ interactiveUrl: 'ftp://example.test/x' }).length === 1);
+  }
+  // review 3, m4: the release date may not fall after the earliest deadline
+  {
+    const o = (d, t, extra = {}) => bad({ opensDate: d, opensTime: t, ...extra });
+    eq('opening before the deadline is fine', o('2026-12-07', '00:00'), []);
+    const late = o('2026-12-11', '08:00');
+    check('opening after the deadline is refused and points at the date', late.length === 1 && I.moreOptionsTarget(late[0]) === 'i-opens', late.join());
+    eq('opening the same day, before the 23:59 deadline, is fine', o('2026-12-10', '08:00'), []);
+    eq('with no deadline there is nothing to be after', o('2030-01-01', '00:00', { dayDates: { M: '', T: '' }, sameDate: false }), []);
+    const sec = o('2026-12-09', '08:00', { sectionDates: { 's-t': '2026-12-08' } });
+    check('a section with an earlier date counts as the earliest deadline', sec.length === 1, sec.join());
+  }
   check('an unknown commit rule is refused', bad({ withTutor: true, interactiveSlug: 't', switchPolicy: 'whenever' }).length === 1);
   eq('a commit rule is not checked when there is no second path', bad({ switchPolicy: 'whenever' }), []);
   const dbFile = (await import('node:fs')).readFileSync(new URL('../../supabase/migrations/app/001_core_model.sql', import.meta.url), 'utf8');

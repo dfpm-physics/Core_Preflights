@@ -8,6 +8,20 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-11-05 — Matthew Recker via Claude (third fix round on the roll-in: prefill link, tutor changes, key reads, wording; branch `v2-step2-rollin`, local, not applied anywhere)
+
+**What.**
+- **Prefill link.** A link that names another course and term the person directs now moves the Assignments page to that course and term before the chooser opens, or refuses in plain words if it cannot; the form and the save only ever act on the course the form was opened on, and a save on any other is refused. A course the person only teaches is reported as not found. A link opened where nothing can be loaded is kept in the address until a course the person directs is chosen. The chooser says when an assignment in the term already uses the link's assignment id, and marks that card. An assignment that cannot take a tutor is shown with the reason and cannot be chosen. A `policy` word that is not one of the three is ignored. The link format is unchanged; the contract text for `pub` now says the link ticks the Published box for the director and never publishes by itself.
+- **Tutor replace and remove.** The save context is built in one place (`saveContext`) from what the page is given, and the release of cadets who chose the tutor checks that it has the person acting before anything is written. The save reports an error instead of stopping silently. The release checks the number the person confirmed, reads past a thousand cadets, and the warning says how many released cadets already hold a mark. If a replacement tutor cannot be created, the old one is put back (its reports are not restored).
+- **Answer keys and ids.** Typing in a guidance box before the saved keys load no longer breaks the late read. While the keys are loading, or after the read failed, a save that touches guidance in a saved question is refused; a failed read is an error banner. A box typed in early is named when the keys arrive. A question cannot be added until the saved question ids have been read.
+- **Smaller.** A tutor that cadets can open needs a link before the assignment is published, and a link must be http or https. A release date after the earliest deadline is refused. The confirm text no longer promises a question that is not always asked. Staff pages say "assignment", not "item", on the questions, entry and backlog pages. The questions page no longer says the assignment stays unpublished. One comment says online-question assignments get no planned zeros because their deadline already makes a blank Missing.
+
+**Proofs.** Each new check was shown failing against the previous code, then passing. The link handling is tested by running the page's own source against stand-ins. Tests that built their own save context now build it with `saveContext`. Offline suites run through `.github/ci/run_offline_suites.py`; page policy hashes re-checked with `scripts/checks/csp_pages.py`. No database was touched and no scratch database was needed, because no SQL changed.
+
+**Not done.** Nothing applied to any database; no Fall row written; `lessons.html` and `faculty-lessons.js` untouched; no page opened in a browser, so the new messages, the chooser changes and the key-read banner are checked only in the page's source and its tests. The browser harness lines for the questions page were edited to match and not run. The copy of the contract kept with the builder kit still describes `pub` the old way (it is hash-locked and was not edited). Left open: the older editor and some other staff pages still say "item"; whether released cadets with a finalized mark can send another report is unconfirmed; counts read through a staff session answer what that person may see.
+
+---
+
 ## 2026-11-05 — Matthew Recker via Claude (second fix round on the roll-in: Published control, database rules, hand pulls; branch `v2-step2-rollin`, local, not applied anywhere)
 
 **What.**

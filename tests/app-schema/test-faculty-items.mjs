@@ -211,7 +211,8 @@ section('form checks');
 /* ───────────────────────────────────────────────────────────────────────────────────────── */
 section('createItem: every write, in order, never published');
 const sections = [{ id: 's-none', code: 'ENT-A', meeting_days: [] }, { id: 's-wf', code: 'ENT-B', meeting_days: ['W', 'F'] }];
-const ctx = { courseId: 'course-1', courseCode: 'gate-entry', courseOfferingId: 'co-1', sections };
+// built the way the page builds it from bootstrap(), so a field the page does not send cannot be supplied here
+const ctx = I.saveContext({ currentCourse: 'course-1', currentCourseCode: 'gate-entry', currentOffering: 'co-1', user: { id: 'user-director' } }, sections);
 const form = (o = {}) => ({ kindId: 'homework', title: 'Problem Set 3', description: 'Made up.', delivery: 'online_questions',
   grading: 'human_graded', points: '10', lateAllowed: true, isBonus: false, progIncluded: true,
   allDate: '2026-12-10', time: '23:59', sectionDates: {}, interactiveSlug: '', interactiveUrl: '', ...o });

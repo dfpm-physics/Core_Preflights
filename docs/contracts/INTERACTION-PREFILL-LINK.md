@@ -38,7 +38,7 @@ Append a query string with these parameters (URL-encode every value):
 | `ititle` / `idesc` | ⬜ | Interaction title / description. Default to the lesson's. | |
 | `num` | ⬜ | Lesson number (ordering). | `2` |
 | `due_m` / `due_t` | ⬜ | M-day / T-day due dates, `YYYY-MM-DD`. | `2026-08-24` |
-| `pub` | ⬜ | `1` = publish immediately; omit or `0` = save as draft (recommended). | `pub=0` |
+| `pub` | ⬜ | `1` = tick the form's Published box for the director to review; omit or `0` = leave it unticked (recommended). A link never publishes by itself: the director's Save does. | `pub=0` |
 
 > Anything not in this table is **ignored** — the page reads exactly these keys. In particular
 > there is no parameter for lesson **objectives**; the director sets those by hand after Save.
@@ -101,7 +101,7 @@ values yourself when you build it this way.
      choose *existing*, the list is scoped to the course and term chosen above.
 3. The **assignment form** opens, prefilled with your values. Reviews — especially the **slug** and
    **artifact URL** — and clicks **Save**.
-4. Publishes when ready (or you set `pub=1` to prepublish).
+4. The director ticks Published when it is ready (a link with `pub=1` arrives with the box already ticked, for them to check; nothing is published until they Save).
 
 The query string is cleared from the address bar as soon as it is read, so a refresh won't
 re-open or resubmit it.

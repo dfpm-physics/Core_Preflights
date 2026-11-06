@@ -594,6 +594,14 @@ export function checkForm(form, { kinds = [], sections = [], slugFrozen = false,
         out.push('The interactive tutor needs its id: lowercase letters, numbers and hyphens, the same id the lesson posts to.');
       }
     }
+    // A tutor a cadet can open needs a link before the assignment is published (the older editor demanded it at save; a draft
+    // may wait, so a tutor can be made first and linked once it is published on claude.ai). A link that is not http(s) is never stored.
+    const tutorReachable = form.delivery === 'interactive_tutor' || (wantsTwoPaths(form) && ['choice', 'tutor'].includes(form.policy || 'choice'));
+    if (tutorReachable) {
+      const url = String(form.interactiveUrl || '').trim();
+      if (url && !/^https?:\/\//i.test(url)) out.push('The tutor link must start with http:// or https://.');
+      else if (!url && form.publish === true) out.push('Enter the tutor link before publishing: cadets can open this tutor. Untick Published to save it as a draft and add the link later.');
+    }
     if (wantsTwoPaths(form)) {
       const pol = form.policy || 'choice';
       if (!POLICIES.includes(pol)) out.push('Choose which path earns credit.');
@@ -656,6 +664,17 @@ export function checkForm(form, { kinds = [], sections = [], slugFrozen = false,
       out.push(`${time} does not exist in Mountain time on ${missing.join(', ')}, because the clocks skip that hour. Choose another time.`);
     }
   }
+  // The release date may not fall after the earliest deadline: cadets would never see the work before it is due.
+  if (form.opensDate && !out.length) {
+    try {
+      const sched = buildSchedule(form, sections, 'x');
+      const dues = [sched.dueAt, ...sched.rows.map(r => r.due_at)].filter(Boolean).map(x => new Date(x).getTime()).filter(n => !isNaN(n));
+      const opens = new Date(opensAtFor(form)).getTime();
+      if (dues.length && opens > Math.min(...dues)) {
+        out.push('The date it opens is after the earliest deadline, so cadets would not see it before it is due. Choose an earlier date.');
+      }
+    } catch { /* a date problem is already listed */ }
+  }
   return out;
 }
 
@@ -715,6 +734,7 @@ export function needsMoreOptions(item, { prefill = null, sections = [], sched = 
 export function moreOptionsTarget(problem) {
   const t = String(problem || '');
   if (/tutor needs its id/i.test(t)) return 'i-islug';
+  if (/tutor link/i.test(t)) return 'i-iurl';
   if (/time must look like|does not exist in Mountain time/i.test(t)) return 'i-time';
   if (/description/i.test(t)) return 'i-desc';
   if (/delivery and grading/i.test(t)) return 'i-delivery';

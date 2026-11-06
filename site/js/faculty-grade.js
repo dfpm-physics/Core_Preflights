@@ -1433,6 +1433,7 @@ export function staleZeroIds(offering, students, gradeMap = {}, submissionMap = 
  *                status (condition 6). Enrollments in scope are ignored if included.
  *   canZero      false when the viewer cannot see every section (seesWholeOffering())
  * @param {Date} [now]
+ * Settled, not a gap: no zeros are planned for online-question assignments, because their deadline already makes a blank Missing.
  * @returns {object[]} one item per cadet-lesson that has something to say:
  *   kind 'publish' | 'zero' | 'hold' (with `reason`, a PUBLISH_HOLDS key) | 'wrong-published'
  */
