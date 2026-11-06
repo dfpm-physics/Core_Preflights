@@ -144,6 +144,29 @@ export function pathShape(paths) {
   return { kind: 'locked' };
 }
 
+/**
+ * Whether a tutor can be put on this assignment from a link. The page adds a tutor BESIDE a typed response, or keeps the tutor
+ * an assignment already has; it cannot put one next to questions answered on the site, an in-person or outside-graded
+ * assignment, or an assignment whose paths it does not edit. A refused assignment is shown in the chooser with the reason.
+ */
+export function canCarryTutor(item) {
+  const shape = pathShape(item?.paths);
+  if (shape.kind === 'choice') return true;
+  if (shape.kind !== 'single') return false;
+  return shape.main.delivery === 'typed_response' && shape.main.modality === 'written' || shape.main.modality === 'interactive';
+}
+
+/** The sentence for an assignment that cannot take a tutor; empty when it can. */
+export function tutorRefusal(item) {
+  if (canCarryTutor(item)) return '';
+  const shape = pathShape(item?.paths);
+  if (shape.kind === 'single') {
+    return `This assignment is "${DELIVERY_LABEL[shape.main.delivery] || shape.main.delivery}", and a tutor can be added only beside a typed response. Nothing was changed.`;
+  }
+  if (shape.kind === 'none') return 'This assignment has no path to put a tutor beside. Nothing was changed.';
+  return 'This assignment has paths that this page does not edit, so a tutor cannot be added to it here. Nothing was changed.';
+}
+
 /** The paths a form asks for, in order. One path, or the typed response plus the tutor when the form wants both. */
 export function pathPlan(form) {
   if (isTypedResponse(form.delivery) && form.withTutor) {

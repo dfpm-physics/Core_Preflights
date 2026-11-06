@@ -114,14 +114,44 @@ export function editorFromContent(content, keys = null, storedIds = []) {
 /** Fill the key boxes that are still empty from a key read that finished after the person began typing. Never
  *  overwrites a box with text in it. Also remembers the ids those keys belong to. */
 export function applyKeys(editor, keys, storedIds = []) {
-  for (const q of editor.questions) {
+  const conflicts = [];
+  editor.questions.forEach((q, i) => {
     const text = keys?.[q.id];
-    if (!text) continue;
+    if (!text) return;
     const field = (q.type === 'multiple_choice' || q.type === 'numerical') ? 'correct_answer' : 'expected_response';
     if (String(q[field] ?? '').trim() === '') showKeys([q], { [q.id]: text });
-  }
+    else if (q._stored) conflicts.push({ n: i + 1, id: q.id });      // typed before the stored guidance arrived: kept, and the person is told
+  });
+  editor.keyConflicts = conflicts;
   editor.used_ids = [...new Set([...(editor.used_ids || []), ...(storedIds || []), ...Object.keys(keys || {})])];
   return editor;
+}
+
+/**
+ * Mark a question's guidance box as touched by the person. Called on the first keystroke. It must leave the record of what was
+ * filled from the key table alone (that record is an object; a flag written over it made the late key read throw), and it
+ * makes the box count as touched, so questionsForSave sends it.
+ */
+export function noteTyped(q) {
+  if (!q._keyShown || typeof q._keyShown !== 'object') q._keyShown = {};
+}
+
+/**
+ * The reason a question may not be added now, or ''. While the ids the saved activity has rows for are still being read (or
+ * could not be read), a new question could be given an id that a retired or keyless question already holds, and its key would
+ * land on that one. `editor.idsState` is set by the page around that read: 'pending', 'ok' or 'failed'; unset means a new
+ * set with nothing stored, where any id is free.
+ */
+export function additionBlocked(editor) {
+  if (editor?.idsState === 'pending') return 'The saved questions are still loading. Try again in a moment.';
+  if (editor?.idsState === 'failed') return 'The ids of the saved questions could not be read, so no question can be added until the page is reloaded.';
+  return '';
+}
+
+/** Whether the guidance of a question already saved would ride in this save: a box the person touched, with whatever it holds. */
+function touchedStoredKeys(editor) {
+  return questionsForSave(inOrder(stampRoles((editor.questions || []).map(q => ({ ...q })))), { keepKeys: false })
+    .some(q => q._stored && ('expected_response' in q || 'correct_answer' in q));
 }
 
 /** Remove question `i`. Its id is remembered, so a question added later gets a new one. */
@@ -215,6 +245,13 @@ export function checkEditor(editor) {
   const out = [];
   const qs = editor.questions || [];
   if (!qs.length) out.push('Add at least one question.');
+  // The saved guidance is read after the form opens. A box touched before that read has returned, or after it failed, would
+  // replace (or blank) guidance the person has not seen, so that save is refused. A save that leaves every box alone is fine.
+  if (editor.keyState === 'failed' && touchedStoredKeys(editor)) {
+    out.push('The saved answer keys could not be read, so guidance in a saved question cannot be changed in this save. Clear what you typed in those boxes, or reload the page.');
+  } else if (editor.keyState === 'pending' && touchedStoredKeys(editor)) {
+    out.push('The saved answer keys are still loading, so guidance typed in a saved question cannot be saved yet. Wait a moment, then save again.');
+  }
   qs.forEach((q, i) => {
     const n = `Question ${i + 1}`;
     if (!String(q.text || '').trim()) out.push(`${n} needs its text.`);

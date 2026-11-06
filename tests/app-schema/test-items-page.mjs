@@ -182,6 +182,17 @@ section('the page\'s own link handler: a link for another course moves the page 
   check('the address is still cleared with the same call the contract test looks for', /history\.replaceState\(null, '', location\.pathname\)/.test(script));
 }
 
+section('the chooser: same-id flag, and assignments that cannot take a tutor (review 3, M2, M4)');
+{
+  const chooser = script.slice(script.indexOf('async function openDestChooser'), script.indexOf('/* A link from the older Assignments page'));
+  check('the chooser looks for an assignment that already uses the link\'s id and says so', /LK\.sameIdItem\(vm\.items, prefill\)/.test(chooser) && /already uses the id/.test(chooser));
+  check('a card for an assignment that cannot take a tutor gives the reason and is not selectable', /carriesTutor: I\.canCarryTutor\(it\)/.test(chooser) && /tutorRefusal: I\.tutorRefusal\(it\)/.test(chooser));
+  check('clicking such a card says why instead of doing nothing', /I\.canCarryTutor\(it\)/.test(chooser.slice(chooser.indexOf("addEventListener('click'"))));
+  const overlay = script.slice(script.indexOf('function applyOverlay'), script.indexOf('function showNote'));
+  check('applying a tutor to an assignment that cannot take one is refused out loud', /I\.canCarryTutor\(item\)/.test(overlay) && /showNote\(I\.tutorRefusal\(item\)\)/.test(overlay));
+  check('the overlay no longer promises a confirmation it does not always ask', !/You will be asked to confirm\./.test(overlay));
+}
+
 section('a save is built from the page context the way the page builds it (review 3, C2)');
 {
   const I = await import('../../site/js/faculty-items.js');

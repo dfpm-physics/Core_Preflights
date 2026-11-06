@@ -318,4 +318,19 @@ section('runPrefill: a link for another course the person directs switches the p
   }
 }
 
+section('the chooser says when the link\'s assignment id is already used, and when an assignment cannot take a tutor (review 3, M2, M4)');
+{
+  const items = [{ slug: 'lesson-04-circuits', title: 'Circuits', offeringId: 'o-1' }, { slug: 'other', title: 'Other', offeringId: 'o-2' }];
+  eq('an assignment with the link\'s id is found', LK.sameIdItem(items, { id: 'lesson-04-circuits' })?.offeringId, 'o-1');
+  eq('no id in the link: nothing is found', LK.sameIdItem(items, { id: null }), null);
+  eq('an id nobody uses: nothing is found', LK.sameIdItem(items, { id: 'new-one' }), null);
+  const base = LK.destinationCard({ tutorSlug: null, isNew: true, isPublished: false, lessonNumber: 3 }, 'iid');
+  eq('a card without the new fields is exactly what the older page shows', base, { swap: false, badge: 'Add to', meta: 'L3 · draft · no tutor yet', selectable: true });
+  const no = LK.destinationCard({ tutorSlug: null, isNew: true, isPublished: false, lessonNumber: null, carriesTutor: false, tutorRefusal: 'It is delivered as questions on the site.' }, 'iid');
+  check('an assignment that cannot take a tutor is not selectable and is not badged "Add to"', no.selectable === false && no.badge !== 'Add to', JSON.stringify(no));
+  check('and the reason is on the card', /questions on the site/.test(no.meta), no.meta);
+  const same = LK.destinationCard({ tutorSlug: null, isNew: true, isPublished: false, lessonNumber: null }, 'iid', { sameId: true });
+  check('the assignment with the link\'s id is marked', /same id/i.test(same.meta) && same.selectable === true, same.meta);
+}
+
 process.exit(summary() ? 0 : 1);

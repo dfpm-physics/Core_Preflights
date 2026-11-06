@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8=' 'sha256-OdXBmFEiy57InxQNCp1cWbKpnpTefXMoA1WgDR969ww='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8=' 'sha256-ApoF+TaP/YnUZntVCUB+LcQWRt3ysIVA9J3+hwse1no='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Assignments · PREP</title>
   <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
@@ -475,18 +475,31 @@
           if (editing !== item || !fr.get() || w.error || !(w.submissions || w.grades)) return;
           fr.get().workLocked = true; fr.redraw();
         });
-        // The keys arrive after the form is usable. They are put into the boxes that are still empty and never replace
-        // what the person has typed meanwhile; the ids the activity has rows for are remembered so none is reused.
-        Promise.all([loadQuestionKeys(path.activityId), I.loadQuestionIds(db, path.activityId)]).then(([r, ids]) => {
-          if (editing !== item || !fr.get()) return;
+        // The keys and the ids arrive after the form is usable. Until they do, a question cannot be added (it could be given an id a
+        // saved question already holds) and guidance typed into a saved question is not saved. The keys are put into the boxes that
+        // are still empty and never replace what the person has typed meanwhile; a box typed in early is named to the person.
+        const editor = fr.get();
+        editor.keyState = 'pending'; editor.idsState = 'pending';
+        const settle = (r, ids) => {
+          if (editing !== item || fr.get() !== editor) return;
+          if (ids.error) editor.idsState = 'failed'; else editor.idsState = 'ok';
           if (r.error) {
-            applyKeys(fr.get(), {}, ids.qids);
-            note.textContent = 'The answer keys could not be read, so their boxes are blank. Saving leaves the stored keys as they are. Do not type new guidance in a blank box until this is fixed: it would replace the stored one.';
-            note.style.display = 'block'; return;
+            editor.keyState = 'failed';
+            applyKeys(editor, {}, ids.qids);
+            showError('The saved answer keys could not be read, so the guidance boxes are blank. A save that touches guidance in a saved question is refused until the page is reloaded; everything else still saves.');
+          } else {
+            editor.keyState = 'ok';
+            applyKeys(editor, r.keys, ids.qids);
+            if (editor.keyConflicts?.length) {
+              showNote('You typed in the guidance of ' + editor.keyConflicts.map(c => 'question ' + c.n).join(', ') +
+                ' before the saved guidance loaded. Saving replaces the saved guidance there with what you typed.');
+            }
           }
-          applyKeys(fr.get(), r.keys, ids.qids);
+          if (ids.error) showError('The ids of the saved questions could not be read, so no question can be added until the page is reloaded.');
           fr.redraw();
-        });
+        };
+        Promise.all([loadQuestionKeys(path.activityId), I.loadQuestionIds(db, path.activityId)]).then(([r, ids]) => settle(r, ids))
+          .catch((e) => settle({ error: e || { message: 'read failed' } }, { error: e || { message: 'read failed' }, qids: [] }));
       } else if (item) fr.set(null);
       formSlug = '';
       showInteractive(); syncSwap();
@@ -549,7 +562,7 @@
     }
     /* Choosing an existing assignment carries the tutor and nothing else. */
     function applyOverlay(o, item) {
-      if (isLocked(item)) return;
+      if (!I.canCarryTutor(item)) { showNote(I.tutorRefusal(item)); return; }
       const cur = tutorOf(item);
       const set = (id, v) => { if (v != null && v !== '') $(id).value = v; };
       if (mainOf(item).modality === 'written') $('i-withtutor').checked = true;
@@ -557,8 +570,8 @@
       syncSwap();
       set('i-islug', o.iid); set('i-iurl', o.iurl); set('i-ititle', o.ititle); set('i-idesc', o.idesc);
       showNote(!cur ? 'The tutor will be added to this assignment when you save.'
-        : swapOn ? 'The tutor id differs from the saved one, so saving replaces the tutor and deletes its reports. You will be asked to confirm.'
-        : 'The tutor id is the same, so saving only updates the link and keeps every report.');
+        : swapOn ? 'The tutor id differs from the saved one, so saving replaces the tutor and deletes its reports. If it has reports or cadets who chose it, you will be asked to confirm first.'
+        : 'The tutor id is the same, so saving updates the link, keeps every report, and also sets the tutor\'s title and description to the ones the link carries (check them above).');
     }
     function showNote(text) { const n = $('im-note'); n.textContent = text; n.style.display = 'block'; }
 
@@ -729,8 +742,10 @@
       const pick = $('dest-pick');
       pick.style.display = 'none';
       modal.querySelectorAll('.dest-box').forEach(b => b.classList.remove('active'));
+      const known = LK.sameIdItem(vm.items, prefill);
       $('dest-sub').textContent = (prefill.ititle || prefill.title || prefill.iid || prefill.id || 'This tutor') +
-        ' needs a home. Choose the course and term first, then whether it starts a new assignment or joins one you have.';
+        ' needs a home. Choose the course and term first, then whether it starts a new assignment or joins one you have.' +
+        (known ? ` An assignment in this term already uses the id “${prefill.id}” (“${known.title}”): “Create new” would make a second one with a different ending, so pick “Modify or add to” if you mean that one.` : '');
       renderDestOffering(prefill);
       modal.querySelectorAll('[data-dest]').forEach(b => { b.onclick = () => {
         modal.querySelectorAll('.dest-box').forEach(x => x.classList.toggle('active', x === b));
@@ -771,15 +786,18 @@
     function renderDestLessons(prefill) {
       const iid = prefill.iid || prefill.id;
       const items = vm.items;
+      const known = LK.sameIdItem(vm.items, prefill);
       $('dest-pick-note').textContent = 'Pick the assignment to add it to. Red cards already have a tutor: a different id would replace it, and its reports with it.';
       $('dest-lessons').innerHTML = items.length ? items.map(it => {
-        const c = LK.destinationCard({ tutorSlug: it.tutorSlug, isNew: it.isNew, isPublished: it.isPublished, lessonNumber: it.position }, iid);
+        const c = LK.destinationCard({ tutorSlug: it.tutorSlug, isNew: it.isNew, isPublished: it.isPublished, lessonNumber: it.position,
+          carriesTutor: I.canCarryTutor(it), tutorRefusal: I.tutorRefusal(it) }, iid, { sameId: known === it });
         return `<div class="lb-orphan les${c.swap ? ' swap' : ''}" data-lid="${esc(it.offeringId)}" title="${esc(it.title)}"${c.selectable ? '' : ' style="opacity:.55;cursor:not-allowed"'}>
           <span class="lb-orphan-badge">${esc(c.badge)}</span><span class="lb-orphan-title">${esc(it.title)}</span><span class="lb-orphan-meta">${esc(c.meta)}</span></div>`;
       }).join('') : '<div class="muted">No assignments in this course and term yet. Choose “Create new assignment”.</div>';
       $('dest-lessons').querySelectorAll('[data-lid]').forEach(el => el.addEventListener('click', () => {
         const it = vm.items.find(x => x.offeringId === el.dataset.lid);
         if (!it || !it.isNew) return;       // entered on the older page: read-only here
+        if (!I.canCarryTutor(it)) { $('dest-pick-note').textContent = I.tutorRefusal(it); return; }
         $('dest-modal').classList.remove('open');
         openForm(it, null, LK.overlayForExisting(prefill));
       }));

@@ -372,6 +372,81 @@ section('review fixes: a key read that finishes late fills only boxes that are s
   eq('an empty box is filled', e2.questions[0].expected_response, 'stored guidance');
 }
 
+section('a key read that is late, failed or contested never blanks or silently replaces stored guidance (round 3, item 4)');
+{
+  const stored = () => F.editorFromContent({ questions: [
+    { id: 'q3', role: 'free_response', type: 'free_response', text: 'Three', points: 1 },
+    { id: 'q4', role: 'free_response', type: 'free_response', text: 'Four', points: 1 }] }, null);
+  const sent = (e) => F.contentFromEditor(e, { keepKeys: false }).questions.map(q => 'expected_response' in q);
+
+  // (a) typing before the read returns
+  {
+    const e = stored();
+    F.noteTyped(e.questions[0]);                       // what the box does on the first keystroke
+    e.questions[0].expected_response = 'x';
+    e.questions[0].expected_response = '';             // typed, then cleared
+    let threw = null;
+    try { F.applyKeys(e, { q3: 'stored guidance three', q4: 'stored guidance four' }); } catch (err) { threw = String(err); }
+    check('typing in a box and clearing it before the read returns does not break the late read', threw === null, threw);
+    eq('the cleared box is filled from the stored guidance', e.questions[0].expected_response, 'stored guidance three');
+    eq('the other box is filled too', e.questions[1].expected_response, 'stored guidance four');
+    eq('neither is sent again unchanged', sent(e), [false, false]);
+  }
+  {
+    const e = stored();
+    F.noteTyped(e.questions[0]); e.questions[0].expected_response = 'my own words';
+    F.applyKeys(e, { q3: 'stored guidance three', q4: 'stored guidance four' });
+    eq('text typed before the read is kept', e.questions[0].expected_response, 'my own words');
+    eq('and the person is told it will replace the stored guidance, by question number', e.keyConflicts, [{ n: 1, id: 'q3' }]);
+    eq('the other box, not typed in, is just filled', [e.questions[1].expected_response, sent(e)], ['stored guidance four', [true, false]]);
+  }
+  // (b) the read failed
+  {
+    const e = stored(); e.keyState = 'failed';
+    eq('a failed read with no guidance touched: the save is not blocked', F.checkEditor(e), []);
+    F.noteTyped(e.questions[1]); e.questions[1].expected_response = '';
+    const p = F.checkEditor(e);
+    check('a box touched and left empty would blank the stored guidance, so the save is refused', p.length === 1 && /could not be read/.test(p[0]), p.join());
+    e.questions[1].expected_response = 'new text';
+    check('new text over guidance that could not be read is refused too', F.checkEditor(e).length === 1);
+  }
+  {
+    const e = stored(); e.keyState = 'pending';
+    F.noteTyped(e.questions[0]); e.questions[0].expected_response = 'typed early';
+    const p = F.checkEditor(e);
+    check('a save before the read has returned, with a guidance box touched, is refused', p.length === 1 && /still loading/.test(p[0]), p.join());
+    e.keyState = 'ok';
+    eq('once the read has succeeded it is allowed', F.checkEditor(e), []);
+  }
+  {
+    const e = F.emptyEditor(); e.keyState = 'failed';
+    const q = F.newQuestion('free_response', e.questions, e.used_ids); q.text = 'New'; q.points = 1; q.expected_response = 'guidance for a new question';
+    e.questions.push(q);
+    check('a question added in this session (nothing stored to blank) is not refused', !F.checkEditor(e).some(x => /could not be read|still loading/.test(x)));
+  }
+  // (c) Add before the id read returns
+  {
+    const e = stored();
+    eq('no read in progress: adding is allowed', F.additionBlocked(e), '');
+    e.idsState = 'pending';
+    check('adding while the ids are being read is blocked, with a reason', /still loading/.test(F.additionBlocked(e)));
+    e.idsState = 'failed';
+    check('adding after the ids could not be read is blocked, with a reason', /could not be read/.test(F.additionBlocked(e)));
+    e.idsState = 'ok';
+    eq('after a good read it is allowed', F.additionBlocked(e), '');
+    e.idsState = 'pending'; const used = [...e.used_ids];
+    F.applyKeys(e, {}, ['q9']);
+    check('the late id read adds its ids to the used list', e.used_ids.includes('q9') && used.every(x => e.used_ids.includes(x)));
+  }
+  const ui = read('site/js/free-response-ui.js');
+  check('the box no longer overwrites the key marker with a flag', !/_keyShown = true/.test(ui) && /noteTyped\(q\)/.test(ui));
+  check('Add and the two toggles ask additionBlocked first', (ui.match(/additionBlocked\(editor\)/g) || []).length >= 2);
+  const pg = read('site/faculty/items.html');
+  check('the page marks the key and id reads as pending, then ok or failed', /keyState = 'pending'/.test(pg) && /idsState = 'pending'/.test(pg) && /keyState = 'failed'/.test(pg) && /idsState = 'failed'/.test(pg) && /keyState = 'ok'/.test(pg) && /idsState = 'ok'/.test(pg));
+  check('a failed read is an error banner, not an information note', /showError\('The saved answer keys could not be read/.test(pg));
+  check('a read that throws is treated as failed', /\.catch\(/.test(pg.slice(pg.indexOf('loadQuestionKeys(path.activityId)'), pg.indexOf('} else if (item) fr.set(null)'))));
+}
+
 section('review fixes: the page places the reading fields under More options and offers no Remove on pinned cards');
 {
   const ui = read('site/js/free-response-ui.js');

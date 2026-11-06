@@ -199,20 +199,35 @@ export function datesFromPrefill(prefill, sections = []) {
  *
  * @param {{tutorSlug?: string|null, isNew: boolean, isPublished?: boolean, lessonNumber?: number|null}} item
  */
-export function destinationCard(item, iid) {
+export function destinationCard(item, iid, { sameId = false } = {}) {
   const has = !!item.tutorSlug;
   const swap = has && item.tutorSlug !== iid;
+  // `carriesTutor` false: the assignment is delivered in a way this page cannot put a tutor beside. It is shown, with the reason,
+  // and cannot be chosen, so a card never says "Add to" for something the save would then ignore. Absent means yes.
+  const refused = item.carriesTutor === false;
   const meta = [
     item.lessonNumber != null ? 'L' + item.lessonNumber : null,
     item.isPublished ? 'published' : 'draft',
-    !has ? 'no tutor yet' : swap ? `replaces “${item.tutorSlug}”` : 'updates this tutor in place',
+    refused ? (item.tutorRefusal || 'cannot take a tutor')
+      : !has ? 'no tutor yet' : swap ? `replaces “${item.tutorSlug}”` : 'updates this tutor in place',
+    sameId ? 'same id as the link' : null,
   ].filter(Boolean).join(' · ');
   return {
-    swap,
-    badge: !item.isNew ? 'Older page' : swap ? 'Will replace' : (has ? 'Will update' : 'Add to'),
+    swap: refused ? false : swap,
+    badge: !item.isNew ? 'Older page' : refused ? 'No tutor' : swap ? 'Will replace' : (has ? 'Will update' : 'Add to'),
     meta,
-    selectable: !!item.isNew,
+    selectable: !!item.isNew && !refused,
   };
+}
+
+/**
+ * The assignment, among those in view, that already uses the id the link names for its assignment. Creating a new assignment
+ * with that id does not reuse it (the save gives the second one a different ending), so the chooser says so. null for none.
+ */
+export function sameIdItem(items, prefill) {
+  const id = String(prefill?.id || '').trim();
+  if (!id) return null;
+  return (items || []).find(i => i.slug === id) || null;
 }
 
 /**

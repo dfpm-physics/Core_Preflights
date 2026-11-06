@@ -10,6 +10,7 @@ import { uploadFigure } from './faculty-lessons.js';
 import {
   QUESTION_TYPES, TYPE_LABEL, READING_TIME_NOTE, newQuestion, pinnedState, pinOn, pinOff,
   ragLabel, parseRagManifest, showKeys, PINNED_ROLES, removeQuestion, canChangeType, canRemove, REMOVAL_LOCKED_NOTE,
+  noteTyped, additionBlocked,
 } from './free-response.js';
 
 const ROLE_LABEL = { reading_time: 'Reading time question', reading_reflection: 'Reading reflection question' };
@@ -123,7 +124,7 @@ export function mountFreeResponse(host, opts = {}) {
       else if (f === 'points') q.points = el.value.trim() === '' ? '' : Number(el.value);
       else if (f === 'tolerance') q.tolerance = el.value.trim() === '' ? '' : Number(el.value);
       else q[f] = el.value;
-      if (f === 'expected_response' || f === 'correct_answer') q._keyShown = true;
+      if (f === 'expected_response' || f === 'correct_answer') noteTyped(q);
     }
     opts.onChange && opts.onChange();
   };
@@ -132,6 +133,8 @@ export function mountFreeResponse(host, opts = {}) {
     const el = ev.target; if (!editor || !(el instanceof HTMLElement)) return;
     if (el.dataset.pin) {
       const on = el.checked;
+      const why = on ? additionBlocked(editor) : '';
+      if (why) { notice = why; draw(); return; }
       const r = on ? pinOn(editor, el.dataset.pin) : pinOff(editor, el.dataset.pin);
       notice = r === 'kept' ? 'That question was reworded, so it was kept as an ordinary free-response question.'
         : r === 'locked' ? REMOVAL_LOCKED_NOTE : '';
@@ -162,7 +165,11 @@ export function mountFreeResponse(host, opts = {}) {
   const onClick = (ev) => {
     const b = ev.target instanceof HTMLElement ? ev.target.closest('button') : null;
     if (!b || !editor) return;
-    if (b.dataset.add) { editor.questions.push(newQuestion(b.dataset.add, editor.questions, editor.used_ids)); draw(); opts.onChange && opts.onChange(); return; }
+    if (b.dataset.add) {
+      const why = additionBlocked(editor);
+      if (why) { notice = why; draw(); return; }
+      editor.questions.push(newQuestion(b.dataset.add, editor.questions, editor.used_ids)); draw(); opts.onChange && opts.onChange(); return;
+    }
     const i = Number(b.dataset.q), qs = editor.questions;
     if (b.dataset.act === 'remove') { if (PINNED_ROLES.includes(qs[i]?.role)) return; if (!canRemove(editor, qs[i])) { notice = REMOVAL_LOCKED_NOTE; draw(); return; } removeQuestion(editor, i); }
     else if (b.dataset.act === 'up' && i > 0) [qs[i - 1], qs[i]] = [qs[i], qs[i - 1]];

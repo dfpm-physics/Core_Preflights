@@ -349,6 +349,23 @@ section('updateItem: replace the tutor with a different id');
   eq('on a two-path item the replacement keeps both roles', [r.error, writesTo('offering_activities', 'insert')[0].payload.grading_role, writesTo('offering_activities', 'update').length], [null, 'graded', 0]);
 }
 
+section('which assignments can take a tutor, and what is said when one cannot (review 3, M4)');
+{
+  const P = (modality, delivery, grading, role = 'graded') => ({ modality, delivery, grading, role, activityId: modality, slug: modality, content: {} });
+  const it = (paths) => ({ isNew: true, paths });
+  check('a typed response can', I.canCarryTutor(it([P('written', 'typed_response', 'human_graded')])));
+  check('a typed response with a tutor already can (the link updates or replaces it)', I.canCarryTutor(it([P('written', 'typed_response', 'ai_drafted'), P('interactive', 'interactive_tutor', 'effort')])));
+  check('a tutor-only assignment can', I.canCarryTutor(it([P('interactive', 'interactive_tutor', 'effort')])));
+  for (const [name, paths] of [['questions answered on the site', [P('questions', 'online_questions', 'auto_checked')]],
+                               ['in person', [P('external', 'in_person', 'hand_entered')]],
+                               ['done elsewhere', [P('external', 'elsewhere', 'imported')]],
+                               ['no path at all', []],
+                               ['two paths that are not a typed response and a tutor', [P('questions', 'online_questions', 'auto_checked'), P('interactive', 'interactive_tutor', 'effort')]]]) {
+    check(`${name}: it cannot, and it says why`, !I.canCarryTutor(it(paths)) && I.tutorRefusal(it(paths)).length > 20, I.tutorRefusal(it(paths)));
+  }
+  check('an empty reason when it can', I.tutorRefusal(it([P('written', 'typed_response', 'human_graded')])) === '');
+}
+
 section('the unlock helper names the person and does nothing when nobody chose');
 {
   reset({ 'submissions.select': [{ id: 's1' }, { id: 's2' }] });
