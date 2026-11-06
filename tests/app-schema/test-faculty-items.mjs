@@ -663,8 +663,10 @@ section('the first-time form shows only what most assignments need');
   const inMore = (id) => { const at = html.indexOf(`id="${id}"`); return at > more && at < moreEnd; };
   check('the control is closed in the markup (no open attribute)', !/<details[^>]*id="i-more"[^>]*open/.test(html));
   for (const id of ['i-kind', 'i-title', 'i-points', 'i-alldate']) check(`${id} is shown at once`, html.indexOf(`id="${id}"`) > -1 && !inMore(id));
-  for (const id of ['i-desc', 'i-delivery', 'i-grading', 'i-islug', 'i-iurl', 'i-late', 'i-bonus', 'i-prog', 'i-time', 'i-same', 'i-sections', 'i-daybox'])
+  for (const id of ['i-desc', 'i-delivery', 'i-grading', 'i-late', 'i-bonus', 'i-prog', 'i-time', 'i-same', 'i-sections', 'i-daybox'])
     check(`${id} is behind More options`, inMore(id));
+  // 2026-11-06: the tutor id and link sit in the visible "How cadets do this work" section, not behind the control.
+  for (const id of ['i-islug', 'i-iurl']) check(`${id} is in the setup section, in view`, html.indexOf(`id="${id}"`) > html.indexOf('id="i-setup"') && !inMore(id));
   check('the save opens the control for a refusal about a hidden field', /revealHidden\(problems\)/.test(html) && /\$\('i-more'\)\.open = true/.test(html));
   check('an edit opens the control by the rule in faculty-items.js', /I\.needsMoreOptions\(/.test(html));
 }
@@ -686,7 +688,10 @@ section('More options opens on its own when a hidden field is not at its default
   check('bonus opens it', opens({ isBonus: true }));
   check('Counts at Prog opens it', opens({ progIncluded: true }));
   check('a delivery other than the kind fills in opens it', opens({ paths: [{ ...path, grading: 'human_graded' }] }));
-  check('a tutor opens it (its id and link are in there)', opens({ paths: [{ ...path, modality: 'interactive', delivery: 'interactive_tutor', grading: 'effort' }] }));
+  check('a tutor alone stays closed (its fields are on the cards)', opens({ paths: [{ ...path, modality: 'interactive', delivery: 'interactive_tutor', grading: 'effort' }] }) === false);
+  check('questions and a tutor stay closed (both are on the cards)', opens({ paths: [path, { ...path, modality: 'interactive', delivery: 'interactive_tutor', grading: 'effort' }] }) === false);
+  check('questions and a tutor open it when the questions side is not the default', opens({ paths: [{ ...path, grading: 'human_graded' }, { ...path, modality: 'interactive', delivery: 'interactive_tutor', grading: 'effort' }] }));
+  check('two typed paths open it (this page does not edit that shape)', opens({ paths: [path, path] }));
   check('a path that cannot be changed here opens it', opens({ paths: [] }));
   check('a deadline time other than 23:59 opens it', opens({}, { ...sched, time: '17:59' }));
   check('a date for one section opens it', opens({}, { ...sched, sectionDates: { s1: '2026-12-10' } }));

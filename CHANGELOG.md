@@ -8,6 +8,15 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-11-06 — Matthew Recker via Claude (Assignments: "How cadets do this work" cards; branch `v2-cf-items`, local, uncommitted)
+
+An assignment that exists now shows a visible section above More options with three cards, in the same look as the cadets' chooser: Questions, Interactive tutor, Both (cadets choose). The selected card shows only what it needs: Questions links to the questions page with a count (or says the typed questions are in the box below), Tutor shows the tutor id, link, title and description, Both shows both plus what earns credit and the commit rule. The "Also offer an interactive tutor" checkbox is gone. A new assignment still asks the same short form; saving it creates it unpublished and opens it for setup with a plain line saying what to do next. A locked shape (several paths) shows why instead of the cards; in-person and done-elsewhere assignments say no cards apply. The card styles moved from the cadets' page into `styles.css` so there is one look.
+
+- What a save writes did not change: the cards set the same delivery, grading and tutor flag the old controls set, and `pathPlan`, `createItem` and `updateItem` are untouched, so every refusal and warning for work already done is as before. `test-items-setup.mjs` (new) shows this for each card.
+- Did not: move the grading box (it stays under More options), change `needsMoreOptions` (a saved tutor assignment still opens More options), touch the frozen lesson page or contract, write to staging, or commit.
+
+---
+
 ## 2026-11-05 — Matthew Recker via Claude (small faults from the roll-in walk, and the parts that stayed unwalked; branch `v2-step2-rollin`, local)
 
 Five small faults found in the roll-in walk are closed, each with a failing test first, and the screens the walk could not reach were walked in a browser against the staging project only.

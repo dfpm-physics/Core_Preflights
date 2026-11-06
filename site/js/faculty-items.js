@@ -183,6 +183,55 @@ export function pathPlan(form) {
 export const wantsTwoPaths = (form) => isTypedResponse(form.delivery) && !!form.withTutor;
 
 /* ══════════════════════════════════════════════════════════════════════════════
+ * "How cadets do this work": the three cards on an assignment's setup
+ * ════════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * The cards are a plain way to set three things the form already had: the delivery, its grading, and whether a tutor sits
+ * beside a typed response. They write the same form fields as before, so a save writes the same data for the same choice.
+ *   questions  the work is answered questions (on the site, or typed): no tutor
+ *   tutor      the work is the interactive tutor alone
+ *   both       a typed response with the tutor beside it; the cadet picks (the policy below says what earns credit)
+ * Nothing here reads a kind to decide what is allowed. A kind only sets which delivery the Questions card starts on.
+ */
+export const SETUP_MODES = ['questions', 'tutor', 'both'];
+
+/** Deliveries the cards describe. In person and done elsewhere are not questions or a tutor, so no card applies. */
+export const cardsApply = (delivery) => ['online_questions', 'typed_response', 'interactive_tutor'].includes(delivery);
+
+/** The card an item starts on: two paths is Both, a lone tutor is Tutor, anything else is Questions. */
+export function modeOfShape(shape) {
+  if (shape?.kind === 'choice') return 'both';
+  if (shape?.kind === 'single' && shape.main.modality === 'interactive') return 'tutor';
+  return 'questions';
+}
+
+/** The card a delivery implies after the delivery box itself is changed. Both survives only on a typed response. */
+export function modeFromDelivery(delivery, previous = 'questions') {
+  if (delivery === 'interactive_tutor') return 'tutor';
+  return delivery === 'typed_response' && previous === 'both' ? 'both' : 'questions';
+}
+
+/**
+ * What choosing a card sets: { delivery, grading, withTutor }. `current` is the form's present delivery and grading;
+ * `kindPrefill` is prefillFromKind(kind) (or null). A choice that keeps the present delivery keeps its grading too.
+ */
+export function applyMode(mode, current, kindPrefill = null) {
+  const d = current.delivery;
+  const fresh = (delivery) => ({ delivery, grading: gradingsFor(delivery)[0] });
+  if (mode === 'tutor') {
+    return d === 'interactive_tutor' ? { delivery: d, grading: current.grading, withTutor: false } : { ...fresh('interactive_tutor'), withTutor: false };
+  }
+  if (mode === 'both') {
+    return d === 'typed_response' ? { delivery: d, grading: current.grading, withTutor: true } : { ...fresh('typed_response'), withTutor: true };
+  }
+  if (d !== 'interactive_tutor') return { delivery: d, grading: current.grading, withTutor: false };
+  const kd = kindPrefill?.delivery;
+  if (kd === 'online_questions' || kd === 'typed_response') return { delivery: kd, grading: kindPrefill.grading, withTutor: false };
+  return { ...fresh('typed_response'), withTutor: false };
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
  * When cadets can see it (the release window), in Mountain time
  * ════════════════════════════════════════════════════════════════════════════ */
 
@@ -718,13 +767,14 @@ export function needsMoreOptions(item, { prefill = null, sections = [], sched = 
   if (String(item.description || '').trim()) return true;
   if (item.lateAllowed === false || item.isBonus || item.progIncluded) return true;
   const paths = item.paths || [];
-  if (paths.length !== 1) return true;                      // two paths, or a path this page does not edit: the note says so
+  // A tutor and a two-path setup are shown on the cards, so they do not open this by themselves. Any other shape does: the note says so.
+  const tutors = paths.filter(x => x.modality === 'interactive');
+  if (!(paths.length === 1 || (paths.length === 2 && tutors.length === 1))) return true;
   if (item.attemptLimit != null) return true;                 // a limit on attempts lives in there
   if (item.position != null || item.opensAt) return true;   // an assignment number or a fixed opening date lives in there
-  const p = paths[0];
-  if (p.modality === 'interactive') return true;            // a tutor id and link live there
-  if (p.delivery === 'typed_response' && p.modality === 'written' && typedFieldsSet(p.content)) return true;   // reading fields, or a switch turned off
-  if (prefill && (p.delivery !== prefill.delivery || p.grading !== prefill.grading)) return true;
+  const p = paths.find(x => x.modality !== 'interactive');   // the typed side; a tutor alone has none
+  if (p && p.delivery === 'typed_response' && p.modality === 'written' && typedFieldsSet(p.content)) return true;   // reading fields, or a switch turned off
+  if (p && prefill && (p.delivery !== prefill.delivery || p.grading !== prefill.grading)) return true;
   if (sched) {
     if (sched.time && sched.time !== DEFAULT_TIME) return true;
     if (Object.values(sched.sectionDates || {}).some(Boolean)) return true;

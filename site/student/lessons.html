@@ -8,27 +8,8 @@
   <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
   <link rel="stylesheet" href="../css/styles.css">
   <style>
-    /* Choice modal: two equal-weight option cards. NEITHER is styled as primary — a default
-       would put a thumb on the scale of the exact preference this design exists to measure
-       (STUDENT-LESSON-VIEW.md §2, §5). */
-    .choice-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin: 18px 0; }
-    .choice-card { border: 1px solid var(--border); border-radius: var(--radius); padding: 18px;
-      background: var(--card); display: flex; flex-direction: column; gap: 10px; transition: box-shadow .15s, border-color .15s; }
-    .choice-card:hover { box-shadow: var(--shadow-md); border-color: var(--blue-lt); }
-    /* Header row: icon chip beside the title stack, per the §5 sketch in STUDENT-LESSON-VIEW.md
-       ("✎  Written preflight" on one line). Chip follows the .stat-tile icon-chip pattern
-       (DESIGN.md {components.stat-tile}) so a lone glyph never floats unanchored.
-       Both chips use the SAME neutral tint — an accent color on one would be the styled
-       default §5 forbids. */
-    .choice-head { display: flex; align-items: center; gap: 11px; }
-    .choice-ic { width: 42px; height: 42px; border-radius: 11px; flex: none;
-      display: grid; place-items: center; font-size: 1.25em; line-height: 1;
-      background: var(--mc-sel-bg); border: 1px solid var(--border); color: var(--text-soft); }
-    .choice-titles { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-    .choice-title { font-weight: 700; font-size: 1.02em; }
-    .choice-meta { font-size: 0.8em; color: var(--muted); font-weight: 600; }
-    .choice-body { font-size: 0.88em; color: var(--text-soft); line-height: 1.5; flex-grow: 1; }
-    .choice-card .btn { margin-top: 4px; }
+    /* The option-card styles (.choice-grid, .choice-card and its parts) live in styles.css, shared with the assignment setup.
+       The rule they carry still holds here: neither card is styled as primary. */
     .lesson-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 4px; }
     .study-note { font-size: 0.85em; color: var(--muted); line-height: 1.5; margin-top: 10px; }
 
