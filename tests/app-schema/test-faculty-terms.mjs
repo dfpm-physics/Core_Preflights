@@ -187,7 +187,7 @@ section('the plan: what would be copied');
   eq('the tutor gets a new id with its stem', p2.activities[0].activity.slug, 'lesson-02-charge-deadbeef');
   check('the tutor copy says it has no link and where to set one', p2.notes.some(n => /without its link, under a new tutor id/.test(n) && /assignments page/.test(n)));
   check('a written path gets a fresh generated slug, not the old one', p1.activities[0].activity.slug !== 'old-written' && /^c-1-hw-1-spring-2027-written-/.test(p1.activities[0].activity.slug));
-  check('a published source item is noted as a draft in the copy', p1.notes.some(n => /copy is a draft/.test(n)));
+  check('a published source item is noted as unpublished in the copy', p1.notes.some(n => /copy is unpublished/.test(n)));
   eq('the letter scale is to be copied', blank.scale, 'copy');
 
   const shifted = T.buildRolloverPlan(src, tgt, { dates: 'shift', days: '7' }, rand);

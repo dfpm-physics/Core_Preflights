@@ -425,7 +425,7 @@ const oldRows = await d.$$eval('#items-table tbody tr', rs => rs.map(r => ({ isN
   link: [...r.querySelectorAll('a')].some(a => /older editor/.test(a.innerText) && /lessons\.html/.test(a.getAttribute('href') || '')) })));
 check('the vector course lists its items entered on the older page', oldRows.length >= 3, String(oldRows.length));
 check('each is read-only here, with a link to the older editor', oldRows.every(r => r.isNew === '0' && !r.edit && !r.remove && r.link), JSON.stringify(oldRows.slice(0, 3)));
-check('the older rows show Published or Draft and say which page owns them', /Entered on the older page/.test(text) && /(Published|Draft)/.test(text));
+check('the older rows show Published or Draft and say which page owns them', /Entered on the older page/.test(text) && /(Published|Unpublished)/.test(text));
 
 console.log('\n== 5. a cadet, and an instructor');
 const cad = await signIn(`cadet0401@${DOMAIN}`, '000401');

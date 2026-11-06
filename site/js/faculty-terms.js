@@ -435,7 +435,7 @@ export function buildRolloverPlan(src, tgt, opts, rand = randomHex) {
     row.dates = dates;
     row.dueText = shift === null ? 'blank' : trap ? 'blank (see note)' : `${dateText(it.due_at)} -> ${dateText(dates.due_at)}`;
     row.offering = { ...pick(it, OFFERING_COPY), ...dates, is_published: false };
-    if (it.is_published) notes.push('Published in the source; the copy is a draft.');
+    if (it.is_published) notes.push('Published in the source; the copy is unpublished.');
     if (it.part_set_id) {
       notes.push('This assignment is part of a part set in the source ("do all of these"). Part sets are not copied, so the copy stands alone; set the parts again if they should stay together.');
     }

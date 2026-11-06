@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-Ir2XvUprMlfFC1g0Jfry9h+aXqHJcMbHpzMlpSRVmYU=' 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8=' 'sha256-XrJN0gC++fZidt0Szq7CyqlLZzK8sXjzyp2TJgtEpcM='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Artifacts · PREP</title>
   <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
@@ -305,7 +305,7 @@
         <div class="stat-grid">
           ${tile('blue', 'interactions', '🧪', arts.length, 'Built', 'interactive lessons')}
           ${tile('green', 'done', '🚀', pub, 'Published',
-                 pub === arts.length ? 'all of them' : `${arts.length - pub} still draft`)}
+                 pub === arts.length ? 'all of them' : `${arts.length - pub} still unpublished`)}
           ${tile('gold', 'analytics', '🔎', reviewed, 'Reviewed',
                  `${arts.length - reviewed} not yet judged`)}
           ${tile(reg < arts.length ? 'red' : 'green', reg < arts.length ? 'warning' : 'done',
@@ -465,7 +465,7 @@
           </div>
           <div class="lh-sub">
             <div class="hflags grow">
-              ${a.published_url ? '<span class="tag green">Published</span>' : '<span class="tag">Draft</span>'}
+              ${a.published_url ? '<span class="tag green">Published</span>' : '<span class="tag">Unpublished</span>'}
               ${reg ? '<span class="tag blue">Registered</span>' : '<span class="tag gold">Not registered</span>'}
             </div>
           </div>

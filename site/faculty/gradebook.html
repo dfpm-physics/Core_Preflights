@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-0yG2+S/9eRrtrywjAvrdPNQfPQmjy4itFddgeWjcklc=' 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8=' 'sha256-Xyv7lK29o8rxerhcCOkP+/Y93ibifZHczkCj51CrFRo='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Gradebook · PREP</title>
   <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
@@ -48,6 +48,7 @@
     import { taughtSectionIds } from '../js/faculty-rollup.js';
     import { getPref, setPref } from '../js/prefs.js';
     import * as GB from '../js/faculty-gradebook.js';
+    import { percentShown } from '../js/percent-shown.js';
     import * as EI from '../js/faculty-ei.js';
 
     const ctx = await bootstrap({ require: 'faculty' });
@@ -209,7 +210,7 @@
           : `<span class="muted">—</span><span class="gb-frac">nothing counts yet · ${esc(countedText(t))}</span>`;
       }
       const extra = [t.letter, t.rank != null ? `#${t.rank}` : '', countedText(t)].filter(Boolean).join(' · ');
-      return `<strong>${esc(t.percentText)}%</strong>${t.nearLine ? ' <span class="muted" title="Within the near-line width of a letter line">≈</span>' : ''}`
+      return `<strong>${esc(percentShown(t.percentText))}%</strong>${t.nearLine ? ' <span class="muted" title="Within the near-line width of a letter line">≈</span>' : ''}`
         + `<span class="gb-frac">${esc(t.earnedText)}/${esc(t.possibleText)}${extra ? ' · ' + esc(extra) : ''}</span>`;
     }
 

@@ -72,11 +72,34 @@ section('the total is passed through, never worked out');
 const t = V.totalView({ earned_text: '45', possible_text: '50', percent_text: '90', percent_key_text: '90.0' });
 eq('line text', t.line, '45 of 50 points · 90%');
 const t2 = V.totalView({ earned_text: '2', possible_text: '3', percent_text: '66.666666…' });
-check('a cut value keeps its ellipsis and is not rounded', t2.percent === '66.666666…%');
+check('a cut value is shown to two places, not as six digits and an ellipsis', t2.percent === '66.67%', t2.percent);
 eq('no possible points says nothing counts yet', V.totalView({ earned_text: '0', possible_text: '0', percent_text: null }).line, 'No graded work counts yet.');
 eq('no row, no view', V.totalView(null), null);
 check('the view has no letter field', !('letter' in t));
 
+section('a percent shows a sensible rounded value (roll-in fix 4)');
+{
+  const { percentShown: p } = await import('../../site/js/percent-shown.js');
+  eq('a repeating third', p('33.333333…'), '33.33');
+  eq('a repeating two thirds rounds up', p('66.666666…'), '66.67');
+  eq('an exact whole number is left alone', p('90'), '90');
+  eq('an exact short value is left alone', p('87.5'), '87.5');
+  eq('a long exact value is cut to two places', p('12.345678'), '12.35');
+  eq('trailing zeros after rounding go', p('80.001'), '80');
+  eq('a value just under a whole number never shows as that number (it could sit under a letter line)', p('89.999999…'), '89.99');
+  eq('three-digit percents work', p('100'), '100');
+  eq('extra credit above a hundred', p('104.166666…'), '104.17');
+  eq('nothing in, nothing out', [p(null), p(''), p(undefined)], ['', '', '']);
+  eq('text that is not a number is passed through', p('n/a'), 'n/a');
+  eq('three dots as an ellipsis', p('33.333333...'), '33.33');
+  eq('the student view uses it', V.totalView({ earned_text: '1', possible_text: '3', percent_text: '33.333333…' }).line, '1 of 3 points · 33.33%');
+  for (const f of ['site/faculty/gradebook.html', 'site/faculty/student.html', 'site/js/faculty-student.js', 'site/js/student-view.js']) {
+    check(f + ' prints the percent through percentShown', /percentShown\(/.test(readFileSync(resolve(ROOT, f), 'utf8')));
+  }
+}
+
+// The letter-scale preview and the near-a-line list print the database text as it is: they are the tools used to decide where a
+// line sits, so a rounded figure there could hide the very difference being looked for.
 section('grade rows: feedback only when released');
 const grade = { question_scores: { q2: { score: 1, max: 1, feedback: 'Good reasoning.' }, q1: { score: 0, max: 0, feedback: '' } },
   instructor_note: { text: 'Well done.' } };

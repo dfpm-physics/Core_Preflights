@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8=' 'sha256-ne1N2jrmq4meZl44oM2VqX3psYtC4DD4ya2dFLueGKI='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8=' 'sha256-SPXacuXZa/yH5MNxbb2QJCE1v9cuobSO46DLvnDjIqQ='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Assignments · PREP</title>
   <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
@@ -69,6 +69,8 @@
         <div class="form-grid" style="--fg-min:200px">
           <div class="field"><label for="i-num">Assignment number (optional)</label><input id="i-num" type="text" inputmode="numeric" placeholder="4">
             <div class="field-hint">Puts it in order in the list.</div></div>
+          <div class="field" id="i-attempts-wrap" style="display:none"><label for="i-attempts">Attempts per question (optional)</label><input id="i-attempts" type="text" inputmode="numeric" placeholder="No limit">
+            <div class="field-hint">How many times a cadet may answer each question. Leave empty for no limit.</div></div>
           <div class="field"><label for="i-release">Cadets can see it</label><select id="i-release"></select>
             <div class="field-hint" id="i-release-hint"></div></div>
           <div class="field" id="i-opens-wrap" style="display:none"><label for="i-opens">Opens on</label><input id="i-opens" type="date">
@@ -251,7 +253,7 @@
     function rowHtml(it) {
       const state = it.isNew
         ? `<span class="score-badge ${it.isPublished ? 'full' : 'pending'}">${it.isPublished ? 'Published' : 'Unpublished'}</span>`
-        : `<span class="score-badge ${it.isPublished ? 'full' : 'pending'}">${it.isPublished ? 'Published' : 'Draft'}</span>
+        : `<span class="score-badge ${it.isPublished ? 'full' : 'pending'}">${it.isPublished ? 'Published' : 'Unpublished'}</span>
            <div class="muted" style="font-size:0.78em;margin-top:3px">Entered on the older page</div>`;
       const actions = it.isNew
         ? `${questionsLink(it)}<button class="btn btn-ghost btn-sm" data-edit="${esc(it.offeringId)}">Edit</button>
@@ -330,6 +332,7 @@
     function syncPoints() {
       const owned = pointsOwned();
       $('i-points').disabled = owned;
+      $('i-attempts-wrap').style.display = $('i-grading').value === 'auto_checked' ? '' : 'none';
       $('i-points-note').textContent = owned
         ? 'Set by the questions. Add them with the Questions button on the assignment once it is saved.' : '';
     }
@@ -458,6 +461,7 @@
       $('i-ititle').value = tutor && tutor.title !== item.title ? tutor.title : '';
       $('i-idesc').value = tutor?.content?.description || '';
       $('i-num').value = item && item.position != null ? String(item.position) : '';
+      $('i-attempts').value = item && item.attemptLimit != null ? String(item.attemptLimit) : '';
       const rel = item ? I.releaseFromOpensAt(item.opensAt) : { mode: 'standard', date: '', time: '00:00' };
       $('i-release').value = rel.mode; $('i-opens').value = rel.date; $('i-openst').value = rel.time;
       $('i-release-hint').textContent = ''; showRelease();
@@ -606,6 +610,7 @@
         switchPolicy: $('i-switch').value,
         swapTutor: swapOn,
         lessonNumber: $('i-num').value,
+        attemptLimit: $('i-attempts').value,
         slug: editing ? '' : formSlug,
         opensDate: fixedRelease ? $('i-opens').value : '',
         opensTime: $('i-openst').value || '00:00',
@@ -640,7 +645,7 @@
         // Each warning is asked in turn, its answer is added to one acknowledgement, and the save is tried again. Nothing
         // has been written while a question is open. A number that changed meanwhile comes back as a new question.
         const ack = {};
-        for (let round = 0; editing && round < 4 && (res.needsConfirm || res.needsTutorConfirm || res.needsPointsConfirm); round++) {
+        for (let round = 0; editing && round < 6 && (res.needsConfirm || res.needsTutorConfirm || res.needsPointsConfirm || res.needsDeadlineConfirm || res.needsUnpublishConfirm); round++) {
           if (res.needsConfirm) {
             // The new delivery replaces the old path, which holds questions and answer keys. Say how many, ask,
             // and for keys ask a second time.
@@ -652,6 +657,16 @@
             const t = res.needsTutorConfirm;
             if (!window.confirm(I.tutorChangeWarning(t.kind, editing.title, t))) { showError('Nothing was changed.'); return; }
             ack.tutor = { committed: t.committed, reports: t.reports };
+          } else if (res.needsDeadlineConfirm) {
+            // A deadline moves earlier on an assignment cadets have already worked on. Only a person decides this; the
+            // answer is never taken for granted, and a yes never blocks the save.
+            const d = res.needsDeadlineConfirm;
+            if (!window.confirm(I.deadlineEarlierWarning(editing.title, d))) { showError('Nothing was changed.'); return; }
+            ack.deadline = d.notSubmitted;
+          } else if (res.needsUnpublishConfirm) {
+            const u = res.needsUnpublishConfirm;
+            if (!window.confirm(I.unpublishWarning(editing.title, u))) { showError('Nothing was changed.'); return; }
+            ack.unpublish = true;
           } else {
             const p = res.needsPointsConfirm;
             if (!window.confirm(I.pointsChangeWarning(editing.title, p))) { showError('Nothing was changed.'); return; }
@@ -659,7 +674,7 @@
           }
           res = await I.updateItem(db, c, editing, form, { ...ack });
         }
-        if (res.needsConfirm || res.needsTutorConfirm || res.needsPointsConfirm) {
+        if (res.needsConfirm || res.needsTutorConfirm || res.needsPointsConfirm || res.needsDeadlineConfirm || res.needsUnpublishConfirm) {
           showError('The numbers on this assignment changed while you were deciding. Nothing was changed. Save again to see the new numbers.'); return;
         }
         if (res.error) {

@@ -1,6 +1,6 @@
 // student-view.js -- the wording and the grouping behind the student schedule and grade list.
 //
-// PURE. No imports, no network, no DOM, so a test can load it anywhere. The pages stay thin and the
+// PURE. Its one import (percent-shown.js) is pure too; no network, no DOM, so a test can load it anywhere. The pages stay thin and the
 // words live here, once, because the same state has to read the same way on the dashboard, the
 // schedule and the grade list.
 //
@@ -16,6 +16,7 @@
 //   * "Graded on effort" is said only about an item whose grading mode is effort.
 //   * "Missed" is not used. Work with no submission yet is "Past due" while a late submission is still
 //     possible, and "Not submitted" once the database has counted it as a zero.
+import { percentShown } from './percent-shown.js';
 
 /** Student-facing words for the seven database states (docs/decisions/V2-DATA-MODEL.md section 7). */
 const STATE_WORDS = {
@@ -145,7 +146,7 @@ export function groupByMonth(rows) {
 
 /**
  * The course total as the database stated it, ready to print. Returns null when there is no row.
- * `percent_text` is passed through untouched (it can end in an ellipsis where the value does not end).
+ * `percent_text` is the database's text, shown to two places (percentShown); nothing is computed from it.
  */
 export function totalView(total) {
   if (!total) return null;
@@ -153,9 +154,9 @@ export function totalView(total) {
   return {
     earned: total.earned_text ?? '',
     possible: total.possible_text ?? '',
-    percent: hasPercent ? `${total.percent_text}%` : '',
+    percent: hasPercent ? `${percentShown(total.percent_text)}%` : '',
     line: hasPercent
-      ? `${total.earned_text} of ${total.possible_text} points · ${total.percent_text}%`
+      ? `${total.earned_text} of ${total.possible_text} points · ${percentShown(total.percent_text)}%`
       : (Number(total.possible_text) === 0 ? 'No graded work counts yet.' : ''),
   };
 }

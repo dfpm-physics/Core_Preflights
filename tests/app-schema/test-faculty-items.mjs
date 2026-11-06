@@ -717,4 +717,122 @@ section('a refusal about a hidden field is pointed at that field');
   eq('the points are always shown', t('Enter the points (0 or more).'), '');
 }
 
+/* ───────────────────────────────────────────────────────────────────────────────────────── */
+section('the attempt limit: a field behind More options, read and written on the offering (roll-in fix 1)');
+{
+  const kinds = [{ id: 'homework' }];
+  const auto = (o = {}) => form({ delivery: 'online_questions', grading: 'auto_checked', points: '', ...o });
+  eq('no limit is fine', I.checkForm(auto({ attemptLimit: '' }), { kinds }), []);
+  eq('a whole number is fine', I.checkForm(auto({ attemptLimit: '3' }), { kinds }), []);
+  for (const bad of ['0', '-1', '1.5', 'abc', '1000'])
+    check(`"${bad}" is refused with a plain sentence`, I.checkForm(auto({ attemptLimit: bad }), { kinds }).some(p => /attempt/i.test(p)), bad);
+  eq('a limit typed for a delivery with no automatic marking is ignored', I.checkForm(form({ attemptLimit: 'abc' }), { kinds }), []);
+
+  const lim = (c) => writesTo('assignment_offerings', c)[0].payload.attempt_limit;
+  reset({ 'assignments.select': [] });
+  await I.createItem(db, ctx, auto({ attemptLimit: '3' }));
+  eq('a new item stores the number', lim('insert'), 3);
+  reset({ 'assignments.select': [] });
+  await I.createItem(db, ctx, auto({ attemptLimit: '' }));
+  eq('an empty box stores no limit (NULL)', lim('insert'), null);
+  reset({ 'assignments.select': [] });
+  await I.createItem(db, ctx, form({ attemptLimit: '3' }));
+  check('a delivery with no automatic marking never writes one', !('attempt_limit' in writesTo('assignment_offerings', 'insert')[0].payload));
+
+  const sel = { 'assignment_offerings.select': { id: 'o-1', entered_on_new_page: true } };
+  const autoItem = (o = {}) => item({ paths: [{ delivery: 'online_questions', grading: 'auto_checked', modality: 'questions', activityId: 'act-1', content: {} }], ...o });
+  reset(sel);
+  await I.updateItem(db, ctx, autoItem(), auto({ attemptLimit: '2' }));
+  eq('a save writes the number', lim('update'), 2);
+  reset(sel);
+  await I.updateItem(db, ctx, autoItem({ attemptLimit: 2 }), auto({ attemptLimit: '' }));
+  eq('clearing the box clears the limit', lim('update'), null);
+
+  const row = { id: 'o-1', assignment_id: 'a-1', points_possible: 0, attempt_limit: 4, assignments: { id: 'a-1', slug: 's', title: 'T', kind_id: 'homework' }, offering_activities: [], assignment_due_dates: [] };
+  eq('the list reads the stored limit', [I.shapeItem(row, kinds, sections).attemptLimit, I.shapeItem({ ...row, attempt_limit: null }, kinds, sections).attemptLimit], [4, null]);
+  check('the list query asks for the column', /ITEM_SELECT =[\s\S]*?attempt_limit/.test(read('site/js/faculty-items.js')));
+  const plain = { description: '', lateAllowed: true, isBonus: false, progIncluded: false, paths: [{ modality: 'questions', delivery: 'online_questions', grading: 'auto_checked', content: {} }], position: null, opensAt: null };
+  check('a stored limit opens More options', I.needsMoreOptions({ ...plain, attemptLimit: 3 }, { sections }));
+  check('no limit keeps it closed', I.needsMoreOptions({ ...plain, attemptLimit: null }, { sections }) === false);
+  eq('a refusal about the limit points at its box', I.moreOptionsTarget('The number of attempts must be a whole number from 1 to 999, or empty.'), 'i-attempts');
+  const html = read('site/faculty/items.html');
+  const more = html.slice(html.indexOf('id="i-more"'), html.indexOf('</details>', html.indexOf('id="i-more"')));
+  check('the box sits inside More options, so a new assignment opens short', /id="i-attempts"/.test(more));
+  check('the page sends and fills it', /attemptLimit:\s*\$\('i-attempts'\)/.test(html) && /\$\('i-attempts'\)\.value\s*=/.test(html));
+}
+
+section('a deadline moved earlier on an item with cadet work asks a person first (roll-in fix 2)');
+{
+  const sel = { 'assignment_offerings.select': { id: 'o-1', entered_on_new_page: true } };
+  const OLD = '2026-12-11T06:59:59.000Z';                       // 10 Dec 23:59:59 Mountain
+  const pub = (o = {}) => item({ isPublished: true, dueAt: OLD, dueRows: [{ section_id: 's-wf', due_at: OLD }], ...o });
+  const f = (o = {}) => form({ delivery: 'in_person', grading: 'hand_entered', allDate: '2026-12-10', ...o });
+  // 4 active cadets in the two sections; one has handed in
+  const world = (extra = {}) => ({ ...sel,
+    'submissions.select': (st) => (st.opts?.head ? { __count: 1 } : [{ enrollment_id: 'e1' }]),
+    'grades.select': (st) => (st.opts?.head ? { __count: 0 } : []),
+    'enrollments.select': [{ id: 'e1', section_id: 's-wf' }, { id: 'e2', section_id: 's-wf' }, { id: 'e3', section_id: 's-none' }, { id: 'e4', section_id: 's-none' }],
+    ...extra });
+  const noWrites = () => CALLS.filter(c => c.verb !== 'select').length === 0;
+
+  reset(world());
+  let r = await I.updateItem(db, ctx, pub(), f({ allDate: '2026-12-08' }));
+  check('an earlier date with work asks, and writes nothing', !!r.needsDeadlineConfirm && noWrites(), JSON.stringify(r));
+  eq('it says how many cadets have not submitted', [r.needsDeadlineConfirm?.notSubmitted, r.needsDeadlineConfirm?.submitted], [3, 1]);
+  reset(world());
+  r = await I.updateItem(db, ctx, pub(), f({ allDate: '2026-12-08' }), { deadline: 3 });
+  eq('a person who confirms is never blocked: the save goes through', [r.error, !!r.needsDeadlineConfirm, writesTo('assignment_offerings', 'update').length], [null, false, 1]);
+  reset(world());
+  r = await I.updateItem(db, ctx, pub(), f({ allDate: '2026-12-08' }), { deadline: 2 });
+  check('a confirmation for a different number asks again', !!r.needsDeadlineConfirm && noWrites());
+  reset(world());
+  r = await I.updateItem(db, ctx, pub(), f({ allDate: '2026-12-12' }));
+  eq('a later date asks nothing', [r.error, !!r.needsDeadlineConfirm], [null, false]);
+  reset(world());
+  r = await I.updateItem(db, ctx, pub(), f());
+  eq('the same date asks nothing', [r.error, !!r.needsDeadlineConfirm], [null, false]);
+  reset(world({ 'submissions.select': (st) => (st.opts?.head ? { __count: 0 } : []) }));
+  r = await I.updateItem(db, ctx, pub(), f({ allDate: '2026-12-08' }));
+  eq('no cadet work: moving it earlier is free', [r.error, !!r.needsDeadlineConfirm], [null, false]);
+  reset(world());
+  r = await I.updateItem(db, ctx, pub({ dueAt: null, dueRows: [] }), f({ allDate: '2026-12-08' }));
+  eq('adding a first deadline is not moving one earlier', [r.error, !!r.needsDeadlineConfirm], [null, false]);
+  const w = I.deadlineEarlierWarning('Problem Set 3', { notSubmitted: 3, submitted: 1, sections: 2 });
+  check('the warning names the title, the count, and that a person decides', /Problem Set 3/.test(w) && /3 cadets/.test(w) && /1 cadet has/.test(w) && /decision/i.test(w), w);
+}
+
+section('unpublishing an item with cadet work asks first, with the counts (roll-in fix 3)');
+{
+  const sel = { 'assignment_offerings.select': { id: 'o-1', entered_on_new_page: true } };
+  const work = (s, g) => ({ ...sel, 'submissions.select': { __count: s }, 'grades.select': { __count: g } });
+  const f = (o = {}) => form({ delivery: 'in_person', grading: 'hand_entered', publish: false, ...o });
+  const pubs = () => CALLS.filter(c => c.table === 'assignment_offerings' && c.verb === 'update' && c.payload && 'is_published' in c.payload);
+  reset(work(4, 2));
+  let r = await I.updateItem(db, ctx, item({ isPublished: true, points: 10 }), f());
+  eq('it asks, with the counts, before any write', [r.needsUnpublishConfirm, CALLS.filter(c => c.verb !== 'select').length], [{ submissions: 4, grades: 2 }, 0]);
+  reset(work(4, 2));
+  r = await I.updateItem(db, ctx, item({ isPublished: true, points: 10 }), f(), { unpublish: true });
+  eq('once confirmed it unpublishes (never blocked)', [r.error, pubs().map(c => c.payload)], [null, [{ is_published: false }]]);
+  reset(work(0, 0));
+  r = await I.updateItem(db, ctx, item({ isPublished: true, points: 10 }), f());
+  eq('with no cadet work it just unpublishes', [!!r.needsUnpublishConfirm, pubs().length], [false, 1]);
+  reset(work(4, 2));
+  r = await I.updateItem(db, ctx, item({ isPublished: false, points: 10 }), f());
+  eq('an item that is not published asks nothing', !!r.needsUnpublishConfirm, false);
+  reset(work(4, 2));
+  r = await I.updateItem(db, ctx, item({ isPublished: true, points: 10 }), f({ publish: undefined }));
+  eq('a form without the control asks nothing', !!r.needsUnpublishConfirm, false);
+  const w = I.unpublishWarning('Problem Set 3', { submissions: 4, grades: 2 });
+  check('the warning has the counts and says what stays', /4 submissions/.test(w) && /2 grades/.test(w) && /Problem Set 3/.test(w), w);
+}
+
+section('one word for "not yet visible to cadets": Unpublished (roll-in fix 5)');
+{
+  const html = read('site/faculty/items.html');
+  check('the Assignments list says Unpublished for newer and older rows', !/'Draft'/.test(html));
+  check('the older-page rows still say which page owns them', /Entered on the older page/.test(html));
+  // The tutor destination card keeps the older page's word on purpose: test-lesson-link.mjs pins it to the frozen older page.
+  check('the artifacts page says Unpublished', !/>Draft</.test(read('site/faculty/artifacts.html')));
+}
+
 process.exit(summary() ? 0 : 1);

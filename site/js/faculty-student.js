@@ -31,6 +31,7 @@ import { canonMisconceptionId } from './faculty-rollup.js';
 import { cellState, CELL, shortCode, dbCellView, totalView } from './faculty-gradebook.js';
 import { loadCellsAndTotals } from './faculty-totals.js';
 import { loadEiForEnrollment } from './faculty-ei.js';
+import { percentShown } from './percent-shown.js';
 
 /* ---------------------------------------------------------------------------
  * Loader
@@ -252,7 +253,7 @@ export function commentCard({ student, enrollment, totals, rows, ei = [], freeTe
 
   L.push(`${name} — ${enrollment?.sectionCode || ''}`.trim());
   L.push('');
-  // Every figure below is text the database returned. The note does not round: 89.99 is written as 89.99.
+  // Every figure below is text the database returned. The percent is shown to two places (percentShown) and is never rounded up to a whole number it has not reached.
   if (!totals) {
     L.push('Grade to date: not available (the total could not be read).');
   } else if (totals.percentText == null) {
@@ -260,7 +261,7 @@ export function commentCard({ student, enrollment, totals, rows, ei = [], freeTe
       ? `Grade to date: nothing counts yet except ${totals.earnedText} bonus point(s).`
       : 'Grade to date: nothing counts yet.');
   } else {
-    L.push(`Grade to date: ${totals.earnedText} / ${totals.possibleText} (${totals.percentText}%)`
+    L.push(`Grade to date: ${totals.earnedText} / ${totals.possibleText} (${percentShown(totals.percentText)}%)`
       + `${totals.letter ? `, ${totals.letter}` : ''}${totals.rank != null ? `, rank ${totals.rank}` : ''}`);
   }
 

@@ -574,6 +574,7 @@ export const emptyForm = (kind, sections) => ({
   switchPolicy: 'lock_on_commit',
   swapTutor: false,            // replace the saved tutor with a different id
   lessonNumber: '',
+  attemptLimit: '',            // attempts allowed per question on an auto-checked item; empty = no limit
   slug: '',                    // the assignment's own id, from a prefill link; the title makes one when empty
   opensDate: '',               // empty = the standard rolling window
   opensTime: '00:00',
@@ -625,6 +626,11 @@ export function checkForm(form, { kinds = [], sections = [], slugFrozen = false,
   }
   if (!lockedPath && isTypedResponse(form.delivery) && form.freeResponse) {
     for (const p of checkEditor(form.freeResponse)) out.push(p);
+  }
+  // The attempt limit applies to automatic marking only; a box left over from another delivery is ignored.
+  if (form.grading === 'auto_checked') {
+    const lim = String(form.attemptLimit ?? '').trim();
+    if (lim !== '' && !(/^\d{1,3}$/.test(lim) && Number(lim) >= 1)) out.push('The number of attempts must be a whole number from 1 to 999, or empty.');
   }
   const pts = String(form.points ?? '').trim();
   if (pointsOwned) { /* set by the questions; nothing to check */ }
@@ -713,6 +719,7 @@ export function needsMoreOptions(item, { prefill = null, sections = [], sched = 
   if (item.lateAllowed === false || item.isBonus || item.progIncluded) return true;
   const paths = item.paths || [];
   if (paths.length !== 1) return true;                      // two paths, or a path this page does not edit: the note says so
+  if (item.attemptLimit != null) return true;                 // a limit on attempts lives in there
   if (item.position != null || item.opensAt) return true;   // an assignment number or a fixed opening date lives in there
   const p = paths[0];
   if (p.modality === 'interactive') return true;            // a tutor id and link live there
@@ -743,6 +750,7 @@ export function moreOptionsTarget(problem) {
   if (/delivery and grading/i.test(t)) return 'i-delivery';
   if (/section date/i.test(t)) return 'i-sections';
   if (/assignment number/i.test(t)) return 'i-num';
+  if (/number of attempts/i.test(t)) return 'i-attempts';
   if (/it opens|time to open|to open\./i.test(t)) return 'i-opens';
   if (/earns credit|only practice|which path/i.test(t)) return 'i-policy';
   if (/once a cadet commits/i.test(t)) return 'i-switch';
@@ -756,7 +764,7 @@ export function moreOptionsTarget(problem) {
  * ════════════════════════════════════════════════════════════════════════════ */
 
 const ITEM_SELECT =
-  `id,assignment_id,points_possible,grading_mode,due_at,due_by_day,is_published,position,updated_at,` +
+  `id,assignment_id,points_possible,grading_mode,due_at,due_by_day,is_published,position,updated_at,attempt_limit,` +
   `late_allowed,is_bonus,prog_included,opens_at,switch_policy,${NEW_PAGE_COLUMN},` +
   `assignments!inner(id,slug,title,description,kind_id),` +
   `offering_activities(grading_role,available_after,is_visible,delivery,grading,position,activities(id,slug,modality,title,content)),` +
@@ -822,6 +830,7 @@ export function shapeItem(r, kinds = [], sections = []) {
     isBonus: r.is_bonus === true,
     progIncluded: r.prog_included === true,
     position: r.position ?? null,
+    attemptLimit: r.attempt_limit ?? null,
     opensAt: r.opens_at || null,
     switchPolicy: r.switch_policy || 'lock_on_commit',
     paths: paths.map(p => ({
@@ -847,7 +856,14 @@ export function shapeItem(r, kinds = [], sections = []) {
  * Writing
  * ════════════════════════════════════════════════════════════════════════════ */
 
+/** The attempt limit as stored: a whole number, or null for no limit. Blank means none. */
+const attemptLimitOf = (form) => {
+  const s = String(form.attemptLimit ?? '').trim();
+  return s === '' ? null : Number(s);
+};
+
 const offeringColumns = (form, sched, pointsOwned, { position = true } = {}) => ({
+  ...(form.grading === 'auto_checked' ? { attempt_limit: attemptLimitOf(form) } : {}),
   ...(pointsOwned ? {} : { points_possible: Number(form.points) }),
   due_at: sched.dueAt,
   due_by_day: sched.dueByDay,
@@ -1048,6 +1064,64 @@ export function switchWarning(title, impact) {
     `and ${plural(impact.keys, 'answer key version', 'answer key versions')} under it. There is no copy to bring them back from. Change it anyway?`;
 }
 
+/**
+ * The sections whose effective deadline (their own row, else the offering default) moves EARLIER in this save. A deadline
+ * that is new, removed or later is not in the list. Pure.
+ * @returns {string[]} section ids
+ */
+export function earlierSections(item, sched, sections = []) {
+  const t = (iso) => { const n = new Date(iso).getTime(); return Number.isNaN(n) ? null : n; };
+  const oldRows = new Map((item.dueRows || []).map(r => [r.section_id, t(r.due_at)]));
+  const newRows = new Map((sched.rows || []).map(r => [r.section_id, t(r.due_at)]));
+  const oldDef = item.dueAt ? t(item.dueAt) : null;
+  const newDef = sched.dueAt ? t(sched.dueAt) : null;
+  const out = [];
+  for (const s of sections || []) {
+    const o = oldRows.has(s.id) ? oldRows.get(s.id) : oldDef;
+    const n = newRows.has(s.id) ? newRows.get(s.id) : newDef;
+    if (o != null && n != null && n < o) out.push(s.id);
+  }
+  return out;
+}
+
+/**
+ * Of the active cadets in the given sections, how many have committed this assignment and how many have not.
+ * @returns {Promise<{ error?: object, submitted: number, notSubmitted: number }>}
+ */
+export async function deadlineImpact(db, offeringId, sectionIds) {
+  const ids = [];
+  for (const part of chunks(sectionIds, 50)) {
+    for (let from = 0; ; from += 1000) {
+      const r = await db.from('enrollments').select('id').in('section_id', part).eq('status', 'active').order('id').range(from, from + 999);
+      if (r.error) return { error: r.error, submitted: 0, notSubmitted: 0 };
+      ids.push(...(r.data || []).map(x => x.id));
+      if ((r.data || []).length < 1000) break;
+    }
+  }
+  const done = new Set();
+  for (const part of chunks(ids, 100)) {
+    const r = await db.from('submissions').select('enrollment_id').eq('assignment_offering_id', offeringId).eq('status', 'committed').in('enrollment_id', part);
+    if (r.error) return { error: r.error, submitted: 0, notSubmitted: 0 };
+    for (const x of r.data || []) done.add(x.enrollment_id);
+  }
+  return { error: null, submitted: done.size, notSubmitted: ids.length - done.size };
+}
+
+/** The warning shown before a deadline moves earlier on an item that already has cadet work. A person decides; nothing blocks. */
+export function deadlineEarlierWarning(title, impact) {
+  return `“${title}” already has cadet work. You are moving its deadline earlier for ${plural(impact.sections, 'section', 'sections')}. ` +
+    `${plural(impact.notSubmitted, 'cadet', 'cadets')} there ${impact.notSubmitted === 1 ? 'has' : 'have'} not submitted yet and would have less time ` +
+    `(${plural(impact.submitted, 'cadet has', 'cadets have')} already submitted). Moving a deadline earlier is a decision for a person, ` +
+    'so confirm only if that is what you mean. Move it earlier anyway?';
+}
+
+/** The warning shown before an item that has cadet work is unpublished. Nothing is deleted; cadets stop seeing it. */
+export function unpublishWarning(title, impact) {
+  return `“${title}” already has ${plural(impact.submissions, 'submission', 'submissions')} and ${plural(impact.grades, 'grade', 'grades')}. ` +
+    'Unpublishing it hides it from cadets, so they cannot open it or hand anything in until it is published again. ' +
+    'Nothing already submitted or graded is deleted. Unpublish it anyway?';
+}
+
 export const KEYS_SECOND_CONFIRM =
   'This deletes answer keys, which are versioned history and cannot be recovered. Are you sure you want to delete them?';
 
@@ -1197,6 +1271,23 @@ export async function updateItem(db, ctx, item, form, ack = null) {
       return { error: null, needsPointsConfirm: {
         grades: w.grades, submissions: w.submissions, from: Number(item.points), to: Number(form.points),
         assignmentPoints: pointsMove, questionPoints: questionPointsMove } };
+    }
+  }
+
+  // A deadline moved earlier, or an unpublish, on an item that already has cadet work is a person's decision: ask, with the
+  // counts. Confirming always lets the save through; nothing here blocks.
+  const earlier = earlierSections(item, sched, ctx.sections);
+  const unpublishing = form.publish === false && item.isPublished === true;
+  if (earlier.length || unpublishing) {
+    const w = await countWork(db, item.offeringId);
+    if (w.error) return { error: w.error };
+    if (w.submissions || w.grades) {
+      if (earlier.length) {
+        const d = await deadlineImpact(db, item.offeringId, earlier);
+        if (d.error) return { error: d.error };
+        if (ack?.deadline !== d.notSubmitted) return { error: null, needsDeadlineConfirm: { sections: earlier.length, submitted: d.submitted, notSubmitted: d.notSubmitted } };
+      }
+      if (unpublishing && !ack?.unpublish) return { error: null, needsUnpublishConfirm: { submissions: w.submissions, grades: w.grades } };
     }
   }
 
