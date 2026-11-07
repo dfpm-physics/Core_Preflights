@@ -59,6 +59,7 @@ OFFLINE = [
     "test-numeric-answer.mjs",
     "test-check-answer-function.mjs",
     "test-symbolic-answer.mjs",
+    "test-symbolic-view.mjs",
     "test-problem-file.mjs",
     "test-remark-function.mjs",
     "test-homework.mjs",

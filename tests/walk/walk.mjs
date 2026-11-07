@@ -21,6 +21,7 @@ import { runE } from './groups/e.mjs';
 import { runF } from './groups/f.mjs';
 import { runG } from './groups/g.mjs';
 import { runH } from './groups/h.mjs';
+import { runI } from './groups/i.mjs';
 
 const argv = process.argv.slice(2);
 const arg = (n, d = null) => { const i = argv.indexOf(`--${n}`); return i >= 0 && argv[i + 1] && !argv[i + 1].startsWith('--') ? argv[i + 1] : d; };
@@ -70,13 +71,13 @@ async function main() {
   if (flag('self-test')) { console.log('Guard self-test'); await selfTest(base, chrome); return finish(arg('report')); }
   if (flag('cleanup-only')) { console.log(JSON.stringify(cleanup(), null, 1)); return; }
 
-  const only = (arg('only') || 'A,B,C,D,E,F,G,H').split(',').map(x => x.trim().toUpperCase());
+  const only = (arg('only') || 'A,B,C,D,E,F,G,H,I').split(',').map(x => x.trim().toUpperCase());
   const seed = L.loadSeed();
   const run = 'ZZ walk ' + Date.now().toString(36).slice(-5);
   const browser = await L.launch(chrome);
   const W = { base, seed, browser, run, state: {} };
   console.log(`Walk ${run} against ${base}`);
-  const groups = { A: runA, B: runB, C: runC, D: runD, E: runE, F: runF, G: runG, H: runH };
+  const groups = { A: runA, B: runB, C: runC, D: runD, E: runE, F: runF, G: runG, H: runH, I: runI };
   try {
     cleanup();                                   // leftovers of an earlier run
     for (const g of only) if (groups[g]) { console.log(`\nGroup ${g}`); try { await groups[g](W); } catch (e) { L.record(g + '0', 'group ran to its end', 'fail', String(e.message).slice(0, 300)); } }

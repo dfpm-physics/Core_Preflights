@@ -38,7 +38,10 @@
 //   primary     = number | name | function "(" expression ")" | "(" expression ")"
 //   Numbers: 12  3.5  .5  1e3  2.5E-4.   Spacing and a few look-alike characters (a real minus sign, a times sign, a
 //   superscript digit) are tidied first.
-//   Names: the variables the question allows, and the constants pi (or the Greek letter) and e. A run of letters that is
+//   Names: the variables the question allows, and the constants pi (or the Greek letter) and e. A VARIABLE OF THE QUESTION
+//   WINS: a question that declares e (the electron charge) or pi reads e or pi as that variable, and the constant is gone
+//   for that question. 1e3 is a number (a digit run followed by e and digits); 2e and 2 e are 2 times e; with e a variable,
+//   2e3 and 2e+3 are still the number 2000. A run of letters that is
 //   not a name is split into names ONLY IF there is exactly one way to do it (xy is x*y; mpi is refused when m, p, i
 //   and pi are all names). Multiplying by juxtaposition (2x, x y, 2(x+1), (a)(b)) works.
 //   Functions: sin cos tan asin acos atan sinh cosh tanh sqrt exp ln log10 abs. log alone is refused, because it means ln
@@ -59,7 +62,8 @@
 //   sqrt(x^2) the same as x. Staff mark a variable "can be negative" on the question page (the key's signed_variables),
 //   and only those variables are also tested at negative values. Every point at which the KEY is defined is used
 //   (normally all of them). An answer that is undefined (division by zero, a root of a negative, an overflow) at a point
-//   where the key is defined is wrong. If the key is defined at fewer than 8 of 96 candidate points, that is the
+//   where the key is defined is wrong. A root of a negative number is undefined (never 0, never complex); the one exception
+//   is an argument within rounding noise of zero, which the root reads as 0. If the key is defined at fewer than 8 of 96 candidate points, that is the
 //   QUESTION's fault, not the student's.
 //
 // THE COMPARISON
@@ -122,7 +126,7 @@ export function variableProblem(variables) {
     if (v.length > MAX_NAME_CHARS) return `The variable name "${v.slice(0, 14)}" is longer than ${MAX_NAME_CHARS} characters.`;
     if (!NAME_RE.test(v)) return `The variable name "${v}" must start with a letter and use only letters, digits and underscores.`;
     const f = foldName(v);
-    if (FUNCTIONS.has(f) || CONSTANTS.has(f) || f === 'log') return `"${v}" is a function or constant name and cannot also be a variable.`;
+    if (FUNCTIONS.has(f) || f === 'log') return `"${v}" is a function name and cannot also be a variable.`;
     if (OBJECT_NAMES.has(v) || OBJECT_NAMES.has(f)) return `"${v}" cannot be used as a variable name. Choose another.`;
     if (seen.has(f)) return `The variable "${v}" is listed twice (a Greek letter and its Latin spelling are the same name).`;
     seen.add(f);
@@ -287,7 +291,7 @@ function resolveNames(tokens, vocab, variables) {
 
 /* ── the parser ─────────────────────────────────────────────────────────────────────────────────────────── */
 
-function parseTokens(tokens) {
+function parseTokens(tokens, varNames) {
   let pos = 0;
   let depth = 0;
   let nodes = 0;
@@ -374,7 +378,7 @@ function parseTokens(tokens) {
     if (t.t === 'num') { pos++; return node({ k: 'num', v: t.v }); }
     if (t.t === 'id') {
       pos++;
-      return node(CONSTANTS.has(t.v) ? { k: 'const', name: t.v === 'π' ? 'pi' : t.v, v: CONSTANTS.get(t.v) } : { k: 'var', name: t.v });
+      return node(CONSTANTS.has(t.v) && !varNames.has(t.v) ? { k: 'const', name: t.v === 'π' ? 'pi' : t.v, v: CONSTANTS.get(t.v) } : { k: 'var', name: t.v });
     }
     if (t.t === 'fn') {
       pos++;
@@ -452,6 +456,13 @@ export function evaluateWithError(n, env) {
     case 'neg': { const a = evaluateWithError(n.a, env); return { v: -a.v, e: a.e }; }
     case 'call': {
       const a = evaluateWithError(n.a, env);
+      if (n.fn === 'sqrt' && Math.abs(a.v) <= ERROR_ALLOWANCE * a.e) {
+        // The argument is zero within its own rounding (1 - sin(x)^2 where cos(x) is 0 can come out as -1e-17). Its root is
+        // read as 0 with a wide bound, never as undefined: a right answer must not fail on noise. A clearly negative
+        // argument is not near zero and stays undefined (NaN).
+        const z = Math.sqrt(Math.max(a.v, 0));
+        return { v: z, e: Math.sqrt(ERROR_ALLOWANCE * a.e) + ROUND * z };
+      }
       const v = FUNCTIONS.get(n.fn)(a.v);
       return { v, e: fin(SLOPE[n.fn](a.v, v) * a.e) + ROUND * Math.abs(v) };
     }
@@ -521,7 +532,7 @@ export function parseSymbolic(input, variables) {
     const vocab = new Set([...variables, ...CONSTANTS.keys()].map(foldName));
     const tokens = resolveNames(tokenize(text), vocab, variables);
     if (tokens.length === 0) return refuse('empty', 'Type your answer first.');
-    const ast = parseTokens(tokens);
+    const ast = parseTokens(tokens, new Set(variables.map(foldName)));
     return { ok: true, ast, used: usedNames(ast), reading: print(ast) };
   } catch (e) {
     if (e && e.symbolicError) return refuse(e.code, e.message);

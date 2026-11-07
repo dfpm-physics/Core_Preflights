@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8=' 'sha256-qnIFjbSpRrOzo0K/VW6sDI5bnWbHZzKFZrHQuc5q+fk='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-96QJkdgQNMFK6gzKVnGJPih/eRUziK2KtJuBCakoJ8Q=' 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Questions · PREP</title>
   <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
@@ -63,9 +63,9 @@
       <div id="q-symbolic-part" style="display:none">
         <div class="form-grid" style="--fg-min:220px">
           <div class="field"><label for="q-expression">Expected expression</label><input id="q-expression" type="text" maxlength="200" autocomplete="off" spellcheck="false" placeholder="m*v^2/2">
-            <div class="field-hint">Use + - * / ^, round brackets, and the functions sin cos tan asin acos atan sinh cosh tanh sqrt exp ln log10 abs. pi and e are known.</div></div>
+            <div class="field-hint">Use + - * / ^, round brackets, and the functions sin cos tan asin acos atan sinh cosh tanh sqrt exp ln log10 abs. pi and e are known, and so is sqrt(x) for a square root.</div></div>
           <div class="field"><label for="q-variables">Variables an answer may use</label><input id="q-variables" type="text" maxlength="120" autocomplete="off" spellcheck="false" placeholder="m, v">
-            <div class="field-hint">One to eight names, separated by commas. A name starts with a letter. Names such as sin, e and pi are taken. A Greek letter and its Latin spelling (theta and the Greek theta) count as the same name.</div></div>
+            <div class="field-hint">One to eight names, separated by commas. A name starts with a letter. Names such as sin and sqrt are taken. If you list e (the electron charge, say) or pi as a variable, it is YOUR variable in this question and the constant e or pi is not available to the answer or the key; the student page then shows a button for your variable and none for the constant. A Greek letter and its Latin spelling (theta and the Greek theta) count as the same name.</div></div>
           <div class="field"><label for="q-signed">Variables that can be negative</label><input id="q-signed" type="text" maxlength="120" autocomplete="off" spellcheck="false" placeholder="leave empty if all are positive">
             <div class="field-hint">By default every variable is tested on positive values only, so sqrt(k)/sqrt(m) matches sqrt(k/m) and sqrt(x^2) matches x. List a variable here (for example x, if x is a position or a charge with a sign) and it is also tested at negative values; then sqrt(x^2) no longer matches x.</div></div>
         </div>
@@ -79,6 +79,7 @@
             <li>The answer and your expression are worked out at the same fixed set of values for the variables, and compared. The values are fixed for a question, so a re-mark gives the same result. Every variable is tested on positive values only unless you list it under "Variables that can be negative", so with positive values sqrt(x^2) matches x and ln(a)-ln(b) matches ln(a/b). A listed variable is also tested at negative values.</li>
             <li>It proves two expressions are equal, not that one is simplified. (x+1)^2 and x^2+2x+1 are both right.</li>
             <li>A difference smaller than about one part in a billion is not seen. An answer that is undefined (a division by zero, a square root of a negative number) where your expression is defined is marked wrong. A difference is judged against the size of the numbers themselves, so a key such as 6.63e-34*f is not matched by 0.</li>
+            <li>A square root of a negative number has no real value: it is never read as 0 and never as a complex number. At a test value where your expression is undefined, nothing is asked; an answer that is undefined where yours is defined is marked wrong. A root whose argument is zero only up to rounding noise is read as 0. 1e3 is the number 1000; 2e and 2 e are 2 times the constant e (or your variable e), and with a variable called e, 2e3 and 2e+3 are still the number 2000.</li>
             <li>Units, vectors and equations are not read. An answer is at most 200 characters.</li>
             <li>An answer that cannot be read (an unknown name, a missing bracket, a division followed by juxtaposition such as 1/2x) is refused with a message and costs the student no attempt. Students must write 1/(2x) or (1/2)*x.</li>
             <li>The key is checked on the server. A student's browser never receives your expression.</li>
@@ -205,6 +206,7 @@
     import * as Q from '../js/faculty-questions.js';
     import * as PF from '../js/problem-file.js';
     import * as SA from '../js/symbolic-answer.js';
+    import * as SV from '../js/symbolic-view.js';
 
     const ctx = await bootstrap({ require: 'faculty' });
     runPage(ctx, init);
@@ -415,6 +417,7 @@
       $('q-choice-part').style.display = choice ? 'block' : 'none';
       $('q-numeric-part').style.display = format === 'numeric' ? 'block' : 'none';
       $('q-symbolic-part').style.display = format === 'symbolic' ? 'block' : 'none';
+      if (format === 'symbolic' && !SV.katexNow()) SV.loadKatex().then((k) => { if (k && $('q-sym-out').dataset.shown) symbolicTry(); });
       $('q-prose-part').style.display = format === 'prose' ? 'block' : 'none';
       $('q-choice-hint').textContent = format === 'multiple_select'
         ? 'Switch on every correct choice. A student must pick exactly those to earn the points.'
@@ -492,18 +495,30 @@
       const out = $('q-sym-out');
       const vars = Q.splitVariables($('q-variables').value);
       const signed = Q.splitVariables($('q-signed').value);
+      out.textContent = '';
+      out.dataset.shown = '1';
+      const say = (t) => out.appendChild(document.createTextNode(t));
+      // The typeset reading is built from the parsed tree (never from the typed text); KaTeX falls back to the plain reading.
+      const math = (text) => {
+        const parsed = SA.parseSymbolic(text, vars);
+        const span = document.createElement('span');
+        span.className = 'mx-math';
+        out.appendChild(span);
+        SV.showMath(span, parsed, parsed.ok ? parsed.reading : '');
+      };
       const key = SA.previewKey($('q-expression').value, vars, signed);
-      if (!key.ok) { out.textContent = 'The expected expression cannot be used. ' + key.message; return; }
-      let t = 'The expected expression reads as: ' + key.reading + '. It is defined at ' + key.points + ' of the test values. '
+      if (!key.ok) { say('The expected expression cannot be used. ' + key.message); return; }
+      say('The expected expression reads as: ');
+      math($('q-expression').value);
+      say('. It is defined at ' + key.points + ' of the test values. '
         + (signed.length ? 'Tested at positive and negative values: ' + signed.join(', ') + '; every other variable on positive values only.'
-          : 'Every variable is tested on positive values only, so sqrt(x^2) would match x. List a variable under "Variables that can be negative" to test it at negative values too.');
+          : 'Every variable is tested on positive values only, so sqrt(x^2) would match x. List a variable under "Variables that can be negative" to test it at negative values too.'));
       const trial = $('q-try').value;
       if (trial.trim() !== '') {
         const r = SA.checkSymbolic(trial, $('q-expression').value, vars, signed);
-        if (r.ok) t += ' Your trial answer reads as: ' + r.reading + ' and would be marked ' + (r.correct ? 'right' : 'wrong') + '.';
-        else t += ' Your trial answer would be refused, and cost the student no attempt: ' + r.message;
+        if (r.ok) { say(' Your trial answer reads as: '); math(trial); say(' and would be marked ' + (r.correct ? 'right' : 'wrong') + '.'); }
+        else say(' Your trial answer would be refused, and cost the student no attempt: ' + r.message);
       }
-      out.textContent = t;
     }
     function showQError(t) { const e = $('qm-error'); e.textContent = t; e.style.display = 'block'; }
 

@@ -319,6 +319,88 @@ comparing the numbers. No AI is involved.
 - **Not built.** The problem-file and CSV uploads do not carry this type (add one question at a time on the page). Per-student
   values, units and vectors. A browser walk-through of either page; the real edge function; a deployed run.
 
+
+### Insert buttons, typeset reading, e and pi, and square roots (added 2026-11-06)
+
+
+
+What a cadet and a director see changed; what is marked did not (a differential run of the reader before and after, over
+
+6,162 inputs and nine keys with positive and signed variables, gave 0 differences in how any text reads or is marked).
+
+
+
+- **The buttons.** Above the answer box on a symbolic question: one per variable of that question, then squared, power, square
+
+  root, multiply, fraction, plus, minus, brackets, pi, e. A click inserts plain text at the cursor and keeps focus in the box;
+
+  the box stays the one source of the answer, and the server receives the same text as if typed. A selection is bracketed by
+
+  square root, brackets and fraction (the selection becomes the top). A name is given a space before it when a letter, digit or
+
+  closing bracket stands before it, so `2` then `e` is `2 e` and never the number notation `2e3`. Buttons are type=button, have
+
+  accessible names, and are disabled with the box when the question is locked or closed. The row is built by
+
+  `site/js/symbolic-view.js`, which is not part of the byte-copied reader.
+
+- **The typeset reading.** Built from the parsed tree only (`toLatex`), never from the typed text, and drawn by the vendored
+
+  KaTeX 0.19.1 (`site/vendor/katex/`, self-hosted, `trust: false`, `throwOnError: false`), loaded on demand on the cadet
+
+  homework page and the staff question editor and nowhere else. LaTeX is made only of fixed commands, finite numbers, and
+
+  names rebuilt letter by letter from letters and digits. Text carrying LaTeX or HTML is refused by the reader before a tree exists.
+
+  If KaTeX is missing or throws, the plain reading is shown with a note that nothing is lost.
+
+- **A question's own variable wins over a constant.** A question that declares `e` or `pi` (or the Greek letter) reads that name
+
+  as its variable: the constant is gone for that question, the variable button is shown and the constant button is hidden. This
+
+  needed one change to the reader: the variable check used to refuse `e` and `pi` as variable names. A function name (`sin`,
+
+  `sqrt`, ...) and `log` are still refused. Staff are told on the question page.
+
+- **Number notation.** `1e3` is the number 1000: a digit run, `e`, and digits is read as one number before any name is looked
+
+  at. `2e` and `2 e` are 2 times e (the constant, or the question's variable e). When a question's variable is `e`, `2e3`,
+
+  `2e+3` and `2e-3` are still numbers (2000, 2000, 0.002); to mean "2 times e plus 3" write `2*e+3` or `2 e + 3`. `e2` is an
+
+  unknown name, not 2e.
+
+- **A square root of a negative number.** Undefined: never 0 and never complex. The existing rule decides the mark and is
+
+  unchanged: a test value where the KEY is undefined says nothing; an answer that is undefined where the key is defined is
+
+  wrong. Variables default to positive, so `sqrt(x)^2` is `x`, `sqrt(x^2)` is `x` and `x^(1/2)` is `sqrt(x)`. For a variable
+
+  staff mark "can be negative", `sqrt(x)` is defined at about half the points; `sqrt(x)^2` is undefined at the negative ones, so
+
+  it is not `x` and is marked wrong against a key of `x`; `sqrt(x^2)` is `abs(x)`, not `x`. An odd root such as `x^(1/3)` is
+
+  also undefined at a negative value (it is a power, not a real cube root). **One narrow exception, added with this change:**
+
+  a root whose argument is zero only up to rounding noise (`1 - sin(x)^2` where cos(x) is zero can come out as -1e-17) reads
+
+  as 0 with a wide error bound, so a right answer written that way is not lost to noise. A clearly negative argument is not near
+
+  zero. The test that proves the exception cannot be made to fail on the old reader at the fixed test points: it is a guard,
+
+  not a repair of a mark that was ever wrong.
+
+- **Marking is value checking, and no answer shows the key.** Unchanged. Test values are still seeded by the variable names.
+
+- **Staff keys** use the same reader, so a key can hold `sqrt(...)`, `pi`, `e`, and show the same typeset reading in the editor
+
+  ("Show how it is read" shows the key and the trial answer). No buttons were added to the editor.
+
+- **Still not done:** a walk of the real function (`tests/walk/groups/i.mjs` is written and not run); the buttons on the staff
+
+  trial box; the problem-file uploads do not carry this type.
+
+
 ## Stage E gate: test list
 
 Runs now (offline or on a scratch database):

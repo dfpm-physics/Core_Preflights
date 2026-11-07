@@ -19,6 +19,7 @@ earlier step which failed is reported as blocked, never as a pass.
 | E | Reports: the bar entry, the picker, one report, an instructor's scope, the course switch |
 | F | Meeting days: a course on W and F, one on the default, Add section, a section holding another day, the roster preview line |
 | G | Roles: an instructor gets no Assignments writes; the other course's director reaches nothing here |
+| I | Expression answers: the insert buttons, the typeset reading (a rendered KaTeX element) for the cadet and in the question editor, a question whose own variable is `e`, and one marking through the deployed `check-answer` (I5 needs the new function) |
 
 ## Safety
 

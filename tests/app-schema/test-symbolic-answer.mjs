@@ -234,7 +234,7 @@ section('a question key that does not parse is a key fault');
     check(`${label}: key fault, no verdict`, r.ok === false && r.keyFault === true && !('correct' in r) && typeof r.message === 'string', JSON.stringify(r).slice(0, 140));
   }
   for (const [label, vars] of [
-    ['no variables', []], ['variables not a list', 'x'], ['a variable named like a function', ['sin']], ['a variable named e', ['e']], ['a variable named pi', ['pi']],
+    ['no variables', []], ['variables not a list', 'x'], ['a variable named like a function', ['sin']],
     ['a duplicate variable', ['x', 'x']], ['a variable with a space', ['a b']], ['a variable starting with a digit', ['1x']], ['too many variables', 'abcdefghi'.split('')],
     ['a variable name that is too long', ['a'.repeat(13)]], ['an empty variable name', ['']], ['a variable named __proto__', ['__proto__']], ['a variable named constructor', ['constructor']],
   ]) {
@@ -391,6 +391,92 @@ section('look-alike characters: minus, superscript digits, subscript digits, fra
   expectRight('m*v^2/2', ['m', 'v'], ['½mv²', '½ m v^2'], 'one half sign', []);
   expectRight('sqrt(2*g*h)', ['g', 'h'], ['√(2gh)', '√ (2 g h)'], 'square root sign before a bracket', []);
   expectRefused('x', ['x'], ['√x'], 'bad_character', 'a bare square root sign is still refused');
+}
+
+section('the buttons insert square roots, pi and e: the forms they make are read and compared by value');
+{
+  expectRight('x', ['x'], ['sqrt(x)^2', 'sqrt(x)*sqrt(x)', 'sqrt(x^2)', '(x^(1/2))^2'], 'sqrt(x)^2 is x for a positive x', []);
+  expectRight('sqrt(x)', ['x'], ['x^(1/2)', 'x^0.5', '√(x)', 'sqrt(x)*1', 'x/sqrt(x)'], 'x^(1/2) is sqrt(x)', []);
+  expectRight('pi*r^2', ['r'], ['r^2*pi', 'π r²', 'pi r^2', '3.141592653589793*r^2', 'r*r*pi'], 'pi r squared', []);
+  expectRight('m/(2*k)', ['m', 'k'], ['(m)/(2*k)', '(m)/((2)*(k))', 'm/2/k', '(m/2)/(k)'], 'a stacked fraction typed with brackets is the slash form', []);
+  expectRight('a*b/c', ['a', 'b', 'c'], ['(a*b)/(c)', '(a)*(b)/(c)', 'a*(b/c)'], 'brackets round a numerator and a denominator', []);
+  expectWrong('pi*r', ['r'], ['2*pi*r', 'r', '3*r', '3.14*r', 'pi*r^2', 'e*r'], '2*pi is not pi', []);
+  expectWrong('x^2', ['x'], ['x^3', 'x', 'x^(1/2)', 'x^(2/3)', 'sqrt(x)', '2*x', 'x^-2'], 'the wrong power is wrong', []);
+  expectWrong('sqrt(x)', ['x'], ['x', 'x^2', 'x^(1/3)', 'sqrt(2*x)', 'x^(1/2)+1', '-sqrt(x)'], 'the wrong root is wrong', []);
+  expectRight('e^(-x)', ['x'], ['exp(-x)', '1/exp(x)', 'e^-x', '1/e^x'], 'e as the constant', []);
+  expectRight('2*pi*sqrt(m/k)', ['m', 'k'], ['2*pi*sqrt((m)/(k))', '2 π √(m/k)', '2*pi*m^(1/2)/k^(1/2)'], 'a period', []);
+  for (const t of ['sqrt()', 'sqrt', '()/()', '()', 'x^()', 'sqrt(x']) {
+    const r = S.parseSymbolic(t, ['x']);
+    check(`what a button leaves before it is filled in, "${t}", is refused with a sentence and never marked`, r.ok === false && typeof r.message === 'string' && r.message.length > 8, JSON.stringify(r));
+  }
+}
+
+section('a variable of the question wins over a constant of the same name');
+{
+  check('a variable named e is allowed', S.variableProblem(['e']) === null && S.variableProblem(['pi']) === null && S.variableProblem(['π']) === null);
+  check('a function name is still not allowed as a variable', S.variableProblem(['sqrt']) !== null && S.variableProblem(['sin']) !== null && S.variableProblem(['log']) !== null);
+  // e as the electron charge
+  const vars = ['e', 'V'];
+  expectRight('e*V', vars, ['V*e', 'V e', 'eV', 'e*V*1'], 'e is the question variable', []);
+  expectWrong('e*V', vars, ['2.718281828459045*V', 'exp(1)*V', 'V', 'e*V*2'], 'e is NOT 2.718 here', []);
+  const t = S.parseSymbolic('e*V', vars);
+  check('the tree holds a variable for e, and the reading says e', t.ok && t.ast.a.k === 'var' && t.ast.a.name === 'e' && t.used.join() === 'e,V', JSON.stringify(t.ast));
+  const nv = S.parseSymbolic('e*V', ['V']);
+  check('without such a variable, e is the constant', nv.ok && nv.ast.a.k === 'const' && nv.ast.a.name === 'e' && nv.used.join() === 'V');
+  // pi as a variable
+  expectRight('pi*r', ['pi', 'r'], ['r*pi', 'π r', 'πr'], 'pi is the question variable', []);
+  expectWrong('pi*r', ['pi', 'r'], ['3.141592653589793*r'], 'pi is NOT 3.14159 here', []);
+  check('the Greek pi is the variable too when the question declares pi', S.parseSymbolic('π', ['pi']).ast.k === 'var' && S.parseSymbolic('pi', ['π']).ast.k === 'var');
+  check('the constant works as before when no such variable is declared', S.parseSymbolic('π', ['r']).ast.k === 'const' && S.parseSymbolic('pi', ['r']).ast.name === 'pi');
+  check('and a key that uses e as the constant is not changed by other variables', S.checkSymbolic('e^x', 'exp(x)', ['x']).correct === true);
+  check('...but with e a variable, e^x is no longer exp(x)', S.checkSymbolic('e^x', 'exp(x)', ['e', 'x']).correct === false);
+  check('the test points of other questions do not move (the seed is the variable names)', JSON.stringify(S.testPoints(['x']).slice(0, 2)) === JSON.stringify(S.testPoints(['x']).slice(0, 2)));
+}
+
+section('number notation 1e3, and "2e" / "2 e"');
+{
+  expectRight('1000*x', ['x'], ['1e3*x', '1E3 x', '1e3x', '1.0e3*x', '0.001e6*x'], '1e3 is a number', []);
+  expectRight('0.0001*x', ['x'], ['1e-4*x', '1e-04x', '1E-4 x'], 'a small number', []);
+  expectRight('2*e', ['x'], ['2e', '2 e', '2*e', 'e2'.slice(0, 0) + 'e*2', '2(e)'], '2e and 2 e are 2 times the constant e', []);
+  expectWrong('2*e', ['x'], ['2e3', '2e+3', '2e-3', '2*x', '2'], '2e is not a number', []);
+  expectRight('2000', ['x'], ['2e3', '2E3', '2e+3'], '2e3 is two thousand', []);
+  expectRight('2*e', ['e'], ['2e', '2 e', 'e*2'], '2e is 2 times the variable e when the question declares e', []);
+  expectRight('2000', ['e'], ['2e3'], '2e3 is still two thousand when the question declares e', []);
+  expectRight('2000', ['e'], ['2e+3'], '2e+3 is still the number 2000 when e is a variable: write 2*e+3 for the other reading', []);
+  expectRight('2*e+3', ['e'], ['2*e+3', '2 e + 3'], '2*e+3 with a spaced sign', []);
+  check('a number followed by exp( is a product with exp', S.checkSymbolic('2exp(x)', '2*exp(x)', ['x']).correct === true);
+  check('e2 is an unknown name, not 2e', S.parseSymbolic('e2', ['x']).code === 'unknown_name');
+  check('1 e3 is refused, not guessed', S.parseSymbolic('1 e3', ['x']).ok === false);
+}
+
+section('a square root of a negative number: undefined, never zero and never complex');
+{
+  // default: every variable is positive, so every point is defined
+  check('sqrt(x) is defined at enough points for a positive x', S.previewKey('sqrt(x)', ['x']).ok === true);
+  // x marked "can be negative"
+  const sg = ['x'];
+  check('sqrt(x) with x signed: the key is defined only where x is positive, and there are enough such points', (() => { const p = S.previewKey('sqrt(x)', ['x'], sg); return p.ok && p.points >= 8 && p.points < 96; })());
+  expectRight('sqrt(x)', ['x'], ['x^(1/2)', 'x^0.5', 'sqrt(x)*1'], 'signed x: where the key is undefined nothing is asked', sg);
+  expectRight('x', ['x'], ['x', '(x)'], 'signed x identity', sg);
+  expectWrong('x', ['x'], ['sqrt(x)^2', 'sqrt(x^2)', 'abs(x)'], 'signed x: sqrt(x)^2 is undefined where x<0, so it is not x; sqrt(x^2) is |x|', sg);
+  expectWrong('abs(x)', ['x'], ['x', 'sqrt(x)^2'], 'signed x: x is not |x|', sg);
+  expectRight('abs(x)', ['x'], ['sqrt(x^2)', 'sqrt(x)^2'.slice(0, 0) + 'sqrt(x*x)'], 'signed x: sqrt(x^2) is |x|', sg);
+  expectWrong('x^2', ['x'], ['sqrt(x^2)', 'abs(x)', 'x^(1/2)^4'], 'signed x: a root that is undefined for a negative x is not x^2', sg);
+  // a root of a negative is NaN: it must not become 0, and a wrong answer that is undefined where the key exists is wrong
+  expectWrong('1', ['x'], ['sqrt(x)/sqrt(x)', 'x^(1/2)/x^(1/2)'], 'signed x: an answer undefined at negative x is not the constant 1', sg);
+  expectWrong('sqrt(1+x^2)', ['x'], ['sqrt(x)', 'sqrt(x^2)', 'sqrt(1-x^2)'], 'a wrong root is wrong', sg);
+  // a negative number under a root, as a typed constant
+  const key = S.checkSymbolic('sqrt(-4)', 'sqrt(x)', ['x']);
+  check('sqrt(-4) is not 2 and not 2i: it is wrong at every point, not refused', key.ok && key.correct === false, JSON.stringify(key));
+  check('a key that is a root of a negative everywhere is a key fault', S.checkSymbolic('x', 'sqrt(-1-x^2)', ['x']).keyFault === true);
+  // rounding noise around zero under a root must not decide a mark
+  expectRight('abs(cos(x))', ['x'], ['sqrt(1-sin(x)^2)', 'sqrt(cos(x)^2)'], 'noise under a root: 1-sin^2 is cos^2 and can come out as a tiny negative', []);
+  expectRight('sqrt(1-sin(x)^2)', ['x'], ['abs(cos(x))', 'sqrt(cos(x)^2)'], 'noise under a root, the key being the root form', []);
+  expectRight('sqrt(cosh(x)^2-sinh(x)^2-1+x^2)', ['x'], ['x', 'abs(x)'], 'noise under a root, a root of a cancelling sum', []);
+  expectRight('0', ['x'], ['sqrt(cosh(x)^2-sinh(x)^2-1)'], 'a root of rounding noise is 0 within the rounding, not undefined', []);
+  expectWrong('0', ['x'], ['sqrt(x-1)', 'sqrt(1e-3)', 'sqrt(cosh(x)^2-sinh(x)^2-1+1e-6)'], 'but a real positive root, or a real negative one, is not 0', []);
+  expectWrong('x', ['x'], ['sqrt(x^2-1e-3)+x-sqrt(x^2-1e-3)'.slice(0, 0) + 'sqrt(x^2-0.001)'], 'a root of a clearly negative number at some points is undefined, not near zero', []);
+  check('a real negative argument is not mistaken for noise', S.checkSymbolic('sqrt(x-3)', 'sqrt(x-3)', ['x']).correct === true && S.checkSymbolic('0', 'sqrt(x-3)', ['x']).correct === false);
 }
 
 section('the exported limits are the ones stated to staff');

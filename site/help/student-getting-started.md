@@ -140,6 +140,28 @@ comes back.
 If a lesson will not run at all, tell your instructor — they can grant an extension, and they would
 much rather hear from you early than late.
 
+## Typing a math answer
+
+Some homework questions ask for an **expression**, such as the energy of a moving object in terms of
+its mass and speed. Type it in the box, or use the row of buttons above the box. A button puts plain
+text where your cursor is and leaves you in the box, so you can mix typing and clicking.
+
+- The row has one button for **each letter the question allows**, then squared, power, square root,
+  multiply, fraction, plus, minus, brackets, pi and e. Square root puts in `sqrt()` with the cursor
+  inside. Fraction puts in `()/()` with the cursor in the top. Squared puts in `^2`.
+- **Under the box, your answer is drawn the way it is written in a book**, with a stacked fraction for a
+  division, a root sign, raised powers and the symbol for pi. If you type something the page cannot
+  read, it tells you what to fix. Nothing is marked until you press **Check answer**, and an answer
+  that cannot be read does not use up a try.
+- If the drawn version does not appear, the page shows the same answer as plain text and says so. Your
+  answer is not affected.
+- When a question uses **e** or **pi** as one of its own letters (for example the charge of an electron),
+  that letter is the question's, there is a button for it, and the number e or pi is not available in
+  that question. Otherwise `e` is the number 2.718... and `pi` is 3.14159....
+- Write `1e3` for 1000. `2e` and `2 e` mean 2 times e. Put brackets round anything you divide by:
+  `1/(2*x)`, not `1/2x`.
+- You are marked on the **value** of your expression, so `x*2` and `2x` and `2*x` are the same answer.
+
 ## Seeing your grade
 
 For a **written preflight**, the grade appears once your instructor has reviewed it — a score you can

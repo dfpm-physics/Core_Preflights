@@ -2513,3 +2513,10 @@ td.flagcell b { color: var(--red); font-variant-numeric: tabular-nums; }
 button.choice-card { font: inherit; color: inherit; text-align: left; cursor: pointer; width: 100%; }
 .choice-card.selected { border-color: var(--blue-lt); box-shadow: 0 0 0 2px var(--blue-lt); }
 .choice-card:focus-visible { outline: 2px solid var(--blue-lt); outline-offset: 2px; }
+
+/* Answer-box helpers for an expression question: the insert buttons and the typeset reading (KaTeX is loaded by symbolic-view.js). */
+.mx-bar { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 8px; }
+.mx-btn { min-width: 2.4rem; min-height: 2.2rem; padding: 2px 10px; font-size: 1rem; line-height: 1.2; }
+.mx-preview { margin-top: 6px; font-size: 0.95em; min-height: 1.6em; overflow-x: auto; }
+.mx-math { font-size: 1.1em; color: var(--text, inherit); }
+.mx-math .katex { font-size: 1.15em; }

@@ -23,7 +23,8 @@
 //   auto-checked grade before the deadline; a database test pins it (test_step2_together_scratch.py, section 10).
 
 import { esc, fmtDateTime } from './util.js';
-import { parseSymbolic } from './symbolic-answer.js';
+import { parseSymbolic, foldName } from './symbolic-answer.js';
+import { buttonsFor, insertSnippet, loadKatex, katexNow, showMath, PLAIN_NOTE } from './symbolic-view.js';
 
 export const ANSWER_FUNCTION = 'check-answer';
 /** The relation the grade row is read from: the student's view of their own grades (see the header). */
@@ -173,11 +174,14 @@ function questionHTML(q, readOnly) {
       <div class="field-hint">${q.unitHint ? `Give your answer in ${esc(q.unitHint)}. ` : ''}Use a decimal point, not a comma.</div>`;
   } else if (q.format === 'symbolic') {
     const names = (q.variables || []).map(esc).join(', ');
-    input = `<input type="text" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="200" data-entry="${esc(q.id)}"
+    const bar = buttonsFor(q.variables || [], foldName).map(b => `<button type="button" class="btn btn-secondary btn-sm mx-btn"
+        data-ins="${esc(b.id)}" data-for="${esc(q.id)}" aria-label="${esc(b.name)}" title="${esc(b.name)}" ${readOnly ? 'disabled' : ''}>${esc(b.label)}</button>`).join('');
+    input = `<div class="mx-bar" role="group" aria-label="Insert into your answer">${bar}</div>
+      <input type="text" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="200" data-entry="${esc(q.id)}"
       placeholder="Type an expression" style="max-width:360px" ${readOnly ? 'disabled' : ''}>
-      <div class="field-hint">Use ${names ? esc(names) : 'the given letters'}. Write * to multiply, / to divide and ^ for a power, for example m*v^2/2.
-        Put brackets round anything you divide by: 1/(2*x), not 1/2x.</div>
-      <div class="muted" style="margin-top:6px;font-size:0.88em" data-preview="${esc(q.id)}" aria-live="polite"></div>`;
+      <div class="mx-preview muted" data-preview="${esc(q.id)}" aria-live="polite"></div>
+      <div class="field-hint">Use ${names ? esc(names) : 'the given letters'}. Type, or use the buttons above. Write * to multiply, / to divide and ^ for a power, for example m*v^2/2.
+        Put brackets round anything you divide by: 1/(2*x), not 1/2x.</div>`;
   } else {
     const type = q.format === 'multiple_select' ? 'checkbox' : 'radio';
     input = `${type === 'checkbox' ? '<div class="field-hint" style="margin-bottom:6px">Choose all that apply.</div>' : ''}
@@ -271,7 +275,7 @@ export async function mountHomework(root, deps) {
   };
   const setLocked = (q, locked) => {
     const block = $(`#qb-${CSS.escape(q.id)}`);
-    block?.querySelectorAll('[data-entry], [data-check]').forEach(el => { el.disabled = locked; });
+    block?.querySelectorAll('[data-entry], [data-check], [data-ins]').forEach(el => { el.disabled = locked; });
   };
   const closedOrSpent = (q) => view.readOnly || (q.left !== null && q.left <= 0);
 
@@ -319,7 +323,53 @@ export async function mountHomework(root, deps) {
     else setLocked(q, closedOrSpent(q));
   }
 
+  // The typeset reading under the box. KaTeX is loaded once, only for a page that has a symbolic question; until it arrives, or
+  // if it never does, the plain reading is shown (with a note once it is known to be missing). Nothing here touches the answer.
+  let katexState = katexNow() ? 'ready' : 'loading';
+  const drawPreview = (q) => {
+    const el = $(`[data-preview="${CSS.escape(q.id)}"]`);
+    const box = $(`#qb-${CSS.escape(q.id)} input[type="text"][data-entry]`);
+    if (!el || !box) return;
+    const p = symbolicPreview(q, box.value);
+    el.textContent = '';
+    el.style.color = p.tone === 'bad' ? 'var(--red, #c62828)' : '';
+    if (p.tone !== 'ok') { el.textContent = p.text; return; }
+    const parsed = parseSymbolic(box.value, q.variables || []);
+    const label = document.createElement('span');
+    label.textContent = 'Your answer reads as: ';
+    const math = document.createElement('span');
+    math.className = 'mx-math';
+    el.append(label, math);
+    const how = showMath(math, parsed, parsed.reading, katexNow());
+    if (how === 'plain' && katexState === 'failed') {
+      const note = document.createElement('div');
+      note.className = 'field-hint';
+      note.textContent = PLAIN_NOTE;
+      el.append(note);
+    }
+  };
+  const symbolicQs = view.questions.filter(q => q.format === 'symbolic');
+  if (symbolicQs.length && katexState === 'loading') {
+    loadKatex().then((k) => { katexState = k ? 'ready' : 'failed'; symbolicQs.forEach(drawPreview); }, () => { katexState = 'failed'; symbolicQs.forEach(drawPreview); });
+  }
+
+  // Keep focus (and the selection) in the answer box when a button is pressed.
+  root.addEventListener('mousedown', (e) => { if (e.target.closest('[data-ins]')) e.preventDefault(); });
   root.addEventListener('click', (e) => {
+    const ins = e.target.closest('[data-ins]');
+    if (ins && !ins.disabled) {
+      const q = byId[ins.dataset.for];
+      const box = q && $(`#qb-${CSS.escape(q.id)} input[type="text"][data-entry]`);
+      const btn = q && buttonsFor(q.variables || [], foldName).find(b => b.id === ins.dataset.ins);
+      if (!box || !btn || box.disabled) return;
+      const r = insertSnippet(box.value, box.selectionStart, box.selectionEnd, btn.spec, 200);
+      if (!r) { drawReply(q, 'bad', 'The answer box holds at most 200 characters.'); return; }
+      box.value = r.value;
+      box.focus();
+      box.setSelectionRange(r.caret, r.caret);
+      drawPreview(q);
+      return;
+    }
     const b = e.target.closest('[data-check]');
     if (b && byId[b.dataset.check]) check(byId[b.dataset.check]);
   });
@@ -331,11 +381,7 @@ export async function mountHomework(root, deps) {
     const t = e.target.closest?.('input[type="text"][data-entry]');
     const q = t && byId[t.dataset.entry];
     if (!q || q.format !== 'symbolic') return;
-    const el = $(`[data-preview="${CSS.escape(q.id)}"]`);
-    if (!el) return;
-    const p = symbolicPreview(q, t.value);
-    el.textContent = p.text;
-    el.style.color = p.tone === 'bad' ? 'var(--red, #c62828)' : '';
+    drawPreview(q);
   });
   root.addEventListener('change', (e) => {
     const r = e.target.closest?.('input[type="radio"][data-entry], input[type="checkbox"][data-entry]');

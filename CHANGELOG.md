@@ -8,6 +8,54 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-11-06 — Matthew Recker via Claude (symbolic answers: insert buttons, typeset reading, e and pi; branch `v2-symbolic`, local, uncommitted)
+
+
+
+**What.** On the cadet homework page, a symbolic question now has a row of buttons above the answer box (each variable of the question,
+
+then squared, power, square root, multiply, fraction, plus, minus, brackets, pi, e) that insert plain text at the cursor and keep
+
+focus in the box, and the "reads as" line under the box is drawn as typeset math with KaTeX (a stacked fraction, a root sign,
+
+raised powers, pi as a symbol). The staff question editor shows the key and the trial answer the same way.
+
+- New `site/js/symbolic-view.js` (`toLatex` built from the parsed tree only, the button list, the insert function, a KaTeX
+
+  loader that falls back to plain text). `site/js/homework.js` wired to it. KaTeX 0.19.1 vendored under `site/vendor/katex/`
+
+  (js, css, 20 woff2 fonts; source, license and hashes in `VENDORED.txt`; the existing `site/vendor/** -text` line in `.gitattributes` already keeps it byte-exact, and `.gitattributes` is unchanged); it loads on demand
+
+  on the homework page and the question editor only. `site/css/styles.css`, `site/faculty/questions.html` (CSP hash rebuilt with
+
+  `scripts/checks/csp_pages.py --write`).
+
+- Reader (`symbolic-answer.js`, copied byte for byte to `check-answer/` and `remark-question/`): a question's own `e` or `pi`
+
+  variable now wins over the constant (it used to be refused as a variable name); a square-root argument that is zero up to
+
+  rounding noise reads as 0. How `1e3`, `2e`, `2 e` and a square root of a negative read is written in
+
+  `docs/decisions/V2-STAGE-E-ANSWERS.md`.
+
+- Tests: `test-symbolic-answer.mjs` extended, new `test-symbolic-view.mjs` (added to the CI list), a walk group I.
+
+  A differential run of the reader before and after (6,162 inputs, five variable lists, nine keys, positive and signed) found 0 changes.
+
+- Help: a "Typing a math answer" section in `student-getting-started.md`; DOC-SOURCES updated.
+
+
+
+**Deliberately not done.** No commit, no deploy, no write to staging, no migration. The deployed functions on staging are the old
+
+reader, so marking through the real function (walk check I5) and the whole of group I have not been run. No buttons in the staff
+
+trial box. `site/student/interaction-submit.html` and `site/faculty/lessons.html` untouched. The page was looked at once in a
+
+browser against the local server (port 8061, stopped) with fake data; no sign-in, nothing saved.
+
+
+
 ## 2026-11-05 — Matthew Recker via Claude (symbolic answers: a spaced fraction reads as a product; branch `v2-symbolic`, local, uncommitted)
 
 **What.** In an expression answer or key, a plain number divided by a plain number, then a space, then a factor, now reads as the
