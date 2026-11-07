@@ -1,6 +1,6 @@
 ## Choose how cadets do the work
 
-On **Assignments** in the top navigation, open an assignment that is already saved. A new assignment starts with a short form. Save it once, then open it again to see **How cadets do this work**.
+On **Assignments** in the top navigation, open an assignment that is already saved. A new assignment starts with a short form. Save it once. The form stays open and shows **How cadets do this work**.
 
 Pick one of three cards:
 
