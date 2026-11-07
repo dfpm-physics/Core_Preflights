@@ -209,4 +209,13 @@ section('the files: vendored KaTeX, and where the viewer is used');
   check('the lesson backup pages do not mention the viewer or KaTeX', gem.length > 0 && !existsSync(new URL('site/gemini/katex', root)));
 }
 
+
+section('a tower of powers is typeset right to left, like the reader (small item 5)');
+{
+  eq('x^2^3 is x to the power 2 to the power 3', latex('x^2^3'), 'x^{2^{3}}');
+  eq('(x^2)^3 is bracketed', latex('(x^2)^3'), '\\left(x^{2}\\right)^{3}');
+  eq('x**2**3 is the same as x^2^3', latex('x**2**3'), latex('x^2^3'));
+  eq('2^3^2 is typeset as 2^{3^{2}}', latex('2^3^2'), '2^{3^{2}}');
+}
+
 process.exit(summary() ? 0 : 1);

@@ -1165,6 +1165,45 @@ export function deadlineEarlierWarning(title, impact) {
     'so confirm only if that is what you mean. Move it earlier anyway?';
 }
 
+/**
+ * True when this save lowers (or first sets) the attempt limit of an automatically checked item. Raising it, clearing it, or an
+ * item that is not automatically checked is not a lowering. Pure.
+ */
+export function attemptLimitLowers(item, form) {
+  if (form.grading !== 'auto_checked') return false;
+  const s = String(form.attemptLimit ?? '').trim();
+  if (s === '' || !/^\d{1,3}$/.test(s)) return false;
+  const next = Number(s);
+  return item.attemptLimit == null || next < Number(item.attemptLimit);
+}
+
+/**
+ * Of the cadets who have answered this item, how many have already used MORE attempts on some question than the new limit
+ * allows, and the most any one of them used. Their stored attempts and grades are not changed by a lower limit; they can only
+ * answer no more. Reads the attempts above the new limit, so the answer is small.
+ * @returns {Promise<{ error: object|null, cadets: number, highest: number }>}
+ */
+export async function attemptsOverLimit(db, offeringId, limit) {
+  const over = new Set();
+  let highest = 0;
+  for (let from = 0; ; from += 1000) {
+    const r = await db.from('question_attempts').select('enrollment_id,attempt_no').eq('assignment_offering_id', offeringId)
+      .gt('attempt_no', limit).order('id').range(from, from + 999);
+    if (r.error) return { error: r.error, cadets: 0, highest: 0 };
+    for (const x of r.data || []) { over.add(x.enrollment_id); if (x.attempt_no > highest) highest = x.attempt_no; }
+    if ((r.data || []).length < 1000) break;
+  }
+  return { error: null, cadets: over.size, highest };
+}
+
+/** The warning shown before the attempt limit is set below what some cadets have used. A person decides; nothing blocks. */
+export function attemptLowerWarning(title, impact) {
+  return `“${title}” already has answers. You are setting the limit to ${plural(impact.limit, 'attempt', 'attempts')} for each question, ` +
+    `and ${plural(impact.cadets, 'cadet has', 'cadets have')} already used more than that (the most is ${impact.highest}). ` +
+    'Nothing already answered or graded changes, but those cadets can answer no more on the questions where they are over. ' +
+    'Lowering a limit is a decision for a person, so confirm only if that is what you mean. Lower it anyway?';
+}
+
 /** The warning shown before an item that has cadet work is unpublished. Nothing is deleted; cadets stop seeing it. */
 export function unpublishWarning(title, impact) {
   return `“${title}” already has ${plural(impact.submissions, 'submission', 'submissions')} and ${plural(impact.grades, 'grade', 'grades')}. ` +
@@ -1352,6 +1391,12 @@ export async function updateItem(db, ctx, item, form, ack = null) {
   // counts. Confirming always lets the save through; nothing here blocks.
   const earlier = earlierSections(item, sched, ctx.sections);
   const unpublishing = form.publish === false && item.isPublished === true;
+  if (attemptLimitLowers(item, form)) {
+    const lim = attemptLimitOf(form);
+    const d = await attemptsOverLimit(db, item.offeringId, lim);
+    if (d.error) return { error: d.error };
+    if (d.cadets && ack?.attempts !== d.cadets) return { error: null, needsAttemptConfirm: { cadets: d.cadets, highest: d.highest, limit: lim } };
+  }
   if (earlier.length || unpublishing) {
     const w = await countWork(db, item.offeringId);
     if (w.error) return { error: w.error };

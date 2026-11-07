@@ -39,8 +39,8 @@ const allProblems = (plan) => plan.rows.flatMap(r => r.problems);
 section('the example file');
 for (const origin of ['human', 'ai']) {
   const plan = read(P.exampleProblemFile(origin));
-  check(`the ${origin} example is accepted`, plan.ok && plan.rows.length === 4, JSON.stringify(allProblems(plan)));
-  eq(`the ${origin} example marks every key ${origin}`, plan.toWrite.map(w => w.key.written_by), Array(4).fill(origin));
+  check(`the ${origin} example is accepted`, plan.ok && plan.rows.length === 5, JSON.stringify(allProblems(plan)));
+  eq(`the ${origin} example marks every key ${origin}`, plan.toWrite.map(w => w.key.written_by), Array(5).fill(origin));
 }
 {
   const plan = read(P.exampleProblemFile('human'));
@@ -49,8 +49,8 @@ for (const origin of ['human', 'ai']) {
   eq('an answer of 0 keeps its absolute tolerance', [plan.toWrite[1].key.value, plan.toWrite[1].key.tol_abs], ['0', '0.01']);
   eq('choices get the letters a, b, c, d in order', plan.toWrite[2].columns.choices.map(c => c.id), ['a', 'b', 'c', 'd']);
   eq('the correct letters are kept', plan.toWrite[3].key.correct_choice_ids, ['a', 'b']);
-  eq('positions count from the start position', plan.toWrite.map(w => w.columns.position), [1, 2, 3, 4]);
-  eq('start position is respected', read(P.exampleProblemFile(), { startPosition: 7 }).toWrite.map(w => w.columns.position), [8, 9, 10, 11]);
+  eq('positions count from the start position', plan.toWrite.map(w => w.columns.position), [1, 2, 3, 4, 5]);
+  eq('start position is respected', read(P.exampleProblemFile(), { startPosition: 7 }).toWrite.map(w => w.columns.position), [8, 9, 10, 11, 12]);
   // every number key is accepted by the real checker when its own value is typed back
   let allBack = true;
   for (const w of plan.toWrite.filter(x => x.key.value !== undefined)) {
@@ -319,8 +319,8 @@ section('what the page writes: the origin reaches every key, and a persons check
   };
   const res = await Q.writeImport(db, 'act-1', plan);
   const keyInsert = calls.find(c => c.table === 'question_keys' && c.verb === 'insert');
-  check('the plan is written', res.count === 4, JSON.stringify(res));
-  check('every key row sent says written_by ai', keyInsert && keyInsert.payload.length === 4 && keyInsert.payload.every(k => k.written_by === 'ai'));
+  check('the plan is written', res.count === 5, JSON.stringify(res));
+  check('every key row sent says written_by ai', keyInsert && keyInsert.payload.length === 5 && keyInsert.payload.every(k => k.written_by === 'ai'));
   check('no key row names a checker or a check time', keyInsert.payload.every(k => !('checked_by' in k) && !('checked_at' in k) && !('created_by' in k)));
   check('every key row is for variant "" (the same numbers for everyone)', keyInsert.payload.every(k => k.variant_key === ''));
   check('a refused file writes nothing', (await Q.writeImport(db, 'act-1', read(file(num({ answer: '1,5' }))))).error !== undefined);
@@ -349,6 +349,58 @@ section('what the page writes: the origin reaches every key, and a persons check
   reply = { 'question_keys.update': { data: null, error: { message: 'nope' } } };
   check('a refusal is returned as an error', (await Q.markKeysChecked(db, ['k1'])).error?.message === 'nope');
   calls = []; check('no ids, no call', (await Q.markKeysChecked(db, [])).checked === 0 && calls.length === 0);
+}
+
+section('the symbolic type: expression, variables and signed_variables (small item 3)');
+{
+  const SA = await import(new URL('../../site/js/symbolic-answer.js', here).href);
+  const Q = await import(new URL('../../site/js/faculty-questions.js', here).href);
+  const sym = (extra = {}) => ({ type: 'expression', question: 'A made-up question about energy.', points: '2', expression: 'm*v^2/2', variables: 'm|v', written_by: 'human', ...extra });
+  const one = (extra) => read(file(sym(extra)));
+  const about = (plan, col) => allProblems(plan).filter(p => p.includes(`column "${col}"`));
+  check('the format has the three columns', ['expression', 'variables', 'signed_variables'].every(c => P.COLUMNS.includes(c)));
+  const good = one();
+  check('a plain expression row is accepted', good.ok && good.toWrite.length === 1, JSON.stringify(allProblems(good)));
+  eq('it becomes a symbolic question with the key the editor would write', [good.toWrite[0].columns.format, good.toWrite[0].key],
+    ['symbolic', { variant_key: '', expression: 'm*v^2/2', variables: ['m', 'v'], signed_variables: [], written_by: 'human' }]);
+  eq('the question columns carry no unit hint and no choices', [good.toWrite[0].columns.unit_hint, good.toWrite[0].columns.choices], [null, null]);
+  eq('the editor writes the same key for the same input', Q.keyColumns({ format: 'symbolic', key: { expression: 'm*v^2/2', variables: 'm, v', signed: '' } }),
+    { expression: 'm*v^2/2', variables: ['m', 'v'], signed_variables: [] });
+  eq('variables may be separated by spaces, commas or bars', ['m v', 'm,v', 'm|v', ' m ; v '].map(v => one({ variables: v }).toWrite?.[0]?.key.variables), Array(4).fill(['m', 'v']));
+  eq('signed variables are kept', one({ signed_variables: 'v' }).toWrite[0].key.signed_variables, ['v']);
+  check('the dry run shows how the key is read', good.rows[0].summary?.kind === 'expression' && /m/.test(good.rows[0].summary.text), JSON.stringify(good.rows[0].summary));
+  // the same refusal sentences as the editor, word for word
+  const edit = (k) => Q.checkQuestion({ qid: 'x', format: 'symbolic', prompt: 'p', points: '1', choices: [], unitHint: '', key: { correct: [], value: '', tolAbs: '', tolPct: '', sigFigs: '', sigFigMode: 'ignore', unit: '', unitAliases: [], unitMode: 'ignore', reference: '', expression: '', variables: '', signed: '', ...k } }, { grading: 'auto_checked', isNew: false });
+  for (const [name, over, editorKey] of [
+    ['an expression that does not read', { expression: 'm*(v' }, { expression: 'm*(v', variables: 'm v' }],
+    ['no variable named', { variables: '' }, { expression: 'm*v^2/2', variables: '' }],
+    ['a signed variable that is not listed', { signed_variables: 'q' }, { expression: 'm*v^2/2', variables: 'm v', signed: 'q' }],
+    ['an expression with no real value', { expression: 'sqrt(0-m^2-1)' }, { expression: 'sqrt(0-m^2-1)', variables: 'm v' }],
+  ]) {
+    const plan = one(over);
+    const theirs = edit(editorKey).map(s => s.replace(/^[^:]*: /, '').replace(/^the expected expression cannot be used\. /, ''));
+    check(`${name}: refused`, !plan.ok && plan.toWrite.length === 0);
+    check(`${name}: the editor's sentence is in the row error`, theirs.length > 0 && theirs.every(s => allProblems(plan).some(p => p.includes(s))), JSON.stringify([theirs, allProblems(plan)]));
+    check(`${name}: the error names the row`, allProblems(plan).every(p => p.startsWith('Row 2')));
+  }
+  check('an empty expression is refused in its own column', about(one({ expression: '' }), 'expression').length === 1);
+  check('an over-long expression is refused', about(one({ expression: 'm+'.repeat(150) + 'v' }), 'expression').length >= 1);
+  const greek = one({ variables: 'mu|μ' });
+  check('a Greek letter and its spelling listed together are refused, plainly', !greek.ok && about(greek, 'variables').some(p => /same name/.test(p)), JSON.stringify(allProblems(greek)));
+  check('the micro sign and mu are the same name', !one({ variables: 'µ|mu' }).ok);
+  check('number columns on an expression row are refused', !one({ answer: '3' }).ok && !one({ unit: 'J' }).ok && !one({ unit_hint: 'J' }).ok && !one({ tolerance_percent: '2' }).ok);
+  check('choice columns on an expression row are refused', !one({ choices: 'a|b', correct: 'a' }).ok);
+  check('an expression on a number row is refused', !read(file(num({ expression: 'x' }))).ok);
+  check('variables on a choice row are refused', !read(file({ type: 'choice', question: 'q', points: '1', choices: 'a|b', correct: 'a', variables: 'x', written_by: 'human' })).ok);
+  check('formula text in the expression cell is still refused, with a way out', allProblems(one({ expression: '=1+1' })).length >= 1 && allProblems(one({ expression: '-m*v' })).some(p => /0-|\(-/.test(p)), JSON.stringify(allProblems(one({ expression: '-m*v' }))));
+  check('a bad row does not hide a good one: both listed, nothing written', (() => { const pl = read(file(sym(), sym({ expression: 'm*(v' }))); return !pl.ok && pl.toWrite.length === 0 && pl.rows[0].ok && !pl.rows[1].ok; })());
+  eq('an AI mark reaches the symbolic key too', one({ written_by: 'ai' }).toWrite[0].key.written_by, 'ai');
+  const ck = SA.checkSymbolic('v^2*m/2', good.toWrite[0].key.expression, good.toWrite[0].key.variables, good.toWrite[0].key.signed_variables);
+  check('the real checker accepts an equal expression against the imported key', ck.ok !== false && ck.correct === true, JSON.stringify(ck));
+  const ex = read(P.exampleProblemFile('human'));
+  check('the example has an expression row that the reader accepts', ex.toWrite.some(w => w.columns.format === 'symbolic'));
+  const t = P.aiInstructions();
+  check('the instructions for an AI model describe the three columns and the type', /expression/.test(t) && /signed_variables/.test(t) && /type: .*expression/.test(t));
 }
 
 process.exit(summary() ? 0 : 1);

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-4s0xUNtPzh+M4SoFEfgreWboxsNxpH9kWX4GGEduCUE=' 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8=' 'sha256-ZiAj6uoltHIppWp5gsxNZusT/gOlduuF3Y41m8Klowo='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Assignments · PREP</title>
   <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
@@ -84,7 +84,7 @@
           <div class="field"><label for="i-num">Assignment number (optional)</label><input id="i-num" type="text" inputmode="numeric" placeholder="4">
             <div class="field-hint">Puts it in order in the list.</div></div>
           <div class="field" id="i-attempts-wrap" style="display:none"><label for="i-attempts">Attempts per question (optional)</label><input id="i-attempts" type="text" inputmode="numeric" placeholder="No limit">
-            <div class="field-hint">How many times a cadet may answer each question. Leave empty for no limit.</div></div>
+            <div class="field-hint">How many times a cadet may answer each question. Leave empty for no limit. If you set it below what some cadets have already used, you are told how many before it is saved; their answers and grades do not change, but they can answer no more.</div></div>
           <div class="field"><label for="i-release">Cadets can see it</label><select id="i-release"></select>
             <div class="field-hint" id="i-release-hint"></div></div>
           <div class="field" id="i-opens-wrap" style="display:none"><label for="i-opens">Opens on</label><input id="i-opens" type="date">
@@ -726,7 +726,7 @@
         // Each warning is asked in turn, its answer is added to one acknowledgement, and the save is tried again. Nothing
         // has been written while a question is open. A number that changed meanwhile comes back as a new question.
         const ack = {};
-        for (let round = 0; editing && round < 6 && (res.needsConfirm || res.needsTutorConfirm || res.needsPointsConfirm || res.needsDeadlineConfirm || res.needsUnpublishConfirm); round++) {
+        for (let round = 0; editing && round < 6 && (res.needsConfirm || res.needsTutorConfirm || res.needsPointsConfirm || res.needsDeadlineConfirm || res.needsAttemptConfirm || res.needsUnpublishConfirm); round++) {
           if (res.needsConfirm) {
             // The new delivery replaces the old path, which holds questions and answer keys. Say how many, ask,
             // and for keys ask a second time.
@@ -744,6 +744,10 @@
             const d = res.needsDeadlineConfirm;
             if (!window.confirm(I.deadlineEarlierWarning(editing.title, d))) { showError('Nothing was changed.'); return; }
             ack.deadline = d.notSubmitted;
+          } else if (res.needsAttemptConfirm) {
+            const a = res.needsAttemptConfirm;
+            if (!window.confirm(I.attemptLowerWarning(editing.title, a))) { showError('Nothing was changed.'); return; }
+            ack.attempts = a.cadets;
           } else if (res.needsUnpublishConfirm) {
             const u = res.needsUnpublishConfirm;
             if (!window.confirm(I.unpublishWarning(editing.title, u))) { showError('Nothing was changed.'); return; }
@@ -755,7 +759,7 @@
           }
           res = await I.updateItem(db, c, editing, form, { ...ack });
         }
-        if (res.needsConfirm || res.needsTutorConfirm || res.needsPointsConfirm || res.needsDeadlineConfirm || res.needsUnpublishConfirm) {
+        if (res.needsConfirm || res.needsTutorConfirm || res.needsPointsConfirm || res.needsDeadlineConfirm || res.needsAttemptConfirm || res.needsUnpublishConfirm) {
           showError('The numbers on this assignment changed while you were deciding. Nothing was changed. Save again to see the new numbers.'); return;
         }
         if (res.error) {

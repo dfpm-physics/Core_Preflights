@@ -159,7 +159,7 @@ export function groupByMonth(rows) {
 
 /**
  * The course total as the database stated it, ready to print. Returns null when there is no row.
- * `percent_text` is the database's text, shown to two places (percentShown); nothing is computed from it.
+ * `percent_text` is the database's text, shown to one decimal place at most (percentShown); nothing is computed from it.
  */
 export function totalView(total) {
   if (!total) return null;

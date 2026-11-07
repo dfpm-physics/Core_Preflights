@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8=' 'sha256-qNhWpig4Fqxj4xRA1QrsTxoXngy+rCFXnGfzFZbMSZQ='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8=' 'sha256-WucxIf0DzOnwoxOmaXzSTuCRZTdcb72GWAh7yzm76Gc='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Backlog and export · PREP</title>
   <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
@@ -21,6 +21,7 @@
     import { initTheme } from '../js/theme.js';
     import { db } from '../js/supabase.js';
     import { esc, runPage, lastFirst, triggerDownload } from '../js/util.js';
+    import { percentShown } from '../js/percent-shown.js';
     import * as X from '../js/faculty-export.js';
     import * as BB from '../js/blackboard-fill.js';
     import * as B from '../js/faculty-backlog.js';
@@ -65,7 +66,7 @@
         + `<section><h2>Near a line <span class="muted">· ${near.length}</span></h2>
           <div class="field-hint">Within the course's chosen width below the next letter. This is a staff list; use the letter scale page to see who would change before a line moves.</div>
           ${near.length ? `<div class="table-wrap"><table><thead><tr><th>Cadet</th><th>Percent</th><th>Letter</th><th>Near</th></tr></thead><tbody>
-            ${near.map(t => `<tr><td>${esc(lastFirst(d.names[t.enrollment_id] || ''))}</td><td>${esc(t.percent_text ?? '')}</td><td>${esc(t.letter ?? '')}</td><td>${esc(t.near_line_letter)}</td></tr>`).join('')}
+            ${near.map(t => `<tr><td>${esc(lastFirst(d.names[t.enrollment_id] || ''))}</td><td>${esc(percentShown(t.percent_text))}%</td><td>${esc(t.letter ?? '')}</td><td>${esc(t.near_line_letter)}</td></tr>`).join('')}
           </tbody></table></div>` : '<div class="muted">Nobody in your sections is near a line.</div>'}</section>`
         + `<section style="margin-top:22px"><h2>Export</h2>
           <div class="field-hint">Every number comes from the same database total the students and the reports use.</div>

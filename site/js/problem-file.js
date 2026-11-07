@@ -1,9 +1,11 @@
 // problem-file.js — the ONE file format for making auto-checked problems from a spreadsheet, and the ONE reader of it.
-// Plain ES module. Its only import is numeric-answer.js, so the staff page and the offline tests run the same code.
+// Plain ES module. Its only imports are numeric-answer.js and symbolic-answer.js (the readers the answer function uses), so the
+// staff page and the offline tests run the same code.
 // No DOM, no network, no AI. A person types the file, or asks their own AI model to write it; code reads it.
 //
 // THE FORMAT (CSV, UTF-8, comma between columns; the first row names the columns; one row per question)
-//   type                 number | choice | select          (required)  choice = one correct answer, select = several
+//   type                 number | choice | select | expression   (required)  choice = one correct answer, select = several,
+//                        expression = the answer is a formula such as m*v^2/2
 //   question             the text the student reads          (required)  put this problem's numbers in the text
 //   points               0 to 9999.99, two decimals at most  (required)
 //   question_id          optional. Letters, digits, . _ -. Left empty, the next free q-number is used.
@@ -16,6 +18,9 @@
 //   unit_rule            ignore | warn | require     (default ignore)
 //   sig_figs, sig_fig_rule   number only: required significant figures, and ignore | warn | require (default ignore)
 //   unit_hint            number only: a unit shown to the student beside the box
+//   expression, variables, signed_variables   expression only. expression: the expected formula. variables: the names an answer
+//                        may use, separated by | (or spaces or commas). signed_variables: the ones also tried at negative values.
+//                        The same reader and the same refusal sentences as the question editor.
 //   variant              KEPT FOR LATER. Must be empty now. Today every student gets the same numbers. When different
 //                        numbers per student exist, several rows with one question_id and different variant values
 //                        will be the way to say it, and a file written today will still be valid.
@@ -36,6 +41,7 @@
 //   CSV is accepted. A workbook is recognised by its first bytes and answered with the steps to save it as CSV UTF-8.
 
 import { decimalFromLiteral, decimalToPlain, parseAnswer, checkNumeric } from './numeric-answer.js';
+import { variableProblem, signedProblem, previewKey, MAX_SYMBOLIC_CHARS } from './symbolic-answer.js';
 
 export const MAX_ROWS = 500;
 export const MAX_CHARS = 400000;
@@ -46,10 +52,11 @@ export const MAX_POINTS = 9999.99;
 
 export const COLUMNS = [
   'question_id', 'type', 'question', 'points', 'choices', 'correct', 'answer', 'tolerance_percent', 'tolerance_absolute',
-  'unit', 'unit_aliases', 'unit_rule', 'sig_figs', 'sig_fig_rule', 'unit_hint', 'variant', 'written_by',
+  'unit', 'unit_aliases', 'unit_rule', 'sig_figs', 'sig_fig_rule', 'unit_hint', 'variant',
+  'expression', 'variables', 'signed_variables', 'written_by',
 ];
 const REQUIRED = ['type', 'question', 'points'];
-const TYPE_TO_FORMAT = { number: 'numeric', choice: 'multiple_choice', select: 'multiple_select' };
+const TYPE_TO_FORMAT = { number: 'numeric', choice: 'multiple_choice', select: 'multiple_select', expression: 'symbolic' };
 const MODES = ['ignore', 'warn', 'require'];
 const QID_RE = /^[A-Za-z0-9_.-]{1,64}$/;
 
@@ -200,6 +207,8 @@ export function acceptedRange(key) {
 
 const canonHeader = (h) => String(h).trim().toLowerCase().replace(/[\s-]+/g, '_');
 const splitBar = (s) => blank(s) ? [] : String(s).split('|').map(x => x.trim()).filter(x => x !== '');
+/** Variable names: the editor's separators (spaces, commas, semicolons) and the file's bar. */
+const splitNames = (s) => blank(s) ? [] : String(s).split(/[\s,;|]+/).map(x => x.trim()).filter(Boolean);
 
 /**
  * Read a problem file. Nothing here touches a database.
@@ -274,7 +283,8 @@ export function readProblemFile(text, opts = {}) {
     }
     // the formula rule applies to every cell of the row, named columns or not
     cells.forEach((c, idx) => {
-      if (looksLikeFormula(c)) bad(header[idx] || `column ${idx + 1}`, 'this cell reads as spreadsheet formula text (it begins with = @ or a + or - that is not a plain number). Rewrite it as plain text');
+      if (looksLikeFormula(c)) bad(header[idx] || `column ${idx + 1}`, 'this cell reads as spreadsheet formula text (it begins with = @ or a + or - that is not a plain number). Rewrite it as plain text' +
+        (header[idx] === 'expression' ? ', and write a leading minus as 0-x or (-x)*y' : ''));
     });
     const formulaNames = new Set(cells.map((c, idx) => looksLikeFormula(c) ? header[idx] : null).filter(Boolean));
     const cell = (name) => get(cells, name).trim();
@@ -284,7 +294,7 @@ export function readProblemFile(text, opts = {}) {
     const typeWord = cell('type').toLowerCase();
     const format = TYPE_TO_FORMAT[typeWord] || null;
     row.type = typeWord;
-    if (!format && usable('type')) bad('type', `"${cell('type')}" is not number, choice or select`);
+    if (!format && usable('type')) bad('type', `"${cell('type')}" is not number, choice, select or expression`);
 
     // id
     let qid = cell('question_id');
@@ -350,12 +360,14 @@ export function readProblemFile(text, opts = {}) {
     };
 
     const isChoice = format === 'multiple_choice' || format === 'multiple_select';
+    const symbolicCols = ['expression', 'variables', 'signed_variables'];
     const numberCols = ['answer', 'tolerance_percent', 'tolerance_absolute', 'unit', 'unit_aliases', 'unit_rule', 'sig_figs', 'sig_fig_rule', 'unit_hint'];
     const choiceCols = ['choices', 'correct'];
     let questionCols = null, keyCols = null, shown = null;
 
     if (isChoice) {
       for (const n of numberCols) if (!blank(get(cells, n)) && usable(n)) bad(n, 'a choice question has no number key. Leave this empty');
+      for (const n of symbolicCols) if (!blank(get(cells, n)) && usable(n)) bad(n, 'a choice question has no expression. Leave this empty');
       const texts = splitBar(get(cells, 'choices'));
       if (usable('choices')) {
         if (texts.length < 2) bad('choices', 'a choice question needs at least two choices, separated by |');
@@ -387,6 +399,7 @@ export function readProblemFile(text, opts = {}) {
       }
     } else if (format === 'numeric') {
       for (const n of choiceCols) if (!blank(get(cells, n)) && usable(n)) bad(n, 'a number question has no choices. Leave this empty');
+      for (const n of symbolicCols) if (!blank(get(cells, n)) && usable(n)) bad(n, 'a number question has no expression. Leave this empty');
       const ans = numCell('answer', true);
       const tp = numCell('tolerance_percent', false);
       const ta = numCell('tolerance_absolute', false);
@@ -436,6 +449,34 @@ export function readProblemFile(text, opts = {}) {
       }
     }
 
+    else if (format === 'symbolic') {
+      for (const n of choiceCols) if (!blank(get(cells, n)) && usable(n)) bad(n, 'an expression question has no choices. Leave this empty');
+      for (const n of numberCols) if (!blank(get(cells, n)) && usable(n)) bad(n, 'an expression question has no number key, unit or tolerance. Leave this empty');
+      const expr = cell('expression');
+      const vars = splitNames(get(cells, 'variables'));
+      const signed = splitNames(get(cells, 'signed_variables'));
+      // The same functions, in the same order, as the question editor (faculty-questions.js checkQuestion).
+      const vp = usable('variables') ? variableProblem(vars) : null;
+      if (vp) bad('variables', vp.replace(/\.$/, ''));
+      const sp = vp || !usable('signed_variables') ? null : signedProblem(signed, vars);
+      if (sp) bad('signed_variables', sp.replace(/\.$/, ''));
+      let reading = null;
+      if (usable('expression')) {
+        if (!expr) bad('expression', 'is empty. A key is never guessed. Write the expected expression, for example m*v^2/2');
+        else if (expr.length > MAX_SYMBOLIC_CHARS) bad('expression', `the expected expression is longer than ${MAX_SYMBOLIC_CHARS} characters`);
+        else if (!vp && !sp && usable('variables') && usable('signed_variables')) {
+          const pk = previewKey(expr, vars, signed);
+          if (!pk.ok) bad('expression', `the expected expression cannot be used. ${pk.message}`.replace(/\.$/, ''));
+          else reading = pk.reading;
+        }
+      }
+      if (!row.problems.length && reading !== null) {
+        questionCols = { qid, position: ++position, prompt_md: q, format, choices: null, points: pointsNum, unit_hint: null };
+        keyCols = { variant_key: variant, expression: expr, variables: vars, signed_variables: signed, written_by: rowOrigin };
+        shown = { kind: 'expression', expression: expr, variables: vars, text: `${expr}; variables ${vars.join(', ')}${signed.length ? '; also tried at negative values: ' + signed.join(', ') : ''}; read as ${reading}` };
+      }
+    }
+
     row.summary = shown;
     row.ok = row.problems.length === 0 && !!questionCols;
     if (row.ok) plan.toWrite.push({ line, columns: questionCols, key: keyCols });
@@ -469,7 +510,8 @@ export function exampleProblemFile(origin = 'human') {
     ['net', 'number', 'A crate slides at constant velocity on a level floor. What is the net force on it in newtons?', '1', '', '', '0', '', '0.01', 'N', '', 'ignore', '', 'ignore', 'N', '', o],
     ['vec', 'choice', 'Which of these is a vector quantity?', '1', 'Speed|Velocity|Distance|Time', 'b', '', '', '', '', '', '', '', '', '', '', o],
     ['forces', 'select', 'Select every force that acts on a book at rest on a table.', '2', 'Weight|Normal force|Friction|Thrust', 'a|b', '', '', '', '', '', '', '', '', '', '', o],
-  ];
+    ['energy', 'expression', 'A cart of mass m moves at speed v. Write its kinetic energy in terms of m and v.', '2', '', '', '', '', '', '', '', '', '', '', '', '', 'm*v^2/2', 'm|v', '', o],
+  ].map(r => r.length === COLUMNS.length ? r : [...r.slice(0, -1), '', '', '', r[r.length - 1]]);
   return [csvLine(COLUMNS), ...rows.map(csvLine)].join('\n') + '\n';
 }
 
@@ -486,7 +528,7 @@ export function aiInstructions() {
     '',
     'THE COLUMNS',
     '- question_id: a short name such as accel1. Leave it empty if unsure.',
-    '- type: number, choice (one correct answer) or select (several correct answers).',
+    '- type: number, choice (one correct answer), select (several correct answers) or expression (the answer is a formula).',
     '- question: the text the student reads.',
     '- points: a plain number, two decimals at most.',
     '- choices (choice and select only): the choice texts separated by | . They become the letters a, b, c in order.',
@@ -498,6 +540,10 @@ export function aiInstructions() {
     '- unit_rule, sig_fig_rule: ignore, warn or require. Use ignore unless told otherwise.',
     '- sig_figs: a whole number, only if you set sig_fig_rule.',
     '- unit_hint: the unit shown beside the answer box.',
+    '- expression (type expression only): the expected formula, for example m*v^2/2. Use * for multiply, ^ for a power, / for divide, and sqrt(), sin(), cos(), ln(), exp(), pi. Never start it with = + - or @ (write 0-x or (-x)*y).',
+    '- variables (type expression only): the names an answer may use, separated by | , for example m|v. Do not list a Greek letter and its spelling (mu and the Greek mu) together.',
+    '- signed_variables (type expression only, optional): variables that may be negative, separated by | . Leave empty if unsure.',
+    '- Leave expression, variables and signed_variables EMPTY on number, choice and select rows.',
     '- variant: leave EMPTY.',
     '- written_by: write ai on every row.',
     '',

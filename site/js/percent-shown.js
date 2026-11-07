@@ -3,11 +3,11 @@
 /**
  * A course percent for display. The database states it as text: exact when it ends within six decimals, else cut at six with a
  * trailing ellipsis ("33.333333…"). That is the right thing to STORE and a poor thing to show, so a page prints it through
- * here: two decimals, half up, trailing zeros dropped. A value that sits just under a whole number is cut rather than rounded
- * (89.999999… shows 89.99, never 90), because the cadet's letter comes from the full value and a rounded 90 could sit beside a B.
+ * here: one decimal at most, half up, trailing zeros dropped. A value that sits just under a whole number is cut rather than rounded
+ * (89.999999… shows 89.9, never 90), because the cadet's letter comes from the full value and a rounded 90 could sit beside a B.
  * Display only: nothing is computed from the result. Text that is not a number comes back as it was.
  */
-export function percentShown(text, places = 2) {
+export function percentShown(text, places = 1) {
   if (text == null || String(text).trim() === '') return '';
   const s = String(text).trim();
   const m = /^(-?)(\d+)(?:\.(\d+))?\s*(…|\.\.\.)?$/.exec(s);

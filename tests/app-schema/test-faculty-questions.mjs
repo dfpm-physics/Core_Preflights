@@ -259,6 +259,14 @@ section('the import plan: the example file, and the whole file refused for one b
   check('a correct choice that is not a choice is refused', /not one of the choices/.test(why(one('t,multiple_choice,"x",1,A|B,c,,'))));
   check('the correct choice can be named by its text', one('t,multiple_choice,"x",1,Alpha|Beta,beta,,').ok);
   check('a multiple choice with two correct is refused', /exactly one correct/.test(why(one('t,multiple_choice,"x",1,A|B,a|b,,'))));
+  const shead = 'qid,format,prompt,points,expression,variables,signed_variables';
+  const sym = (row) => Q.planImport(`${shead}
+${row}`, { grading: 'auto_checked' });
+  check('a symbolic row is accepted, with the key the editor writes', (() => { const p = sym('e,symbolic,"Energy?",2,m*v^2/2,m|v,'); return p.ok && JSON.stringify(p.toWrite[0].key) === JSON.stringify({ expression: 'm*v^2/2', variables: ['m', 'v'], signed_variables: [] }); })());
+  check('the word expression also names the format', sym('e,expression,"Energy?",2,m*v^2/2,m v,').ok);
+  check('a symbolic row with no variables is refused with the editor sentence', /Name at least one variable/.test(why(sym('e,symbolic,"x",1,m*v,,'))));
+  check('mu and the Greek mu together are refused plainly', /same name/.test(why(sym('e,symbolic,"x",1,mu*v,mu|μ,'))));
+  check('an unreadable expression is refused', !sym('e,symbolic,"x",1,m*(v,m|v,').ok);
   check('a duplicate qid inside the file is refused', /appears twice/.test(why(Q.planImport(`${head}\nt,numeric,"x",1,,,1,0\nt,numeric,"y",1,,,1,0`, {}))));
   check('a qid that already exists (even retired) is refused', /already used in this assignment/.test(why(one('q1,numeric,"x",1,,,1,0', 'auto_checked', [{ qid: 'q1', position: 1 }]))));
   check('a missing qid gets the next free one, skipping existing', one('  ,numeric,"x",1,,,1,0', 'auto_checked', [{ qid: 'q1', position: 1 }]).toWrite[0].columns.qid === 'q2');
@@ -575,6 +583,19 @@ section('symbolic questions: the expected expression and its variables');
   check('a changed expression makes a new version', !Q.sameKey({ expression: 'm*v^2/2', variables: ['m', 'v'] }, Q.keyColumns(symbolic({ expression: 'm*v^2' }))));
   check('a changed variable list makes a new version', !Q.sameKey({ expression: 'm*v^2/2', variables: ['m', 'v'] }, Q.keyColumns(symbolic({ variables: 'm, v, t' }))));
   check('the stored key columns include the new fields', /expression,variables/.test(read('site/js/faculty-questions.js')));
+}
+
+section('a variable listed under two spellings is refused on save, in plain words (small item 5)');
+{
+  const pairs = [['mu', '\u03bc'], ['theta', '\u03b8'], ['omega', '\u03c9'], ['\u03bc', 'mu']];
+  const micro = problems(symbolic({ expression: 'a*c', variables: '\u00b5, mu' }));
+  check('the micro sign is not a variable name at all, and the refusal says why', micro.length === 1 && /must start with a letter/.test(micro[0]), JSON.stringify(micro));
+  for (const [a, c] of pairs) {
+    const out = problems(symbolic({ expression: 'a*c', variables: `${a}, ${c}` }));
+    check(`${a} and ${c} together: refused, naming the same name`, out.length === 1 && /listed twice/.test(out[0]) && /same name/.test(out[0]), JSON.stringify(out));
+  }
+  check('the signed list may name the other spelling of a declared variable', problems(symbolic({ expression: 'mu*v', variables: '\u03bc, v', signed: 'mu' })).length === 0);
+  check('two different names are fine', problems(symbolic({ expression: 'mu*nu', variables: 'mu, nu' })).length === 0);
 }
 
 summary();

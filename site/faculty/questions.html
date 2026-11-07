@@ -113,10 +113,10 @@
         If any row is wrong, nothing is written.</p>
       <details style="margin-bottom:10px"><summary>Columns and an example file</summary>
         <div class="field-hint" style="margin:8px 0">
-          <code>qid</code> (optional, kept if given), <code>format</code> (multiple_choice, multiple_select, numeric, prose),
+          <code>qid</code> (optional, kept if given), <code>format</code> (multiple_choice, multiple_select, numeric, symbolic, prose),
           <code>prompt</code>, <code>points</code>, <code>choices</code> (separated by <code>|</code>; they get the letters a, b, c ...),
           <code>correct</code> (letters or exact text, separated by <code>|</code>), <code>value</code>, <code>tol_abs</code>, <code>tol_pct</code>,
-          <code>sig_figs</code>, <code>sig_fig_mode</code>, <code>unit</code>, <code>unit_aliases</code>, <code>unit_mode</code>, <code>unit_hint</code>, <code>reference</code>.
+          <code>sig_figs</code>, <code>sig_fig_mode</code>, <code>unit</code>, <code>unit_aliases</code>, <code>unit_mode</code>, <code>unit_hint</code>, <code>reference</code>; for symbolic: <code>expression</code>, <code>variables</code> (separated by <code>|</code>), <code>signed_variables</code>.
           A cell with a comma needs quotes around it. A correct value of 0 needs <code>tol_abs</code>.</div>
         <pre id="imp-example" style="white-space:pre-wrap;font-size:0.8em;max-height:180px;overflow:auto"></pre>
         <button class="btn btn-ghost btn-sm" type="button" id="imp-use-example">Put the example in the box</button>
@@ -140,7 +140,7 @@
     <div class="modal" style="max-width:1040px">
       <div class="modal-head"><h2>Upload a problem file</h2><button class="modal-close" data-close>×</button></div>
       <div class="alert alert-error" id="pf-error" style="display:none"></div>
-      <p class="muted" style="margin-top:0">Make many number and multiple-choice problems at once from a spreadsheet saved as a CSV file.
+      <p class="muted" style="margin-top:0">Make many number, multiple-choice and expression problems at once from a spreadsheet saved as a CSV file.
         You see every question, its answer and the range of answers that will be marked right before anything is saved.
         If any row is wrong, nothing is saved. The site marks answers with ordinary rules and does not use AI.</p>
       <details style="margin-bottom:10px"><summary>Three ways to make a file</summary>
@@ -149,6 +149,10 @@
           <li>Write the file yourself in a spreadsheet. Download the example below and change it.</li>
           <li>Ask your own AI model to write the file, using the instructions below. Then upload what it gives you.</li>
         </ol>
+        <div class="field-hint">The <code>type</code> column is <code>number</code>, <code>choice</code>, <code>select</code> or <code>expression</code>.
+          An expression row (the answer is a formula such as m*v^2/2) fills <code>expression</code>, <code>variables</code> (the names an answer may use, separated by <code>|</code>)
+          and, if needed, <code>signed_variables</code> (the ones also tried at negative values). It is read by the same reader as the question editor and refused with the same sentences.
+          A formula cannot start with = + - or @ (write 0-x or (-x)*y). As with the other types, an answer marked <code>ai</code> must be checked by a person before the assignment is published.</div>
         <div class="field-hint">Every student gets the same numbers: put the numbers in the question text.
           Only CSV files are read here. For an Excel file choose File, Save As, then "CSV UTF-8".</div>
       </details>

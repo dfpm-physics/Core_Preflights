@@ -398,8 +398,49 @@ What a cadet and a director see changed; what is marked did not (a differential 
 
 - **Still not done:** a walk of the real function (`tests/walk/groups/i.mjs` is written and not run); the buttons on the staff
 
-  trial box; the problem-file uploads do not carry this type.
+  trial box. The problem-file uploads carry this type from 2026-11-07 (see "Small items closed 2026-11-07").
 
+
+### Small items closed 2026-11-07 (branch `v2-symbolic`, local; no migration, no function change)
+
+- **Lowering Attempts per question.** The items page already asked a person before a deadline moved earlier. It now asks the same
+  way when a save sets the attempt limit of an automatically checked item below what some cadets have used (or sets a first limit
+  when cadets have already used more). It counts the cadets who have a question with more attempts than the new limit and says the
+  highest use. Stored attempts and grades do not change; those cadets can answer no more on the questions where they are over.
+  Raising the limit, clearing it, or setting one nobody has passed asks nothing. A failed read of the attempts is an error and
+  nothing is saved. Code: `attemptLimitLowers`, `attemptsOverLimit`, `attemptLowerWarning` in `site/js/faculty-items.js`; the
+  confirm loop in `site/faculty/items.html`. The read goes through the staff read policy on `question_attempts`.
+- **Percentages show at most one decimal place.** `percentShown` (`site/js/percent-shown.js`) now defaults to one place; it was two.
+  The rule is unchanged otherwise: half up, trailing zeros dropped, and a value just under a whole number is cut rather than rounded
+  (89.95 and 89.999999... show as 89.9, never 90), because the letter comes from the full value. Display only: the stored text,
+  `percent_key_text`, the band, the letter and the export are untouched. Every place that printed a percentage now goes through it:
+  the cadet's grades, schedule and dashboard (`totalView`), the staff gradebook, the staff student page and its copy line, the
+  backlog "near a line" list and the scale preview, which printed the database's text with six decimals before.
+- **The problem file carries the symbolic type.** `site/js/problem-file.js` (the upload with a dry run) takes `type` = `expression`
+  and three columns, `expression`, `variables` (separated by `|`, spaces or commas) and `signed_variables`, placed before
+  `written_by`. It calls `variableProblem`, `signedProblem` and `previewKey` from `symbolic-answer.js`, in the order the question
+  editor does, so a row is refused with the editor's sentence plus the row and column ("Row 6, column "variables": ..."). The dry
+  run shows how the key is read. The key row written is the editor's (`expression`, `variables[]`, `signed_variables[]`,
+  `written_by`), and an AI mark reaches it like any other key, so a person still has to check it before publication. The
+  other CSV import on the same page (`planImport`, `format`/`prompt` headers) also accepts `symbolic`/`expression` rows with the
+  same three columns. A formula cell is still refused when it starts with `=`, `@`, `+` or `-` (spreadsheet formula text); the
+  message tells the author to write a leading minus as `0-x` or `(-x)*y`. The example file and the AI instructions carry one
+  expression row.
+- **`x^2^3` is `x^(2^3)`.** Powers group right to left, in the reader (`parseSymbolic`), in the reading shown to staff and
+  students (`x^2^3`; `(x^2)^3` is bracketed), and in the typeset form (`x^{2^{3}}`). At x = 2 it is 256, not 64. It is tested in
+  `test-symbolic-answer.mjs` and `test-symbolic-view.mjs`. The server copies are byte copies of the same reader.
+- **A variable under two spellings** (`mu` and the Greek mu, `theta` and the Greek theta) is refused on save by the page and the
+  reader: "The variable "..." is listed twice (a Greek letter and its Latin spelling are the same name)." The micro sign alone is
+  not a variable name; the refusal says a name must start with a letter. **The database check does not fold the spellings.**
+  `_key_problem` (migrations 085 and 087) compares names as written, so a key written straight to the database with both spellings
+  passes, and a signed variable spelled differently from its declared variable (`mu` against the Greek mu) is accepted by the
+  reader and refused by the database. Closing that is a change to `_key_problem`, which is a migration. **Not done; needs a decision.**
+- **Health page: a line for a question whose key the checker cannot read. Not built.** The database's key check, `_key_problem`,
+  is revoked from every role the site uses (migration 070 revokes it from `authenticated`, `service_role` and the two scoped
+  roles), and no granted function reports it. A page cannot call it. A second copy of the rule in the browser would be a second
+  calculation, which this system avoids. What it needs is a migration: a staff-gated function returning the questions whose
+  current key fails `_key_problem`, which the health page would call, with a failed call shown as an error. **Not done; needs a
+  decision.** Until then the same fault appears as `key_fault` to a cadet, and as `key_fault` in a re-mark preview.
 
 ## Stage E gate: test list
 
@@ -426,12 +467,12 @@ Part two, runs now:
 Needs staging (after the function is deployed and `070`/`071` are applied there):
 
 1. A real student session calls `check-answer`; the response body holds only the four fields. **Done 2026-11-06** (load run, item 8: all 454 replies read, each held only those fields).
-2. The same student reads `question_keys`, `question_attempts` of another student, and `grades` of another student: nothing.
+2. The same student reads `question_keys`, `question_attempts` of another student, and `grades` of another student: nothing. **Done 2026-11-07** (a student session read 0 `question_keys` rows; its `question_attempts` and `grades` held no other cadet's row, asking for another cadet's rows by id returned none, its gradebook read returned only its own cells, and a direct write of an attempt was refused). Script: `scripts/staging/prove_stage_e_open_items.py` (staging only, made-up data deleted at the end).
 3. A request with another student's ids or forged fields returns the session student's result. **Done 2026-11-06** (load run: 28 requests carrying a forged verdict, points, attempt number, student id and enrollment id; each was stored under the session student, with the verdict from the answer itself).
-4. An expired and a forged JWT are refused; a staff JWT cannot answer. **Part done 2026-11-06:** a session with a damaged signature, a string that is not a token, and a request with no credential were each refused with HTTP 401 before the function ran; the publishable key as a session and a key header alone were refused by the function as not signed in. An expired token and a staff token were not tried.
-5. Deadline with a false browser clock; at the deadline second; after it with an extension. **Part done 2026-11-06:** the server clock decided. 52 answers landed in the 120 second grace and were stored; 16 sent after the grace were refused as closed; no stored answer is later than the deadline plus 120 seconds. A false browser clock and an extension were not tried.
+4. An expired and a forged JWT are refused; a staff JWT cannot answer. **Part done 2026-11-06:** a session with a damaged signature, a string that is not a token, and a request with no credential were each refused with HTTP 401 before the function ran; the publishable key as a session and a key header alone were refused by the function as not signed in. An expired token and a staff token were not tried. **Rest done 2026-11-07:** a session kept until its stated expiry had passed (plus 45 seconds) was refused and stored nothing; an instructor session and a director session were each refused as not enrolled; a token with a changed signature, a string that is not a token and no credential were refused again. Script: `scripts/staging/prove_stage_e_open_items.py` (staging only, made-up data deleted at the end).
+5. Deadline with a false browser clock; at the deadline second; after it with an extension. **Part done 2026-11-06:** the server clock decided. 52 answers landed in the 120 second grace and were stored; 16 sent after the grace were refused as closed; no stored answer is later than the deadline plus 120 seconds. A false browser clock and an extension were not tried. **Rest done 2026-11-07:** an answer sent at the deadline second was stored; after the grace, an answer carrying a client time two hours early (in the body and in headers) was refused as closed and stored nothing; a cadet with an extension of a day still answered after the grace, and a cadet with none was refused as closed. Script: `scripts/staging/prove_stage_e_open_items.py` (staging only, made-up data deleted at the end).
 6. Two browser tabs answering the last attempt together. **Done 2026-11-06** (load run: 28 pairs of simultaneous answers from one cadet, two rounds each; exactly 3 stored per cadet, the rest refused as limit reached, no gaps in attempt numbers).
-7. A key corrected mid-session (retry path).
+7. A key corrected mid-session (retry path). **Done 2026-11-07** (the same answer was marked wrong against the first key version and right against the corrected one; the first attempt kept the old key version, the second carried the new one, and the grade followed the best attempt). Script: `scripts/staging/prove_stage_e_open_items.py` (staging only, made-up data deleted at the end).
 8. End-of-deadline load through the real function: many sessions in the last minute, measuring edge function cold start,
    latency (p95), error rate, and Supabase connection limits; then the database invariants of the scratch load test.
    **Done 2026-11-06** with `scripts/staging/load_check_answer.py`.
@@ -443,8 +484,8 @@ Needs staging (after the function is deployed and `070`/`071` are applied there)
    all 144 grades equal the best attempt recomputed; every stored attempt equals the reply the cadet got; forged fields
    changed nothing. A run of 10 cadets came first, three times. The run's rows were deleted; the table
    `grade_events`, which is append-only, kept 597 rows from the four runs (it holds ids and points, no names).
-9. Function logs hold no key, answer text beyond what is intended, or token. **Not done 2026-11-06:** the management logs endpoint answered that no log table exists for the staging project, so the logs could not be read. Replies and headers were read instead (item 8).
-10. The total (student, instructor, export) agrees for an auto-checked grade before and after the deadline.
+9. Function logs hold no key, answer text beyond what is intended, or token. **Not done 2026-11-06:** the management logs endpoint answered that no log table exists for the staging project, so the logs could not be read. Replies and headers were read instead (item 8). **Tried again 2026-11-07, still open:** the access token was tried against the management API logs route in both forms (`logs.all` answered HTTP 410 for `function_logs` and `function_edge_logs`; `logs` answered that neither table exists). No other route is open to that token, so this stays open. The Supabase dashboard's log view is the other route and is a person's to read.
+10. The total (student, instructor, export) agrees for an auto-checked grade before and after the deadline. **Done 2026-11-07** (for two cadets the student's `my_course_total`, the instructor's `course_totals` row and the director's `course_totals` row, which is what the export reads, carried the same earned, possible and percent text, before the deadline and after the grace; the script also checks that `faculty-export.js` reads only `course_totals`). Script: `scripts/staging/prove_stage_e_open_items.py` (staging only, made-up data deleted at the end).
 
 Part two, needs staging (after `072`, `073`, `check-answer` and `remark-question` are deployed there):
 
@@ -452,5 +493,5 @@ Part two, needs staging (after `072`, `073`, `check-answer` and `remark-question
     checked by the real function, the reply and the score match, a reload shows the same tries and score. **Not done.**
 12. A student session calls `student_homework` for an unreleased item and an item of another course: nothing comes back.
 13. A staff session that is not a director calls `remark-question`: refused. A director previews, then commits with the
-    preview's number; a wrong number is refused; the same commit again changes 0.
+    preview's number; a wrong number is refused; the same commit again changes 0. **Done 2026-11-07** (an instructor and a student were refused a preview; the director's preview wrote nothing and said two attempts would change; a commit with a made-up number and an instructor's commit with the director's number were refused and wrote nothing; the commit with the preview's number changed those two attempts and their grades; the same commit again changed nothing). Script: `scripts/staging/prove_stage_e_open_items.py` (staging only, made-up data deleted at the end).
 14. A re-mark while a second tab answers.

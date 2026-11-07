@@ -24,6 +24,7 @@
 //   tests/app-schema/test-faculty-scale.mjs drives them with a recording stub.
 
 import { esc } from './util.js';
+import { percentShown } from './percent-shown.js';
 
 export const MAX_LINES = 30;
 /** The default scale from GRADE-RULES.md. Must equal default_letter_scale() in migration 032; a test reads both. */
@@ -348,7 +349,7 @@ export async function saveScale(db, offeringId, scale, state) {
 
 export function previewHtml(sum) {
   const moves = sum.letterMoves.map(m => `<li>${esc(m.from)} to ${esc(m.to)}: ${m.count}</li>`).join('');
-  const rows = sum.rows.slice(0, 200).map(r => `<tr><td>${esc(r.student_id)}</td><td>${esc(r.percent_text ?? '')}</td>
+  const rows = sum.rows.slice(0, 200).map(r => `<tr><td>${esc(r.student_id)}</td><td>${esc(percentShown(r.percent_text))}${r.percent_text == null ? '' : '%'}</td>
     <td>${esc(r.old_letter ?? 'none')}</td><td>${esc(r.new_letter ?? 'none')}</td>
     <td>${esc(r.old_near_line_letter ?? '')}</td><td>${esc(r.new_near_line_letter ?? '')}</td></tr>`).join('');
   return `<p><strong>${esc(previewSentence(sum))}</strong></p>${moves ? `<ul>${moves}</ul>` : ''}

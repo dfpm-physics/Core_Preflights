@@ -8,6 +8,26 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-11-07 — Matthew Recker via Claude (six small items; branch `v2-symbolic`, local, not committed)
+
+**What changed.**
+- **Attempts per question** (items page): lowering the limit below what some cadets have already used now asks first, with the number of cadets over the new limit and the highest use, the way an earlier deadline does. Nothing blocks; stored answers and grades do not change. A failed read of the attempts is an error. Tests first failed, now pass (`test-faculty-items.mjs`).
+- **Percentages** show at most one decimal place everywhere (`percentShown`, default one place; it was two). Display only: no stored or calculated value changed. The backlog "near a line" list and the scale preview printed the database text with six decimals; they now use the same function, so every copy agrees.
+- **Problem file carries the symbolic type**: `type` = `expression`, columns `expression`, `variables`, `signed_variables`, read by the editor's own functions with the editor's refusal sentences plus row and column. The other CSV import accepts the same. Example file, AI instructions and the in-page help updated. An AI-marked key is still checked by a person before publication. No migration.
+- **`x^2^3`** is `x^(2^3)` (right to left) in the reader, the reading and the typeset form; stated in `docs/decisions/V2-STAGE-E-ANSWERS.md` and tested in both places. **Greek duplicates** (`mu` with the Greek mu) are refused on save by the page and the reader with a plain message, and tested.
+- **New script** `scripts/staging/prove_stage_e_open_items.py` proves the open "needs staging" items through the deployed functions on staging only (made-up "ZZ proof" data, deleted at the end). Results are dated on the list in the decision record.
+- `site/faculty/items.html` and `site/faculty/backlog.html` inline scripts changed; CSP hashes rebuilt with `csp_pages.py --write`.
+
+**What I deliberately did not do.**
+- **Health page key line: not built.** The database's key check (`_key_problem`) is revoked from every role the site uses, so a page cannot call it, and a copy in the browser would be a second rule. It needs a migration (a staff-gated function listing questions whose current key fails the check). Stopped and reported.
+- **Greek duplicates in the database: not changed.** `_key_problem` compares variable names as written, so a key written straight to the database with both spellings passes, and a signed variable spelled unlike its declared variable is accepted by the reader and refused by the database. That is a migration. Stopped and reported.
+- No function was changed and none deployed; no migration written or applied; `site/student/interaction-submit.html` and `site/faculty/lessons.html` untouched; production not touched; nothing committed.
+- Function logs: the access token was tried against the management API logs route in both forms; staging answers that the log tables do not exist (HTTP 410 and "does not exist"). Item 9 stays open.
+
+**Staging.** The proof run made and deleted its own made-up rows. It left only the append-only `grade_events` rows it caused (ids and points, no names) and the sign-in/session rows the project keeps for the accounts it signed in.
+
+---
+
 ## 2026-11-07 — Matthew Recker via Claude (a question may name a variable e or pi; branch `v2-symbolic`, local)
 
 Migration `app/087` lets a symbolic key declare `e` or `pi` as its own variable. The reader already allowed this, and the key check from 085 refused it, so the question could not be saved. Function names stay refused. The browser walk's checks are now split by name, and it waits for slow pages. Applied on staging only; deliberately not done: no production change and no push.

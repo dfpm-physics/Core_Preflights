@@ -253,7 +253,7 @@ export function commentCard({ student, enrollment, totals, rows, ei = [], freeTe
 
   L.push(`${name} — ${enrollment?.sectionCode || ''}`.trim());
   L.push('');
-  // Every figure below is text the database returned. The percent is shown to two places (percentShown) and is never rounded up to a whole number it has not reached.
+  // Every figure below is text the database returned. The percent is shown to one decimal place at most (percentShown) and is never rounded up to a whole number it has not reached.
   if (!totals) {
     L.push('Grade to date: not available (the total could not be read).');
   } else if (totals.percentText == null) {

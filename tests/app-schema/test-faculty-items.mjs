@@ -766,6 +766,48 @@ section('the attempt limit: a field behind More options, read and written on the
   check('the page sends and fills it', /attemptLimit:\s*\$\('i-attempts'\)/.test(html) && /\$\('i-attempts'\)\.value\s*=/.test(html));
 }
 
+section('lowering the attempt limit below what cadets have used asks a person first, with the count (small item 1)');
+{
+  const sel = { 'assignment_offerings.select': { id: 'o-1', entered_on_new_page: true } };
+  const auto = (o = {}) => form({ delivery: 'online_questions', grading: 'auto_checked', points: '', ...o });
+  const autoItem = (o = {}) => item({ isPublished: true, paths: [{ delivery: 'online_questions', grading: 'auto_checked', modality: 'questions', activityId: 'act-1', content: {} }], ...o });
+  const noWrites = () => CALLS.filter(c => c.verb !== 'select').length === 0;
+  // Rows the database would return for "attempt_no greater than the new limit": filtered by the stub as the query asks.
+  const used = [{ enrollment_id: 'e1', attempt_no: 3 }, { enrollment_id: 'e1', attempt_no: 4 }, { enrollment_id: 'e2', attempt_no: 3 }];
+  const world = (extra = {}) => ({ ...sel,
+    'question_attempts.select': (st) => used.filter(x => x.attempt_no > Number(st.filters.attempt_no)),
+    ...extra });
+  reset(world());
+  let r = await I.updateItem(db, ctx, autoItem({ attemptLimit: 5 }), auto({ attemptLimit: '2' }));
+  check('lowering below use asks, and writes nothing', !!r.needsAttemptConfirm && noWrites(), JSON.stringify(r));
+  eq('it says how many cadets are over the new limit, and the highest use', [r.needsAttemptConfirm?.cadets, r.needsAttemptConfirm?.highest, r.needsAttemptConfirm?.limit], [2, 4, 2]);
+  reset(world());
+  r = await I.updateItem(db, ctx, autoItem({ attemptLimit: 5 }), auto({ attemptLimit: '2' }), { attempts: 2 });
+  eq('a person who confirms is never blocked', [r.error, !!r.needsAttemptConfirm, writesTo('assignment_offerings', 'update').length], [null, false, 1]);
+  reset(world());
+  r = await I.updateItem(db, ctx, autoItem({ attemptLimit: 5 }), auto({ attemptLimit: '2' }), { attempts: 1 });
+  check('a confirmation for a different count asks again', !!r.needsAttemptConfirm && noWrites());
+  reset(world());
+  r = await I.updateItem(db, ctx, autoItem({ attemptLimit: 5 }), auto({ attemptLimit: '4' }));
+  eq('a limit nobody has passed asks nothing', [r.error, !!r.needsAttemptConfirm], [null, false]);
+  reset(world());
+  r = await I.updateItem(db, ctx, autoItem({ attemptLimit: 3 }), auto({ attemptLimit: '6' }));
+  eq('raising the limit asks nothing', [r.error, !!r.needsAttemptConfirm], [null, false]);
+  reset(world());
+  r = await I.updateItem(db, ctx, autoItem({ attemptLimit: null }), auto({ attemptLimit: '2' }));
+  check('setting a first limit below use asks too', !!r.needsAttemptConfirm);
+  reset(world());
+  r = await I.updateItem(db, ctx, autoItem({ attemptLimit: 5 }), auto({ attemptLimit: '' }));
+  eq('clearing the limit asks nothing', [r.error, !!r.needsAttemptConfirm], [null, false]);
+  reset(world({ 'question_attempts.select': { __error: { message: 'boom' } } }));
+  r = await I.updateItem(db, ctx, autoItem({ attemptLimit: 5 }), auto({ attemptLimit: '2' }));
+  check('a failed read is an error, and nothing is written', !!r.error && !r.needsAttemptConfirm && noWrites(), JSON.stringify(r));
+  const w = I.attemptLowerWarning('Problem Set 3', { cadets: 2, highest: 4, limit: 2 });
+  check('the warning names the title, the count, the new limit, and that a person decides', /Problem Set 3/.test(w) && /2 cadets/.test(w) && /\b2 attempts/.test(w) && /4/.test(w) && /decision/i.test(w), w);
+  const html = read('site/faculty/items.html');
+  check('the page asks it in the same loop as the other warnings', /needsAttemptConfirm/.test(html) && /attemptLowerWarning/.test(html) && /ack\.attempts/.test(html));
+}
+
 section('a deadline moved earlier on an item with cadet work asks a person first (roll-in fix 2)');
 {
   const sel = { 'assignment_offerings.select': { id: 'o-1', entered_on_new_page: true } };

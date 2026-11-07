@@ -447,12 +447,16 @@ export const CSV_COLUMNS = {
   unit_mode: ['unit_mode', 'unit mode'],
   unit_hint: ['unit_hint', 'unit hint'],
   reference: ['reference', 'reference_text', 'reference text', 'guidance'],
+  expression: ['expression', 'expected expression'],
+  variables: ['variables'],
+  signed_variables: ['signed_variables', 'signed variables'],
 };
 const REQUIRED_COLUMNS = ['format', 'prompt', 'points'];
 const FORMAT_WORDS = {
   multiple_choice: 'multiple_choice', 'multiple choice': 'multiple_choice', mc: 'multiple_choice', choice: 'multiple_choice',
   multiple_select: 'multiple_select', 'multiple select': 'multiple_select', ms: 'multiple_select', select: 'multiple_select',
   numeric: 'numeric', number: 'numeric', num: 'numeric',
+  symbolic: 'symbolic', expression: 'symbolic',
   prose: 'prose', text: 'prose', 'free response': 'prose',
 };
 
@@ -513,7 +517,7 @@ export function planImport(text, { grading = 'auto_checked', existing = [] } = {
     }
     const fmtWord = get(cells, 'format').toLowerCase();
     const format = FORMAT_WORDS[fmtWord] || null;
-    if (!format) row.problems.push(`Row ${line}: the format "${get(cells, 'format')}" is not multiple_choice, multiple_select, numeric or prose.`);
+    if (!format) row.problems.push(`Row ${line}: the format "${get(cells, 'format')}" is not multiple_choice, multiple_select, numeric, symbolic or prose.`);
 
     const choiceTexts = splitList(get(cells, 'choices'));
     const q = {
@@ -525,6 +529,9 @@ export function planImport(text, { grading = 'auto_checked', existing = [] } = {
         sigFigs: get(cells, 'sig_figs'), sigFigMode: get(cells, 'sig_fig_mode').toLowerCase() || 'ignore',
         unit: get(cells, 'unit'), unitAliases: splitAliases(get(cells, 'unit_aliases')),
         unitMode: get(cells, 'unit_mode').toLowerCase() || 'ignore', reference: get(cells, 'reference'),
+        expression: get(cells, 'expression'),
+        variables: splitVariables(get(cells, 'variables').replace(/\|/g, ' ')).join(' '),
+        signed: splitVariables(get(cells, 'signed_variables').replace(/\|/g, ' ')).join(' '),
       },
     };
     // The correct cell names choices by letter (a, b ...) or by exact text, separated by | .

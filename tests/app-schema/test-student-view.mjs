@@ -72,7 +72,7 @@ section('the total is passed through, never worked out');
 const t = V.totalView({ earned_text: '45', possible_text: '50', percent_text: '90', percent_key_text: '90.0' });
 eq('line text', t.line, '45 of 50 points · 90%');
 const t2 = V.totalView({ earned_text: '2', possible_text: '3', percent_text: '66.666666…' });
-check('a cut value is shown to two places, not as six digits and an ellipsis', t2.percent === '66.67%', t2.percent);
+check('a cut value is shown to one place, not as six digits and an ellipsis', t2.percent === '66.7%', t2.percent);
 eq('no possible points says nothing counts yet', V.totalView({ earned_text: '0', possible_text: '0', percent_text: null }).line, 'No graded work counts yet.');
 eq('no row, no view', V.totalView(null), null);
 check('the view has no letter field', !('letter' in t));
@@ -80,20 +80,21 @@ check('the view has no letter field', !('letter' in t));
 section('a percent shows a sensible rounded value (roll-in fix 4)');
 {
   const { percentShown: p } = await import('../../site/js/percent-shown.js');
-  eq('a repeating third', p('33.333333…'), '33.33');
-  eq('a repeating two thirds rounds up', p('66.666666…'), '66.67');
+  eq('a repeating third', p('33.333333…'), '33.3');
+  eq('a repeating two thirds rounds up', p('66.666666…'), '66.7');
   eq('an exact whole number is left alone', p('90'), '90');
   eq('an exact short value is left alone', p('87.5'), '87.5');
-  eq('a long exact value is cut to two places', p('12.345678'), '12.35');
+  eq('a long exact value is cut to one place', p('12.345678'), '12.3');
   eq('trailing zeros after rounding go', p('80.001'), '80');
-  eq('a value just under a whole number never shows as that number (it could sit under a letter line)', p('89.999999…'), '89.99');
+  eq('a value just under a whole number never shows as that number (it could sit under a letter line)', p('89.999999…'), '89.9');
   eq('three-digit percents work', p('100'), '100');
-  eq('extra credit above a hundred', p('104.166666…'), '104.17');
+  eq('extra credit above a hundred', p('104.166666…'), '104.2');
   eq('nothing in, nothing out', [p(null), p(''), p(undefined)], ['', '', '']);
   eq('text that is not a number is passed through', p('n/a'), 'n/a');
-  eq('three dots as an ellipsis', p('33.333333...'), '33.33');
-  eq('the student view uses it', V.totalView({ earned_text: '1', possible_text: '3', percent_text: '33.333333…' }).line, '1 of 3 points · 33.33%');
-  for (const f of ['site/faculty/gradebook.html', 'site/faculty/student.html', 'site/js/faculty-student.js', 'site/js/student-view.js']) {
+  eq('three dots as an ellipsis', p('33.333333...'), '33.3');
+  eq('the student view uses it', V.totalView({ earned_text: '1', possible_text: '3', percent_text: '33.333333…' }).line, '1 of 3 points · 33.3%');
+  eq('two places in is one place out, never a whole number it has not reached', [p('66.67'), p('89.95'), p('0.04'), p('12.25')], ['66.7', '89.9', '0', '12.3']);
+  for (const f of ['site/faculty/gradebook.html', 'site/faculty/student.html', 'site/js/faculty-student.js', 'site/js/student-view.js', 'site/faculty/backlog.html', 'site/js/faculty-scale.js']) {
     check(f + ' prints the percent through percentShown', /percentShown\(/.test(readFileSync(resolve(ROOT, f), 'utf8')));
   }
 }

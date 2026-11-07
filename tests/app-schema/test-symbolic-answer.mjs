@@ -484,4 +484,21 @@ section('the exported limits are the ones stated to staff');
   eq('limits', [S.MAX_SYMBOLIC_CHARS, S.MAX_DEPTH, S.MAX_TOKENS, S.MAX_VARIABLES], [200, 20, 150, 8]);
 }
 
+
+section('a tower of powers reads right to left: x^2^3 is x^(2^3), not (x^2)^3 (small item 5)');
+{
+  const val = (text, x) => { const p = S.parseSymbolic(text, ['x']); return p.ok ? S.evaluate(p.ast, new Map([['x', x]])) : null; };
+  eq('x^2^3 at x=2 is 2^8 = 256', val('x^2^3', 2), 256);
+  eq('x**2**3 reads the same way', val('x**2**3', 2), 256);
+  eq('x^(2^3) is the same', val('x^(2^3)', 2), 256);
+  eq('(x^2)^3 is the other reading, 64', val('(x^2)^3', 2), 64);
+  eq('2^3^2 is 2^9 = 512', S.evaluate(S.parseSymbolic('2^3^2', ['x']).ast, new Map()), 512);
+  eq('the reading shown to staff keeps the order: x^2^3', S.parseSymbolic('x^2^3', ['x']).reading, 'x^2^3');
+  eq('the reading of the other order is bracketed', S.parseSymbolic('(x^2)^3', ['x']).reading, '(x^2)^3');
+  expectRight('x^2^3', ['x'], ['x^(2^3)', 'x**2**3', 'x^8'], 'a key of x^2^3');
+  expectWrong('x^2^3', ['x'], ['(x^2)^3', 'x^6'], 'a key of x^2^3');
+  expectRight('(x^2)^3', ['x'], ['x^6', 'x^2*x^2*x^2'], 'a key of (x^2)^3');
+  expectWrong('(x^2)^3', ['x'], ['x^2^3', 'x^8'], 'a key of (x^2)^3');
+}
+
 process.exit(summary() ? 0 : 1);
