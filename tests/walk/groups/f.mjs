@@ -47,7 +47,7 @@ export async function runF(W) {
     await a.page.waitForSelector(`.course-opt[data-course="${offering}"]`);
     await a.page.$eval(`.course-opt[data-course="${offering}"]`, e => e.click());
     await L.wait(1500);
-    await a.page.$eval('[data-tab="staff"]', e => e.click());
+    await a.untilSel('[data-tab="staff"]', { timeout: 30000 }); await a.page.$eval('[data-tab="staff"]', e => e.click());
     await a.untilSel('#sec-add', { timeout: 30000 });
   };
   const openAdd = async () => { await a.click('#sec-add'); await a.untilSel('#ns-code', { visible: true }); await L.wait(500); };
@@ -88,7 +88,7 @@ export async function runF(W) {
     await L.wait(1000);
     L.eq(norm(sectionDays(offeringOf('zz-walk-wf'), 'M1A')), ['M'], 'stored section days');
     await a.page.reload({ waitUntil: 'networkidle2' }); await L.wait(800);
-    await a.page.$eval('[data-tab="staff"]', e => e.click()); await a.untilSel('#sec-add', { timeout: 30000 });
+    await a.untilSel('[data-tab="staff"]', { timeout: 30000 }); await a.page.$eval('[data-tab="staff"]', e => e.click()); await a.untilSel('#sec-add', { timeout: 30000 });
     const t = await a.text('main');
     L.assert(/Meets M\b[^.]*not in the course's list/s.test(t.replace(/\s+/g, ' ')), 'the section screen does not show M as outside the list');
     L.eq(norm(sectionDays(offeringOf('zz-walk-wf'), 'M1A')), ['M'], 'section days after the reload');

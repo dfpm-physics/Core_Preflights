@@ -8,6 +8,10 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-11-07 — Matthew Recker via Claude (a question may name a variable e or pi; branch `v2-symbolic`, local)
+
+Migration `app/087` lets a symbolic key declare `e` or `pi` as its own variable. The reader already allowed this, and the key check from 085 refused it, so the question could not be saved. Function names stay refused. The browser walk's checks are now split by name, and it waits for slow pages. Applied on staging only; deliberately not done: no production change and no push.
+
 ## 2026-11-06 — Matthew Recker via Claude (symbolic answers: insert buttons, typeset reading, e and pi; branch `v2-symbolic`, local, uncommitted)
 
 

@@ -156,6 +156,9 @@ export async function runC(W) {
     L.assert(Number(fin) >= 8, 'published scores in the database: ' + fin);
     // back to the list: the row is gone until the finished control is ticked
     await d.go('faculty/entry.html'); await d.untilSel('main');
+    // the list and its finished control are drawn after the data arrives; on a busy project that can take longer than a fixed pause.
+    // Wait for the control (up to 30s) so a list that has not loaded yet is not read as "the row is gone". The checks below still decide.
+    await d.untilSel('#show-finished', { timeout: 30000 }).catch(() => {});
     await L.wait(800);
     const hasRow = (t) => d.page.evaluate((x) => !![...document.querySelectorAll('#grade-list tbody tr')].find(r => r.innerText.includes(x)), t);
     L.assert(!(await hasRow(title)), 'the finished assignment is still in the list');

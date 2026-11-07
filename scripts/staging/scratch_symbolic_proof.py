@@ -148,7 +148,7 @@ def run_checks(cur, fx):
         ("a bad character", "m;v", ["m", "v"]), ("a script-looking text", "m*v + require('fs')", ["m", "v"]),
         ("unbalanced brackets", "(m*v", ["m", "v"]), ("a closing bracket first", "m*v)(", ["m", "v"]),
         ("an empty expression", "   ", ["m"]), ("no variables", "m", []), ("a null variable list", "m", None),
-        ("a variable named like a function", "m", ["sin"]), ("a variable named e", "m", ["e"]), ("a variable named pi", "m", ["pi"]),
+        ("a variable named like a function", "m", ["sin"]),
         ("a duplicate variable", "m", ["m", "m"]), ("nine variables", "a", list("abcdefghi")),
         ("a variable name with a space", "m", ["a b"]), ("a variable name starting with a digit", "m", ["1m"]),
         ("a variable name that is too long", "m", ["a" * 13]), ("a variable named constructor", "m", ["constructor"]),
@@ -157,6 +157,25 @@ def run_checks(cur, fx):
         # a current key already exists for variant '' ; use a fresh variant so only the readability rule is tested
         r, msg = refused(cur, ins_key, (s1, expr, vs))
         check(f"refused: {label}", r, msg)
+    # Migration 087: a question's own variable may be e or pi. Each is first refused by 085, then accepted after 087.
+    for name in ("e", "pi"):
+        r, msg = refused(cur, ins_key, (s1, "m", [name]))
+        check(f"085 alone refuses a variable named {name}", r, msg)
+    ok, why = apply(cur, MIG / "087_key_variable_e_pi.sql")
+    check("087 applies", ok, why)
+    for name in ("e", "pi"):
+        r, msg = refused(cur, ins_key, (s1, name + "*2", [name]))
+        check(f"after 087 a key with a variable named {name} is accepted", not r, msg)
+    r, msg = refused(cur, ins_key, (s1, "m", ["sqrt"]))
+    check("after 087 a variable named like a function is still refused", r, msg)
+    ok, why = apply(cur, MIG / "rollback" / "087_key_variable_e_pi_ROLLBACK.sql")
+    check("087 rolls back", ok, why)
+    r, msg = refused(cur, ins_key, (s1, "m", ["e"]))
+    check("after the 087 rollback a variable named e is refused again", r, msg)
+    ok, why = apply(cur, MIG / "087_key_variable_e_pi.sql")
+    check("087 re-applies", ok, why)
+    ok, why = apply(cur, MIG / "rollback" / "087_key_variable_e_pi_ROLLBACK.sql")
+    check("087 rolled back again, for the 085 checks that follow", ok, why)
     check("a good key with Greek letters and an exponent in superscript form is accepted",
           accepted(cur, ins_key, (s1, "θ*v² + 2·m", ["θ", "v", "m"]))[0])
     check("a numeric question may not carry an expression", refused(cur, ins_key, (n1, "m", ["m"]), "only a symbolic")[0])

@@ -169,7 +169,13 @@ export class Session {
     while (Date.now() - t0 < timeout) { t = await this.text(sel); if (re instanceof RegExp ? re.test(t) : t.includes(re)) return t; await wait(250); }
     throw new Error(`timed out waiting for ${re} in ${sel}; page says: ${t.replace(/\s+/g, ' ').slice(0, 200)}`);
   }
-  async untilSel(sel, { timeout = 20000, visible = false } = {}) { await this.page.waitForSelector(sel, { timeout, visible }); }
+  async untilSel(sel, { timeout = 20000, visible = false } = {}) {
+    try { await this.page.waitForSelector(sel, { timeout, visible }); }
+    catch (e) {   // say what the page showed, so a missing element is not a bare timeout
+      const t = (await this.text('body')).replace(/\s+/g, ' ').slice(0, 300);
+      throw new Error(`${String(e.message).split(/\r?\n/)[0]}; page at ${this.page.url().replace(this.base, '')} says: ${t}; ${this.problems.slice(-2).join(' | ')}`);
+    }
+  }
   async untilGone(sel, timeout = 20000) { await this.page.waitForFunction(s => !document.querySelector(s), { timeout }, sel); }
   /** Run code in the page, with the site's own client in scope as `db`. */
   async inPage(fn, ...args) {

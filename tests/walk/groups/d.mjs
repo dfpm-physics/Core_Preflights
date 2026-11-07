@@ -26,7 +26,16 @@ export async function runD(W) {
     await d.tick('#i-publish', true);
     await d.click('#im-save');
     await d.page.waitForFunction(() => !document.getElementById('item-modal').classList.contains('open') || getComputedStyle(document.getElementById('im-error')).display !== 'none', { timeout: 30000 });
-    const err = await d.visible('#im-error') ? await d.text('#im-error') : '';
+    let err = await d.visible('#im-error') ? await d.text('#im-error') : '';
+    // The page refuses a save while the saved answer keys are still loading (it says "Wait a moment, then save again"). On a busy
+    // staging project the read can take a while, so the walk does what the message says, up to four times, and no other refusal is retried.
+    for (let i = 0; i < 4 && /answer keys are still loading/.test(err); i++) {
+      await L.wait(3000);
+      await d.click('#im-save');
+      await L.wait(1500);
+      await d.page.waitForFunction(() => !document.getElementById('item-modal').classList.contains('open') || getComputedStyle(document.getElementById('im-error')).display !== 'none', { timeout: 30000 });
+      err = await d.visible('#im-error') ? await d.text('#im-error') : '';
+    }
     L.assert(!err, 'the form refused: ' + err);
     const it = live(); L.eq(it.is_published, true, 'published'); L.eq(it.paths.map(p => p.grading), ['ai_drafted'], 'grading');
   });
