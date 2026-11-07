@@ -38,6 +38,72 @@ revise, so there is nothing to finalize yet.
 told you there was work and not where. A second, AI-only box existed until 2026-07-29; it counted a
 subset of this one and sent you to the same page.)*
 
+## Grade assignments: the list and the score table
+
+**Grade assignments** in the top navigation lists the assignments in the current course. Assignments with work waiting come first, oldest due date first. Assignments with nothing waiting are hidden. Tick **Also show assignments with nothing waiting** to see them.
+
+Each row shows the due date, how the assignment is graded, what is waiting, and one button. **What is waiting** can name any of these counts:
+
+- scores that are drafted and waiting for approval
+- AI-suggested drafts that a person needs to review
+- cadets who handed in work that is not graded
+- cadets with no score entered yet. This is counted for assignments whose scores are typed or imported. A cadet who is excused is not counted.
+- cadets with no score who are past the due date
+- cadets whose due date cannot be worked out
+- **Not published to cadets yet**
+
+The button depends on how the assignment is graded:
+
+- **Open the score table** is for scores that staff type in or import. The table opens on this page.
+- **Review answers** is for work a person reads answer by answer. It opens the Grade page on that assignment, with a link back to the list.
+- **Checked automatically** means the site marks it. There is nothing for you to grade.
+- **Review AI drafts** appears beside **Open the score table** when a typed or imported assignment also has AI-suggested drafts. It opens the Grade page.
+
+### Type scores into the table
+
+In the score table, choose the **Section**, or leave **All my sections**. Each row is a cadet. **Score** shows the saved score, and **State** shows **Draft** or **Published**.
+
+1. Type a score in the **New score** box for each cadet. Leave a box empty to change nothing.
+2. Press Tab or Enter to move down. To fill several rows, paste a list from a spreadsheet into the first box.
+3. Select **Save entered scores**.
+
+A score the site cannot accept is explained beside its box, and nothing is saved until every typed score is accepted. The site refuses a third decimal place. It also refuses a score above the points, unless the assignment is a bonus.
+
+Saved scores are drafts. Cadets do not see them yet. If a typed score replaces a published one, the page asks first, and the new score is live at once.
+
+Directors also see **Excuse** on each row. It asks for a reason, and the assignment then stops counting in that cadet's total.
+
+### Import a grade file
+
+Select **Import a file…**, or drop a file anywhere on the table. The file is a WebAssign, Teams or Gradescope grade file saved as a CSV. In Teams, export to Excel and save as CSV first.
+
+The page works out which export the file is from, and it says so. If it guessed wrong, change **File format**. A file that does not fit the format is refused with a sentence, and nothing changes. Nothing is written until you read the preview and select the import button.
+
+In the preview:
+
+1. Check which assignment each file column fills. Change a column, or choose **Do not import**.
+2. Read the counts: rows in the file, rows matched to a cadet, rows not matched, and scores that would change.
+3. Tick the boxes that apply, if the page asks. The page holds the import until you decide about rows it could not match, rows matched by name alone, a file maximum that differs from the assignment's points, and published scores it would replace.
+4. Select **Import** with the number of scores. If the page says **Fix the file first**, the button stays off.
+
+A row is matched to a cadet by cadet ID, then by email, then by a full name that is unique on the roster. Imported scores are drafts. The page reminds you to review them and then publish.
+
+### Publish a column
+
+A column is one assignment for the cadets in your sections. Save or clear any typed scores, then select **Publish this column**. The line above the table says what publishing would do before you confirm:
+
+- how many drafted scores would become visible to cadets
+- which cadets have no score and would count as 0. The page lists them by name and puts them first.
+- which cadets have an extension that has not passed. They keep waiting.
+- how many AI-suggested drafts would be left out. A person reviews those on the Grade page.
+- whether the column would also close
+
+A column with no submissions, such as work done in class or graded in Gradescope, is closed when you publish it. A closed column counts a blank score as 0. The line above the table says "the column would also close" or "the column would stay open".
+
+Publishing is off while the assignment itself is not published to cadets, and for assignments whose scores are not typed or imported.
+
+To undo, select **Unpublish this column**. Published scores go back to drafts, and the columns that publish closed reopen. A column closed another way stays closed. Select **Reopen column** to reopen one section on its own.
+
 ## Scope: what you can see
 
 You grade the sections you staff, for the semester you are looking at. Staffing is recorded one of
@@ -343,7 +409,10 @@ The report summarizes how an assignment went — how ready the class is, which m
 one recommended thing to cover, and a few student responses worth reading aloud. It is
 intended as a five-minute read before you teach the lesson.
 
-**Reach it with Rollup** on any assignment card on the Assignments page, or from your dashboard's
+**Reach it with Reports** in the top navigation. That page lists the assignments you can see, with the due date and
+how many cadets have done each one. Select **Open report** on a row. An assignment that is not published shows
+**Not published** instead, because nobody can have done it yet. An assignment appears once it has questions or an
+interactive tutor. You can also use **Rollup** on any assignment card on the Assignments page, or your dashboard's
 carousel. The button is disabled on a draft assignment: nobody can have submitted to one, so there
 is nothing to summarize.
 

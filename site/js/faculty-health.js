@@ -194,6 +194,7 @@ export async function loadHealth({ lessonWindow = 6, errorDays = 14 } = {}) {
   // there is no second place for one to leak back in.
   const offerings = (offRes.data || []).filter(o => !isTrainingOffering(o));
   const activeIds = new Set(offerings.map(o => o.id));
+  const keyProblems = await loadKeyProblems(db, offerings);
   const sections = (secRes.data || []).filter(s => activeIds.has(s.course_offering_id));
   const allAssignments = (aoRes.data || []).filter(a => activeIds.has(a.course_offering_id));
 
@@ -236,7 +237,28 @@ export async function loadHealth({ lessonWindow = 6, errorDays = 14 } = {}) {
     offerings, sections, enrollments: enrRes.data || [],
     assignments: shown, allAssignments,
     submissions, errors: errRes.data || [],
+    keyProblems,
   };
+}
+
+/** The published expression questions whose key the checker cannot read, one database call per offering.
+ *
+ *  The rule lives in the database (`_key_problem`), which no page may call; `symbolic_key_problems` is the staff-gated list
+ *  of its findings, and it returns nothing unless the caller staffs that offering. A copy of the rule here would be a second
+ *  calculation. This read never throws: a failure is kept as `error` so the check can say so, because an unreadable list
+ *  that quietly drew as "none" is the one outcome this line must not have. */
+async function loadKeyProblems(db, offerings) {
+  try {
+    const rows = [];
+    for (const o of offerings) {
+      const { data, error } = await db.rpc('symbolic_key_problems', { p_course_offering: o.id });
+      if (error) throw error;
+      for (const r of data || []) rows.push({ ...r, course_offering_id: o.id });
+    }
+    return { rows, error: null };
+  } catch (e) {
+    return { rows: [], error: String(e?.message || e || 'the read failed') };
+  }
 }
 
 /* ── Shaping ─────────────────────────────────────────────────────────────────────────────
@@ -561,6 +583,29 @@ export const CHECKS = [
     detect: (m) => m.allLessons.filter(L =>
       !L.soloNewPage && L.gradedModalities.includes('interactive') && !L.gradedModalities.includes('written'))
       .map(L => ({ where: `${L.offeringLabel} · ${L.slug}`, href: L.href, detail: 'no graded PREP fallback' })),
+  },
+  {
+    scope: 'term',
+    id: 'symbolic-key-unreadable',
+    label: 'Published expression question whose answer key cannot be read',
+    severity: 'critical',
+    why: 'A cadet who answers it is told the question has a fault, nothing is marked and no attempt is used, so the question cannot be worked at all. The key is the expected expression and the list of variables; the database found a problem in it (the problem is written beside each question).',
+    fix: 'Open the item from the link, open the question, and correct the expected expression or the variable list. Save it, then reload this page: the question leaves the list once its key reads. If the line says the list <em>could not be read</em>, nothing has been checked yet. Reload, and if it stays, tell whoever manages the database.',
+    detect: (m) => {
+      const kp = m.keyProblems;
+      // No read at all, or a failed one, is a finding. Only a read that succeeded and found nothing is a pass.
+      if (!kp || kp.error) {
+        return [{ where: 'The list of unreadable keys could not be read',
+                  detail: kp?.error || 'this page did not ask for it' }];
+      }
+      return kp.rows
+        .filter(r => m.offeringId === 'all' || r.course_offering_id === m.offeringId)
+        .map(r => ({
+          where: `${m.offeringLabels.find(o => o.id === r.course_offering_id)?.label || '—'} · ${r.assignment_slug} · ${r.qid}`,
+          href: `items.html?a=${encodeURIComponent(r.assignment_offering_id)}`,
+          detail: r.problem,
+        }));
+    },
   },
   {
     scope: 'term',

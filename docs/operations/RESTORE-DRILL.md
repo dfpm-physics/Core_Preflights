@@ -13,7 +13,7 @@ project around them.
 |---|---|---|
 | Storage bucket files (`lesson-figures`, `artifact-sources`) | The `storage.objects` rows may exist, but the files do not. Artifact sources would be gone. | The `sync_artifacts.py pull` cache, and the Storage dashboard |
 | Auth settings (providers, password rules, redirect URLs, JWT secret, email templates) | Sign-in behaves differently or fails | Re-enter in the dashboard |
-| Edge functions and their secrets | Password resets and provisioning stop working | `scripts/staging/deploy_functions.py`, then dashboard secrets |
+| Edge functions and their secrets | Password resets, provisioning and online-answer checking stop working | `scripts/staging/deploy_functions.py` deploys the allow-listed functions (it refuses the two AI proxy functions by name, so those are redeployed by hand), then dashboard secrets |
 | Database roles (`prep_app_owner`, `prep_app_dml`, `prep_app_read`) and their passwords | Roles are cluster-wide, so a per-database dump leaves them out; `--no-acl` drops the grants | `supabase/admin/app_schema_bootstrap.sql` on the new project, then re-apply grants |
 | Ownership (`--no-owner`) | Objects belong to whoever ran the restore | Re-run the bootstrap ownership step |
 | Extensions, `pg_cron` jobs, realtime publications, webhooks | Missing until recreated | Migrations and the dashboard |

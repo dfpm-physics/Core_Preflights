@@ -302,6 +302,10 @@ The cost is a blocked night whenever someone pushes. That was accepted knowingly
 
 - **`pull` rejects a bare slug.** `--lesson preflight-02` fails — both phys-110 and phys-215 have
   one live this term. Use `--lesson phys-110-preflight-02-written`.
+- **`worklist` skips items a person marks, and `pull` refuses a mixed item.** A newer typed response
+  graded by a person is never listed. A lesson with a tutor path and a person-marked typed path makes
+  `pull` stop with a message unless `--tutor-only` is passed, so an unattended run does not write a
+  summary that covers only part of the class. Treat that stop as expected, not as a fault.
 - **`worklist`'s `submissions` count is offering-wide, not track-scoped.** It reported 267 for
   preflight-02 day M; the M track actually held 163, the other 104 being T-track. Do not quote it
   as the size of the track being run.

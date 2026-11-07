@@ -190,6 +190,14 @@ once every section has a scope, so it appears after the second track — and `st
 `__all__` as STALE between the two runs is the signal that the second pass is still owed, not a
 fault.
 
+**Which items the worklist offers.** It lists an item only when the job may take its path: an
+interactive tutor, a typed response set to AI-drafted grading (the job drafts, a person finalizes),
+or a typed response from the older Fall setup. A newer typed response that a person marks is never
+offered. If an item has a tutor path and a typed path that a person marks, `pull` stops with a
+message instead of summarizing the tutor cadets alone as if they were the whole class; pass
+`--tutor-only` only when you mean exactly that. Naming a term with `--term` also finds lessons in a
+term that is not the active one.
+
 ---
 
 ## 7. More than one operator

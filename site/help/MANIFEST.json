@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated": "2026-07-21",
+  "updated": "2026-11-07",
   "tiers": ["student", "instructor", "director", "admin"],
   "docs": [
     {
@@ -37,6 +37,13 @@
       "title": "Course and assignment structure",
       "summary": "How courses, terms, assignments, and activities relate — and what carries over to next semester.",
       "file": "director-course-structure.md"
+    },
+    {
+      "id": "assignment-setup",
+      "tier": "director",
+      "title": "Setting up an assignment",
+      "summary": "Choose questions, tutor or both, write expression questions, and fix an answer key that the Health page says cannot be read.",
+      "file": "director-assignment-setup.md"
     },
     {
       "id": "schema-reference",

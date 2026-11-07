@@ -20,7 +20,7 @@
       "doc": "site/help/student-getting-started.md",
       "kind": "help",
       "tier": "student",
-      "reviewed": "2026-11-06",
+      "reviewed": "2026-11-07",
       "sources": [
         "site/js/student-view.js",
         "site/student/schedule.html",
@@ -48,7 +48,7 @@
       "doc": "site/help/ai-and-your-work.md",
       "kind": "help",
       "tier": "student",
-      "reviewed": "2026-11-04",
+      "reviewed": "2026-11-07",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/instructions/PROJECT.md",
@@ -62,7 +62,7 @@
       "doc": "site/help/instructor-grading.md",
       "kind": "help",
       "tier": "instructor",
-      "reviewed": "2026-11-06",
+      "reviewed": "2026-11-07",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/instructions/PROJECT.md",
@@ -75,7 +75,11 @@
         "site/js/auth.js",
         "site/js/faculty-tasks.js",
         "site/faculty/lessons.html",
-        "site/faculty/report.html"
+        "site/faculty/report.html",
+        "site/faculty/entry.html",
+        "site/js/faculty-entry.js",
+        "site/js/faculty-entry-parse.js",
+        "site/js/faculty-rollup.js"
       ],
       "note": "The 3-state toggle, question_scores shape, and the 'all my sections' scoping rule. If the Grade tab's behaviour changes, this doc is wrong before anything else is. nav.js is a source because the page has NO nav entry (P1.14, 2026-07-23) — the doc's 'getting to the Grade page' section is the only place that is written down, so a nav change silently invalidates it. grade.html is a source because the hand-grading queue is rendered there, not in the data module. faculty-tasks.js is a source since 2026-07-27: the due-out boxes are the documented route to this page, and they are now one box per assignment that deep-links into it, so a change to that registry invalidates the 'Getting to the Grade page' section. lessons.html is a source since 2026-07-29: the Assignments page now carries a Grade button that deep-links here, so it is one of the enumerated routes and a change to it invalidates the list. report.html is a source since 2026-08-10: the doc's last section documents the Report tab's two response panels — their controls, their sampling and their selection behaviour — and had been describing that page since it was written with nothing connecting the two, so a change there could never have flagged it. grade-controls.js and schema.js became sources on 2026-08-21, when the page stopped having only one kind of card: grade-controls.js owns BOTH controls the doc describes (the 3-state credit chip and the 0/1/full points toggle), and schema.js's cardKindFor() decides which card each cadet gets — so a change to either alters what an instructor sees without touching faculty-grade.js or grade.html at all. admin.html is a source since 2026-09-29: the doc's 'For directors: publish everything that is due' section documents the Export tab's Publish card, which lives in that page."
     },
@@ -83,7 +87,7 @@
       "doc": "site/help/director-ai-rules.md",
       "kind": "help",
       "tier": "director",
-      "reviewed": "2026-11-04",
+      "reviewed": "2026-11-07",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/instructions/PROJECT.md",
@@ -98,7 +102,7 @@
       "doc": "site/help/admin-system-operations.md",
       "kind": "help",
       "tier": "admin",
-      "reviewed": "2026-11-04",
+      "reviewed": "2026-11-07",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/instructions/PROJECT.md",
@@ -121,7 +125,7 @@
       "doc": "docs/operations/SYSTEM_GUIDE.md",
       "kind": "operations",
       "tier": null,
-      "reviewed": "2026-11-04",
+      "reviewed": "2026-11-07",
       "sources": [
         ".ai/instructions/PROJECT.md",
         ".ai/instructions/CORE.md",
@@ -138,7 +142,7 @@
       "doc": "docs/operations/PREP-V2-CUTOVER.md",
       "kind": "operations",
       "tier": null,
-      "reviewed": "2026-11-04",
+      "reviewed": "2026-11-07",
       "sources": [
         "supabase/admin/app_schema_bootstrap.sql",
         "scripts/app_migration/migrate_public_to_app.py",
@@ -152,7 +156,7 @@
       "doc": "docs/operations/RESTORE-DRILL.md",
       "kind": "operations",
       "tier": null,
-      "reviewed": "2026-11-04",
+      "reviewed": "2026-11-07",
       "sources": [
         "scripts/staging/restore_drill.py",
         "scripts/staging/deploy_functions.py",
@@ -165,7 +169,7 @@
       "doc": ".ai/skills/docs-author/SKILL.md",
       "kind": "skill",
       "tier": null,
-      "reviewed": "2026-11-04",
+      "reviewed": "2026-11-07",
       "sources": [
         "site/help/README.md",
         "site/js/help.js",
@@ -178,7 +182,7 @@
       "doc": "site/help/director-course-structure.md",
       "kind": "help",
       "tier": "director",
-      "reviewed": "2026-11-04",
+      "reviewed": "2026-11-07",
       "sources": [
         "supabase/migrations/app/001_core_model.sql",
         "supabase/migrations/app/003_term_calendar.sql",
@@ -192,10 +196,27 @@
       "note": "Conceptual companion to director-schema-reference.md, which owns the field-level detail and the enforced-rules list; this page links out rather than restating them, after a restated unlock rule drifted and contradicted the reference. Deliberately contains no UI procedures - it explains the model, not the screens, so a page rename cannot invalidate it. (This note used to justify that by saying site/app/ does not read the app schema yet; it has read it since 2026-07-21 - the reason stands, the justification did not.) faculty-lessons.js became a source on 2026-07-28: whether reusing an assignment SHARES it or COPIES it is the content model, not a screen, and it is decided in saveLesson() rather than in any migration - this page said 'schedule the same library entry again instead of copying it', which was true until that day and is now the opposite of what happens. The decision doc is listed beside it because it is where the reasoning lives. schema.js and faculty-lessons.js became sources on 2026-08-04, when publishing stopped meaning 'students can see it': the release window (LOOKAHEAD_DAYS) and the opens_at override are content-model facts, and this page now explains the difference."
     },
     {
+      "doc": "site/help/director-assignment-setup.md",
+      "kind": "help",
+      "tier": "director",
+      "reviewed": "2026-11-07",
+      "sources": [
+        "site/faculty/items.html",
+        "site/js/faculty-items.js",
+        "site/faculty/questions.html",
+        "site/js/faculty-questions.js",
+        "site/js/problem-file.js",
+        "site/js/symbolic-answer.js",
+        "site/js/faculty-health.js",
+        "docs/decisions/V2-STAGE-E-ANSWERS.md"
+      ],
+      "note": "Screens, not the model: director-course-structure.md bars UI procedures, so how-to material for the Assignments and Questions pages and the Health line for unreadable expression keys lives here. The reading rules for expressions (1/2 m v^2, x^2^3, e and pi as variables) come from symbolic-answer.js and the Stage E decision record; the student-side wording is in student-getting-started.md and must agree."
+    },
+    {
       "doc": "site/help/director-schema-reference.md",
       "kind": "help",
       "tier": "director",
-      "reviewed": "2026-11-06",
+      "reviewed": "2026-11-07",
       "sources": [
         "supabase/migrations/app/001_core_model.sql",
         "supabase/migrations/app/002_rls.sql",
@@ -247,7 +268,7 @@
       "doc": ".ai/patterns/README.md",
       "kind": "reference",
       "tier": null,
-      "reviewed": "2026-11-04",
+      "reviewed": "2026-11-07",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/README.md"
@@ -258,7 +279,7 @@
       "doc": ".ai/patterns/python.md",
       "kind": "reference",
       "tier": null,
-      "reviewed": "2026-11-04",
+      "reviewed": "2026-11-07",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/instructions/PROJECT.md",
@@ -270,7 +291,7 @@
       "doc": ".ai/skills/integration-package/SKILL.md",
       "kind": "skill",
       "tier": null,
-      "reviewed": "2026-11-04",
+      "reviewed": "2026-11-07",
       "sources": [
         ".ai/instructions/CORE.md"
       ],
@@ -280,7 +301,7 @@
       "doc": ".ai/skills/safe-change/SKILL.md",
       "kind": "skill",
       "tier": null,
-      "reviewed": "2026-11-04",
+      "reviewed": "2026-11-07",
       "sources": [
         ".ai/instructions/CORE.md"
       ],
@@ -290,7 +311,7 @@
       "doc": ".ai/skills/skill-author/SKILL.md",
       "kind": "skill",
       "tier": null,
-      "reviewed": "2026-11-04",
+      "reviewed": "2026-11-07",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/README.md"
@@ -354,7 +375,7 @@
       "doc": "docs/operations/ONBOARD-ARTIFACTS.md",
       "kind": "operations",
       "tier": "staff",
-      "reviewed": "2026-11-04",
+      "reviewed": "2026-11-07",
       "sources": [
         "scripts/artifacts/sync_artifacts.py",
         "scripts/artifacts/artifact_parse.py",
@@ -370,7 +391,7 @@
       "doc": "docs/operations/TUTOR-BEHAVIOR-PARITY.md",
       "kind": "operations",
       "tier": "staff",
-      "reviewed": "2026-11-04",
+      "reviewed": "2026-11-07",
       "sources": [
         "scripts/artifacts/to_gemini.py",
         "scripts/artifacts/patch_artifacts.py",
@@ -388,7 +409,7 @@
       "doc": "docs/operations/PUBLISH-ARTIFACT.md",
       "kind": "operations",
       "tier": null,
-      "reviewed": "2026-08-26",
+      "reviewed": "2026-11-07",
       "sources": [
         "_builder/preflight-kit/contracts/INTERACTION-DATA-CONTRACT.md",
         "_builder/preflight-kit/skill/preflight-factory-v2/SKILL.md",
@@ -424,7 +445,7 @@
       "doc": "docs/operations/ONBOARD-AGGREGATION.md",
       "kind": "operations",
       "tier": null,
-      "reviewed": "2026-11-04",
+      "reviewed": "2026-11-07",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/skills/lesson-cycle/SKILL.md",
@@ -441,7 +462,7 @@
       "doc": "docs/operations/MACHINE-SETUP.md",
       "kind": "operations",
       "tier": null,
-      "reviewed": "2026-11-04",
+      "reviewed": "2026-11-07",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/instructions/PROJECT.md",
@@ -456,7 +477,7 @@
       "doc": "docs/operations/SCHEDULED-LESSON-CYCLE.md",
       "kind": "operations",
       "tier": null,
-      "reviewed": "2026-11-04",
+      "reviewed": "2026-11-07",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/skills/lesson-cycle/SKILL.md",
@@ -470,7 +491,7 @@
       "doc": ".ai/skills/gemini-port/SKILL.md",
       "kind": "skill",
       "tier": "internal",
-      "reviewed": "2026-11-04",
+      "reviewed": "2026-11-07",
       "sources": [
         ".ai/instructions/CORE.md",
         "scripts/artifacts/to_gemini.py",
@@ -484,7 +505,7 @@
       "doc": "docs/operations/ASKSAGE-TOKEN-TRIAL.md",
       "kind": "runbook",
       "tier": "admin",
-      "reviewed": "2026-11-04",
+      "reviewed": "2026-11-07",
       "sources": [
         "supabase/functions/asksage-proxy/index.ts",
         "scripts/asksage/extract_prompts.py",

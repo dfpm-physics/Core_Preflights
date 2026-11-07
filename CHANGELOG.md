@@ -8,6 +8,49 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-11-07 — Matthew Recker via Claude
+
+- **Assignment form**: a new save now clears the old error message, so an old refusal no longer stays on screen while the new save runs. `site/faculty/items.html`, page hashes rebuilt.
+- **Browser walk**: step F6 now waits for the Students tab before it clicks. A slow page had failed that step.
+- **Staging**: migration `app/088` is applied and recorded in the ledger. Proof 119 passed, 0 failed, on a throwaway database. Walk 64 of 64 on staging after it.
+- **Not done**: nothing pushed; production not touched.
+
+## 2026-11-07 — Matthew Recker via Claude (help pages for the staff screens built in November; branch `v2-symbolic`, local, not committed)
+
+**Added**
+- `site/help/director-assignment-setup.md`, a director page ("Setting up an assignment"), registered in `MANIFEST.json` and `docs/DOC-SOURCES.json`. It covers the "How cadets do this work" cards (Questions, Interactive tutor, Both), writing an expression question (expected expression, variables, how `1/2 m v^2` reads, `e` and `pi` as the question's own variables, the problem file's `expression` columns, a person checking AI-written keys), and what to do when the Health page lists a published expression question whose key cannot be read. It is a new page because `director-course-structure.md` deliberately holds no screen procedures.
+- `site/help/instructor-grading.md`: a section on Grade assignments (the list and its counts, which rows open the score table and which open the Grade page, typing scores, importing a WebAssign, Teams or Gradescope file with the preview, and publishing, unpublishing and reopening a column, including that publishing a column that takes no submission closes it), and a line on the Reports link and its picker.
+- `reviewed` set to 2026-11-07 for both pages, with the screens' files added as sources.
+
+**Deliberately not done:** no WebAssign export layout is described, because the real export has not been tried; the page says only that the format is detected and that a wrong file is refused. Course meeting days were not added: `admin-system-operations.md` and `instructor-accounts.md` already cover them. No code, migration, test or `DOC-STATUS.json` change. No server, browser walk, staging write or production access. The Health line depends on migration 088, which is written and not applied anywhere; until it is applied the page shows the "could not be read" finding, and the help page says what to do then.
+
+## 2026-11-07 — Matthew Recker via Claude (document review against sources: 6 corrected, 17 re-dated only, 1 left flagged; branch `v2-symbolic`, local, not committed)
+
+`check_doc_sources.py` flagged 24 of 33 indexed documents. Each was read against the changes to its sources since its `reviewed` date, and its `reviewed` date in `docs/DOC-SOURCES.json` was set to 2026-11-07 only after that.
+
+**Corrected**
+- `site/help/admin-system-operations.md` and `docs/operations/SYSTEM_GUIDE.md`: a day letter in a section code counts only when a digit follows it (`LAB-3` gets no meeting day); the course keeps its own list of meeting days (M and T by default, under More options on the course form), Add a section offers only those days, and the roster preview notes a day outside the list.
+- `docs/operations/SYSTEM_GUIDE.md`: the edge function table and deploy commands now include `check-answer` and `remark-question` (they need migrations 070 to 075 first).
+- `docs/operations/RESTORE-DRILL.md`: the edge function row now says online-answer checking stops too, and that the deploy script refuses the two AI proxy functions by name.
+- `docs/operations/PREP-V2-CUTOVER.md`: a rerun of the migration script now stops on the one-active-offering index once the course has a different active offering.
+- `docs/operations/ONBOARD-AGGREGATION.md` and `docs/operations/SCHEDULED-LESSON-CYCLE.md`: which items the worklist offers, and that `pull` stops on an item with a person-marked typed path unless `--tutor-only` is passed.
+
+**Re-dated after reading, no text change:** `student-getting-started` (its math answer section already matches the answer buttons, the typeset reading and the plain-text fallback in the code), `ai-and-your-work`, `director-ai-rules`, `director-course-structure`, `director-schema-reference` (the `.sf-*` classes it depends on did not change), `MACHINE-SETUP`, `ONBOARD-ARTIFACTS`, `PUBLISH-ARTIFACT`, `TUTOR-BEHAVIOR-PARITY`, `ASKSAGE-TOKEN-TRIAL`, the `docs-author`, `safe-change`, `skill-author`, `integration-package` and `gemini-port` skills, and the two `.ai/patterns/` files. The changes to their sources were wording about the paid tier, the rollback folder, CI, the local server and the name scan, none of which these documents contradict.
+
+**Left, not re-dated:** `_builder/preflight-kit/contracts/INTERACTION-PREFILL-LINK.md`. It is a hash-locked snapshot, and the authoritative contract's `pub` wording changed on 2026-11-05 (a link only ticks the Published box; the director's Save publishes). Whether that is a schema change for the kit is the course director's decision.
+
+**Deliberately not done:** no edits to `docs/decisions/`, `docs/contracts/`, `supabase/migrations/`, `site/js/`, `tests/` or `scripts/`; `site/help/DOC-STATUS.json` was not regenerated, because it is built from committed history and should be rebuilt after this change is committed; the help pages for the Grade assignments page, the Reports link, the three setup cards, file drops and the Health line (migration 088) were not in the flagged set and were not reviewed here.
+
+## 2026-11-07 — Matthew Recker via Claude (migration 088 written: key names folded, and the Health line for unreadable keys; branch `v2-symbolic`, local, not committed)
+
+**Written, not applied anywhere.** `supabase/migrations/app/088_key_names_folded_and_health.sql`, rollback in `rollback/`.
+
+- **The database key check now reads variable names the way the reader does.** `_fold_name` carries the reader's Greek table; `_key_problem` folds names before the duplicate, signed-variable and function-name checks. A key written straight to the database with `mu` and the Greek mu is refused. A signed variable spelled unlike its declared variable is accepted, as the reader accepts it. Nothing the reader accepts is newly refused. A key already stored with both spellings is not repaired. A test compares the migration's table with the reader's over the whole Greek block.
+- **`symbolic_key_problems(offering)`**: a staff-gated list of published symbolic questions whose current key fails the database check, for the Health page. It checks inside the function that the caller staffs the offering and returns nothing to anyone else; granted to signed-in users only; returns no key, expression or variable name.
+- **Health page** (`site/js/faculty-health.js`): one new line, "Published expression question whose answer key cannot be read", with the count and a link per question's item. A failed read, or a page that never made it, shows a finding saying the list could not be read, never a clear line. No inline script changed, so no CSP hash moved.
+- **Tests**: `tests/app-schema/test-key-names-health.mjs` (42 checks; the Health ones failed before the page change and pass after), registered in `.github/ci/run_offline_suites.py`. The scratch proof `scripts/staging/scratch_symbolic_proof.py` has a new 088 section (apply, behaviour, grants, rollback, re-apply); run on a throwaway database on the staging server by the coordinator after two fixes to the proof itself (it reused a question an earlier section had deleted, and it assumed no signed-in user while earlier sections had left one set): 119 passed, 0 failed. No fault was found in 088.
+- **Deliberately not done**: not applied to staging or production; no stored key rewritten; no change to the reader, the edge functions or the question page; `scripts/app/gen_db_schema.py` not run; no browser walk. Deploy order: apply 088 before the page ships, or the Health page shows the "could not be read" finding.
+
 ## 2026-11-07 — Matthew Recker via Claude (six small items; branch `v2-symbolic`, local, not committed)
 
 **What changed.**

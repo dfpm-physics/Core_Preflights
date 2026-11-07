@@ -474,11 +474,15 @@ and the import's offer did not fire for an offering with **no** sections at all 
 section map, which switches the check off — so a new course deadlocked: the import demanded sections
 that only the import could create. Both routes are real now.)*
 
-A created section gets its meeting days guessed from its code (`M1A` → M-day, `T3B` → T-day). That
+A created section gets its meeting days guessed from its code (`M1A` → M-day, `T3B` → T-day). A day
+letter counts only when a digit follows it, so `LAB-3` or `MECH-1` gets no meeting day. That
 guess is a starting value, not a rule: it is stored on the section and can be corrected, and every
 deadline is resolved from the stored value, never from the code. **Check it for any section whose
 code does not follow the `[MT][135][A-D]` convention** — a section with no meeting day falls back
-to the assignment's default deadline.
+to the assignment's default deadline. The course also keeps a list of the days it meets (M and T by
+default), set under **More options** on the course form; **Add a section** offers only those days,
+and the roster preview notes a new section whose day is outside the list. The list never rewrites a
+section that already holds another day.
 
 **Step 4 — Staff the offering**
 
@@ -511,7 +515,7 @@ This section documents what was done to deploy the system — only needed if sta
 
 ### Deploy the Edge Functions
 
-**Six** edge functions run server-side work a browser session must not be trusted with. They only need to be deployed once (or after any code change to them).
+**Eight** edge functions run server-side work a browser session must not be trusted with, plus `log-tutor-error` and the AI proxy that the deploy commands below also cover. They only need to be deployed once (or after any code change to them).
 
 | Function | Why it cannot live in the browser |
 |---|---|
@@ -521,6 +525,8 @@ This section documents what was done to deploy the system — only needed if sta
 | `reset-student-password` | Derives the default password server-side, and **rejects** a request that carries one — so nobody can set a cadet's password to a value they then know |
 | `reset-staff-password` | The same for a staff account, against the same derived default. Directors and system admins only, and a director cannot reset a system admin (2026-07-27) |
 | `set-own-password` | Re-verifies the current password (`updateUser` does not) and clears the forced-rotation flag, which lives in `app_metadata` where a browser session cannot write it |
+| `check-answer` | Marks one cadet answer to one auto-checked online question and returns right or wrong only, so the key never reaches the browser. Needs migrations `app/070` to `app/075` applied first |
+| `remark-question` | Staff only. Re-marks every stored answer to one question against its corrected key. Needs the same migrations |
 
 **1. Install the Supabase CLI**
 
@@ -556,6 +562,8 @@ supabase functions deploy provision-students
 supabase functions deploy reset-student-password
 supabase functions deploy reset-staff-password
 supabase functions deploy set-own-password
+supabase functions deploy check-answer
+supabase functions deploy remark-question
 supabase functions deploy log-tutor-error
 supabase functions deploy genai-mil-proxy
 ```

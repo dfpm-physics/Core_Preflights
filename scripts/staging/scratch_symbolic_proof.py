@@ -22,6 +22,8 @@ CHECKS (each prints [pass] or [FAIL])
                 is not a list
   remark        remark_context hands the expression and variables to service_role only
   rollback      refuses while a symbolic question exists; with none, rolls back cleanly and re-applies
+  088           (run last, on top of 087) the key check folds Greek and Latin spellings; the staff list returns the questions whose
+                key fails it to a director of the offering and to nobody else; rollback and re-apply
 
 WHAT THIS CANNOT PROVE
   The edge function (the checker is JavaScript; tests/app-schema/test-symbolic-answer.mjs and the two function suites cover
@@ -92,15 +94,16 @@ def accepted(cur, sql, params=()):
         return False, str(e).strip().splitlines()[0]
 
 
-def make_items(cur, fx):
+def make_items(cur, fx, slug="sym-main"):
     b = fx.b
     Q = {"modality": "questions", "delivery": "online_questions", "grading": "auto_checked"}
     future = now_utc() + timedelta(days=2)
     cur.execute("BEGIN")
     cur.execute("SET LOCAL search_path = app, public, extensions")
-    b.assign(fx.director, fx.co, "director")
+    if slug == "sym-main":                    # the director is assigned once
+        b.assign(fx.director, fx.co, "director")
     course = one(cur, "SELECT course_id FROM course_offerings WHERE id = %s", fx.co)
-    it = b.item(course, fx.co, "sym-main", "sym-main", 0, kind="homework", paths=[Q], due=future, published=False,
+    it = b.item(course, fx.co, slug, slug, 0, kind="homework", paths=[Q], due=future, published=False,
                 entered_on_new_page=True, attempt_limit=5, attempt_rule="best")
     it["q"] = {
         "s1": b.question(it, "s1", "symbolic", 2, key=[{"expression": "m*v^2/2", "variables": ["m", "v"], "signed_variables": ["v"]}], n=0,
@@ -290,6 +293,119 @@ def run_checks(cur, fx):
     check("a numeric answer_context still works after the rollback", call(cur, "service_role", "answer_context", A, fx.sym["ao"], n1).get("status") == "ok")
     ok, why = apply(cur, mig)
     check("085 re-applies", ok, why)
+    run_088(cur, fx)
+
+
+def run_088(cur, fx):
+    """Migration 088: names folded in the key check, and the staff list for the Health page. Leaves 087 and 088 rolled back."""
+    import json
+    MU, THETA = "μ", "θ"
+    # The 085 rollback section above deleted the first symbolic question, so this section makes its own item.
+    ok, why = apply(cur, MIG / "085_symbolic_answers.sql") if one(cur, "SELECT count(*) FROM information_schema.columns WHERE table_schema='app' AND table_name='question_keys' AND column_name='expression'") == 0 else (True, "")
+    check("085 is in place for the 088 section", ok, why)
+    make_items(cur, fx, "sym-088")
+    s1 = fx.sym["q"]["s1"]
+    ins_key = "INSERT INTO app.question_keys (question_id, variant_key, version, expression, variables, signed_variables) VALUES (%s, 'v', 1, %s, %s, %s)"
+
+    def listed(role_sql_setup, offering):
+        """Rows of symbolic_key_problems for `offering`, as the session set up by role_sql_setup() (always reset after)."""
+        role_sql_setup()
+        try:
+            cur.execute("SELECT question_id, qid, assignment_offering_id, assignment_slug, problem FROM app.symbolic_key_problems(%s)", (offering,))
+            return cur.fetchall()
+        finally:
+            cur.execute("RESET ROLE")
+            cur.execute("SELECT set_config('request.jwt.claims', '', false), set_config('request.jwt.claim.sub', '', false)")
+
+    def as_user(uid):
+        def setup():
+            cur.execute("SELECT set_config('request.jwt.claims', %s, false), set_config('request.jwt.claim.sub', %s, false)",
+                        (json.dumps({"sub": uid, "role": "authenticated"}), uid))
+            cur.execute("SET ROLE authenticated")
+        return setup
+
+    section("088: before it, the database check compares names as written")
+    ok, why = apply(cur, MIG / "087_key_variable_e_pi.sql")
+    check("087 applies (088 is built on it)", ok, why)
+    check("before 088 a key naming mu and the Greek mu is accepted", accepted(cur, ins_key, (s1, "m", ["mu", MU], None))[0])
+    check("before 088 a signed variable spelled unlike its declared variable is refused", refused(cur, ins_key, (s1, "m", ["mu"], [MU]))[0])
+    # a key that 088 will find: both spellings, written straight to the current key (the owner connection, as a repair script would)
+    cur.execute("BEGIN")
+    cur.execute("UPDATE app.question_keys SET variables = %s, signed_variables = NULL WHERE question_id = %s AND superseded_at IS NULL", (["mu", MU], s1))
+    cur.execute("COMMIT")
+
+    section("088: applies")
+    ok, why = apply(cur, MIG / "088_key_names_folded_and_health.sql")
+    check("088 applies", ok, why)
+    if not ok:
+        return
+    check("_fold_name folds the Greek letters and leaves Latin names alone",
+          one(cur, "SELECT app._fold_name(%s)", MU + THETA + "F_g") == "mutheta" + "F_g" and one(cur, "SELECT app._fold_name('')") == "")
+    check("_fold_name reads the micro sign as mu", one(cur, "SELECT app._fold_name(%s)", "µ") == "mu")
+    for role in ("authenticated", "anon", "service_role", "prep_app_dml", "prep_app_read"):
+        cur.execute("BEGIN")
+        try:
+            cur.execute(f"SET LOCAL ROLE {role}")
+            cur.execute("SELECT app._fold_name('a')")
+            check(f"{role} cannot execute _fold_name", False)
+        except Exception as e:  # noqa: BLE001
+            check(f"{role} cannot execute _fold_name", "permission denied" in str(e), str(e).strip().splitlines()[0][:70])
+        cur.execute("ROLLBACK")
+
+    section("088: the key check folds names")
+    check("a key naming mu and the Greek mu is refused", refused(cur, ins_key, (s1, "m", ["mu", MU], None), "listed twice")[0])
+    check("a key naming theta and the Greek theta is refused", refused(cur, ins_key, (s1, "m", ["theta", THETA], None), "listed twice")[0])
+    check("a signed variable under the other spelling is accepted", accepted(cur, ins_key, (s1, "m", ["mu"], [MU]))[0])
+    check("a signed variable that is no variable is still refused", refused(cur, ins_key, (s1, "m", ["mu"], ["q"]), "able to be negative")[0])
+    check("a Greek variable on its own is accepted", accepted(cur, ins_key, (s1, THETA + "*2", [THETA], None))[0])
+    check("the micro sign alone is not a variable name", refused(cur, ins_key, (s1, "m", ["µ"], None), "start with a letter")[0])
+    check("a variable named like a function is still refused", refused(cur, ins_key, (s1, "m", ["sqrt"], None), "named like a function")[0])
+    check("a variable named e is still accepted (087 is kept)", accepted(cur, ins_key, (s1, "e*2", ["e"], None))[0])
+    check("two different variables are still accepted", accepted(cur, ins_key, (s1, "m*v", ["m", "v"], ["v"]))[0])
+    check("a variable listed twice as written is still refused", refused(cur, ins_key, (s1, "m", ["m", "m"], None), "listed twice")[0])
+
+    section("088: the staff list")
+    co = fx.co
+    # earlier sections leave a signed-in user in the session settings; clear them so "no signed-in user" is true
+    cur.execute("SELECT set_config('request.jwt.claims', '', false), set_config('request.jwt.claim.sub', '', false)")
+    check("with the settings cleared there is no signed-in user", one(cur, "SELECT app.current_uid() IS NULL") is True)
+    rows = listed(lambda: None, co)
+    check("the owner connection (no signed-in user) gets no rows", rows == [], str(len(rows)))
+    rows = listed(as_user(fx.director), co)
+    check("a director of the offering sees the one question whose stored key names both spellings", len(rows) == 1 and rows[0][0] == s1, str(len(rows)))
+    check("the row carries the question's name, the item and the problem sentence only",
+          len(rows) == 1 and len(rows[0]) == 5 and "listed twice" in rows[0][4] and rows[0][2] == fx.sym["ao"])
+    check("no value in the row is the expression or a variable name", all("m*v" not in str(v) and "mu" != str(v) for v in rows[0]) if rows else False)
+    other = one(cur, "SELECT id FROM course_offerings WHERE id <> %s ORDER BY id LIMIT 1", co)
+    check("a director sees nothing for an offering they do not staff", listed(as_user(fx.director), other) == [])
+    for who in ("A", "B"):
+        check(f"cadet {who} gets no rows for the offering they are enrolled in", listed(as_user(fx.cadet[who][2]), co) == [])
+    check("a missing offering id returns no rows", listed(as_user(fx.director), None) == [])
+    for role in ("anon", "service_role", "prep_app_dml", "prep_app_read"):
+        cur.execute("BEGIN")
+        try:
+            cur.execute(f"SET LOCAL ROLE {role}")
+            cur.execute("SELECT * FROM app.symbolic_key_problems(%s)", (co,))
+            check(f"{role} cannot execute symbolic_key_problems", False)
+        except Exception as e:  # noqa: BLE001
+            check(f"{role} cannot execute symbolic_key_problems", "permission denied" in str(e), str(e).strip().splitlines()[0][:70])
+        cur.execute("ROLLBACK")
+    cur.execute("BEGIN")
+    cur.execute("UPDATE app.question_keys SET variables = ARRAY['m','v'], signed_variables = ARRAY['v'] WHERE question_id = %s AND superseded_at IS NULL", (s1,))
+    cur.execute("COMMIT")
+    check("once the key reads, the question leaves the list", listed(as_user(fx.director), co) == [])
+    section("088: rollback and re-apply")
+    ok, why = apply(cur, MIG / "rollback" / "088_key_names_folded_and_health_ROLLBACK.sql")
+    check("088 rolls back", ok, why)
+    check("the list and the folder are gone", one(cur, "SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'app' AND p.proname IN ('symbolic_key_problems', '_fold_name')") == 0)
+    check("after the rollback a key naming both spellings is accepted again", accepted(cur, ins_key, (s1, "m", ["mu", MU], None))[0])
+    ok, why = apply(cur, MIG / "088_key_names_folded_and_health.sql")
+    check("088 re-applies", ok, why)
+    check("after the re-apply it is refused again", refused(cur, ins_key, (s1, "m", ["mu", MU], None), "listed twice")[0])
+    ok, why = apply(cur, MIG / "rollback" / "088_key_names_folded_and_health_ROLLBACK.sql")
+    check("088 rolled back again", ok, why)
+    ok, why = apply(cur, MIG / "rollback" / "087_key_variable_e_pi_ROLLBACK.sql")
+    check("087 rolled back again, leaving the chain as it was found", ok, why)
 
 
 def main():

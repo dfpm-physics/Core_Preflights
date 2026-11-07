@@ -431,16 +431,23 @@ What a cadet and a director see changed; what is marked did not (a differential 
   `test-symbolic-answer.mjs` and `test-symbolic-view.mjs`. The server copies are byte copies of the same reader.
 - **A variable under two spellings** (`mu` and the Greek mu, `theta` and the Greek theta) is refused on save by the page and the
   reader: "The variable "..." is listed twice (a Greek letter and its Latin spelling are the same name)." The micro sign alone is
-  not a variable name; the refusal says a name must start with a letter. **The database check does not fold the spellings.**
-  `_key_problem` (migrations 085 and 087) compares names as written, so a key written straight to the database with both spellings
-  passes, and a signed variable spelled differently from its declared variable (`mu` against the Greek mu) is accepted by the
-  reader and refused by the database. Closing that is a change to `_key_problem`, which is a migration. **Not done; needs a decision.**
-- **Health page: a line for a question whose key the checker cannot read. Not built.** The database's key check, `_key_problem`,
-  is revoked from every role the site uses (migration 070 revokes it from `authenticated`, `service_role` and the two scoped
-  roles), and no granted function reports it. A page cannot call it. A second copy of the rule in the browser would be a second
-  calculation, which this system avoids. What it needs is a migration: a staff-gated function returning the questions whose
-  current key fails `_key_problem`, which the health page would call, with a failed call shown as an error. **Not done; needs a
-  decision.** Until then the same fault appears as `key_fault` to a cadet, and as `key_fault` in a re-mark preview.
+  not a variable name; the refusal says a name must start with a letter. **The database check now agrees (migration 088, written
+  2026-11-07, not yet applied anywhere).** `_fold_name` holds the reader's Greek table letter for letter (a test compares the two over
+  the whole Greek block and the micro sign), and `_key_problem` folds names before the duplicate check, the signed-variable check and
+  the function-name check. So a key naming both spellings is refused, and a signed variable spelled unlike its declared variable is
+  accepted, as the reader does. A key the reader accepts is not refused. A key already stored with both spellings is not repaired;
+  the Health line below lists it. The two tables (`GREEK` in `symbolic-answer.js` and the `VALUES` list in 088) must be changed together.
+- **Health page: a line for a published question whose key the checker cannot read (migration 088, same status).** `_key_problem` is
+  revoked from every role the site uses, and a copy of the rule in the browser would be a second calculation, so the page reads a
+  list instead: `symbolic_key_problems(offering)`, granted to signed-in users only. Inside the function it checks that the caller
+  staffs the offering (`staff_offerings()`, any role, a global admin staffs all) and returns no rows to anyone else, a cadet or a
+  signed-out caller included. It lists published items, auto-checked paths, symbolic questions not retired, and the current key with
+  no variant (the one the checker uses). A row is the question id and name, the item id and slug, and the problem sentence; no key,
+  expression or variable name is returned. `site/js/faculty-health.js` calls it once per active offering and shows one line,
+  "Published expression question whose answer key cannot be read", with the count and a link to the item for each question. The
+  link opens the item, not the question (the items page has no per-question address). A failed or missing read is a finding saying
+  the list could not be read, never a clear line, in every offering view. Until 088 is applied the page shows that finding.
+  The same fault reaches a cadet as `key_fault` and staff as `key_fault` in a re-mark preview.
 
 ## Stage E gate: test list
 

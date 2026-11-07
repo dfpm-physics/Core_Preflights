@@ -118,7 +118,9 @@ each role connects and holds exactly the privileges it should, and no more.
    set. If any shipped artifact targets a dropped slug, **do not commit**; revisit the migration
    (this is a frozen-contract question, per the schema decision §7).
 9. **Commit the migration** — re-run with `--commit`. The whole run is one transaction and is
-   idempotent; re-running after a commit changes nothing.
+   idempotent; re-running after a commit changes nothing. Once the course has a different active
+   offering, a rerun stops cleanly on the one-active-offering unique index with nothing written, so
+   do not rerun it against a live schema.
 10. **Close the read window** as `postgres`, immediately:
 
     ```

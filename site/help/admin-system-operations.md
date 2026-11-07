@@ -30,10 +30,16 @@ unknown-section check and then refused to commit. A new course could not be popu
 path. Both work now.)*
 
 A section made this way also gets its **meeting days** filled in from its code, so its deadlines are
-correct straight away — `M1A` is an M-day section, `T3B` a T-day one. It is a starting value stored
-on the section, not a rule applied on every read, so a code that does not begin with the day it
-meets needs correcting once; left wrong, that section falls back to each assignment's default
-deadline rather than its own day's.
+correct straight away — `M1A` is an M-day section, `T3B` a T-day one. A day letter counts only when a
+digit follows it, so a code such as `LAB-3` gets no meeting day, which is right for a course that does
+not use M and T days. It is a starting value stored on the section, not a rule applied on every read,
+so a code that does not begin with the day it meets needs correcting once; left wrong, that section
+falls back to each assignment's default deadline rather than its own day's.
+
+Each course also keeps its own list of meeting days, M and T unless changed. A site administrator sets
+it under **More options** when making a course on **Courses and terms**. **Add a section** offers only
+the days on that list, and a roster preview adds a line when a new section's day is not on it. The
+list guides what is offered; it never changes a section that already holds another day.
 
 **Provisioning depends on the roster carrying real email addresses.** A cadet's login is the
 address on their roster row, taken from the registrar's export; anyone imported without one is

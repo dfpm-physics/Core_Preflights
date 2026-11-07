@@ -95,7 +95,7 @@ export async function runF(W) {
   }, { needs: ['F3'] });
 
   await L.check('F6', 'the roster preview names an unlisted day for a new section and does not block the import', async () => {
-    await a.page.$eval('[data-tab="students"]', e => e.click());
+    await a.untilSel('[data-tab="students"]', { timeout: 30000 }); await a.page.$eval('[data-tab="students"]', e => e.click());
     await a.untilSel('#paste-text', { timeout: 30000 });
     await a.page.$eval('#imp', e => { e.open = true; }); await a.page.$eval('#paste-box', e => { e.open = true; });
     const id = (n) => SYNTH_ID_LOW + n;
