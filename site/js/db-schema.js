@@ -4938,6 +4938,39 @@ export const DB_SCHEMA = {
           "generated": false,
           "comment": null,
           "pk": false
+        },
+        {
+          "name": "expression",
+          "type": "text",
+          "udt": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": "Symbolic questions only: the expected expression as text, at most 200 characters. Read by the check-answer function, which evaluates it and the answer at fixed test points. Never sent to a student.",
+          "pk": false
+        },
+        {
+          "name": "variables",
+          "type": "ARRAY",
+          "udt": "_text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": "Symbolic questions only: the variable names an answer may use. The names (not the expression) are shown to students.",
+          "pk": false
+        },
+        {
+          "name": "signed_variables",
+          "type": "ARRAY",
+          "udt": "_text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": "Symbolic questions only: the variables, among `variables`, that the checker also tests at negative values. Empty or NULL means every variable is tested on positive values only. Never sent to a student.",
+          "pk": false
         }
       ],
       "foreignKeys": [
@@ -5168,6 +5201,7 @@ export const DB_SCHEMA = {
           "multiple_choice",
           "multiple_select",
           "numeric",
+          "symbolic",
           "prose"
         ]
       },
