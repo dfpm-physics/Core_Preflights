@@ -114,7 +114,7 @@
       "doc": "site/help/README.md",
       "kind": "reference",
       "tier": null,
-      "reviewed": "2026-11-06",
+      "reviewed": "2026-11-07",
       "sources": [
         "site/js/help.js",
         "site/help/MANIFEST.json"
