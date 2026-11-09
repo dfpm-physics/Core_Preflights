@@ -1179,3 +1179,15 @@ export async function buildLessonCorpus(ctx, offeringId) {
 
   return { title, interactionId: offeringId, studentCount: reports.length, text: head + blocks.join('') };
 }
+
+/**
+ * The few assignments the faculty dashboard lists under "Recent reports": the rows of the Reports list
+ * (reportPickerRows) that a report can exist for, newest first. A row qualifies when it is published and either
+ * its deadline has passed or somebody has already finished it; a future assignment nobody has done has nothing
+ * to report on. Same rows, same order, same link as the Reports page; this only trims the list.
+ */
+export function recentReportRows(rows, now = new Date(), limit = 5) {
+  return (rows || [])
+    .filter(r => r.published && ((r.dueAt && new Date(r.dueAt) <= now) || r.done > 0))
+    .slice(0, limit);
+}

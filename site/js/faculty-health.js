@@ -437,9 +437,8 @@ export function shapeHealth(raw, { offeringId = 'all' } = {}) {
       const interactive = acts.find(x => x.activities.modality === 'interactive');
       return {
         id: a.id,
-        // Where to open this item to fix it: an item made on a newer page opens there, by its own
-        // deep link; an older row keeps the older page.
-        href: a.entered_on_new_page === true ? `items.html?a=${encodeURIComponent(a.id)}` : 'lessons.html',
+        // Where to open this item to fix it: the Assignments page, by its own deep link, whichever page made it.
+        href: `items.html?a=${encodeURIComponent(a.id)}`,
         courseOfferingId: a.course_offering_id,
         offeringLabel: labelOf.get(a.course_offering_id)?.label ||
                        courseOf.get(a.course_offering_id) || '—',
@@ -579,7 +578,7 @@ export const CHECKS = [
     label: 'iPREP is the only graded path',
     severity: 'warning',
     why: 'A cadet whose tutor will not start has nowhere to go. This is exactly what happened on lesson 07: completion fell to 49% on the largest cohort, and recovered once a graded PREP was added.',
-    fix: 'Open the lesson in <a href="lessons.html">Assignments</a> and add a written PREP path with grading role <em>graded</em>. The two paths can both be graded; a cadet picks one.',
+    fix: 'Open the lesson in <a href="items.html">Assignments</a> and add a written PREP path with grading role <em>graded</em>. The two paths can both be graded; a cadet picks one.',
     detect: (m) => m.allLessons.filter(L =>
       !L.soloNewPage && L.gradedModalities.includes('interactive') && !L.gradedModalities.includes('written'))
       .map(L => ({ where: `${L.offeringLabel} · ${L.slug}`, href: L.href, detail: 'no graded PREP fallback' })),
@@ -613,7 +612,7 @@ export const CHECKS = [
     label: 'Published iPREP with no artifact link',
     severity: 'critical',
     why: 'The lesson appears to cadets and the Launch button goes nowhere.',
-    fix: 'Open the lesson in <a href="lessons.html">Assignments</a> and paste the published claude.ai URL. If the artifact was republished, its URL moved — the slug does not.',
+    fix: 'Open the lesson in <a href="items.html">Assignments</a> and paste the published claude.ai URL. If the artifact was republished, its URL moved — the slug does not.',
     detect: (m) => m.allLessons.filter(L => L.isPublished && L.hasInteractive && !L.artifactUrl)
       .map(L => ({ where: `${L.offeringLabel} · ${L.slug}`, href: L.href, detail: 'activities.content.artifact_url is empty' })),
   },
@@ -623,7 +622,7 @@ export const CHECKS = [
     label: 'Unpublished lesson inside its release window',
     severity: 'warning',
     why: 'Cadets should be able to see it by now and cannot. Publishing is not releasing — a published lesson still only appears in the 7 days before that cadet\'s own deadline.',
-    fix: 'Publish it in <a href="lessons.html">Assignments</a>, or push its due date back if it is not meant to run yet.',
+    fix: 'Publish it in <a href="items.html">Assignments</a>, or push its due date back if it is not meant to run yet.',
     detect: (m) => m.allLessons.filter(L => !L.isPublished && L.dueAt &&
       Date.parse(L.dueAt) - Date.now() < 7 * 86400000)
       .map(L => ({ where: `${L.offeringLabel} · ${L.slug}`, href: L.href, detail: 'not published, due within 7 days' })),

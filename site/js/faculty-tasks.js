@@ -320,6 +320,11 @@ export const SOURCES = [
  * @param {object} opts `{ only }` — restrict to these source ids (tests, and future filtering)
  * @returns {Promise<Array<{id, severity, icon, count, text, link}>>} in SOURCES order
  */
+const FAILED = Symbol('failedSources');
+/** The ids of any sources whose query failed during that loadTasks() call (empty when all answered).
+ *  Carried on the returned array under a symbol so the array itself still compares equal to a plain one. */
+export function failedSources(tasks) { return (tasks && tasks[FAILED]) || []; }
+
 export async function loadTasks(ctx, opts = {}) {
   if (!ctx?.currentOffering || !ctx.sectionIds?.length) return [];
   const isDirector = !!ctx.isDirectorForCurrent?.();
@@ -334,6 +339,7 @@ export async function loadTasks(ctx, opts = {}) {
   const eligible = SOURCES.filter(s =>
     (!s.director || isDirector) && (!opts.only || opts.only.includes(s.id)));
 
+  const failed = [];
   const settled = await Promise.all(eligible.map(async (src) => {
     try {
       const out = await src.load(scoped);
@@ -347,11 +353,25 @@ export async function loadTasks(ctx, opts = {}) {
     } catch (err) {
       // Deliberately swallowed — see the header. One dead query must not cost the dashboard.
       console.warn(`[tasks] source "${src.id}" failed:`, err?.message || err);
+      failed.push(src.id);
       return [];
     }
   }));
 
-  return settled.flat();
+  const out = settled.flat();
+  // A source that fails still costs only its own box, but it is no longer INDISTINGUISHABLE from one
+  // that answered "nothing": renderTasks reads this, so a list that is empty because queries failed
+  // is not shown as an all-clear.
+  Object.defineProperty(out, FAILED, { value: failed, enumerable: false });
+  return out;
+}
+
+/** The panel when the task list could not be loaded at all. Never the all-clear message. */
+export function renderTasksError({ esc } = {}) {
+  return `<section class="dash-section"><div class="alert alert-error" role="alert" data-tasks-error>
+    <strong>Couldn't load your task list.</strong> Nothing here means the request failed, not that you are caught up.
+    <button type="button" class="btn btn-secondary btn-sm" data-retry-tasks style="margin-left:10px">Retry</button>
+  </div></section>`;
 }
 
 /* ══════════════════════════════════════════════════════════════════════════════
@@ -373,6 +393,8 @@ export async function loadTasks(ctx, opts = {}) {
  */
 export function renderTasks(tasks, { esc, scoped = false } = {}) {
   const gradeLink = `<a class="duo-link" href="grade.html">Grade page →</a>`;
+
+  if (!tasks.length && failedSources(tasks).length) return renderTasksError({ esc });
 
   if (!tasks.length) {
     return `<section class="dash-section duo-empty-wrap">
@@ -398,5 +420,6 @@ export function renderTasks(tasks, { esc, scoped = false } = {}) {
       <span class="muted duo-scope">${scoped ? 'your sections' : 'all sections you staff'}</span>
       <span class="grow"></span>${gradeLink}</div>
     <div class="duo-row">${boxes}</div>
+    ${failedSources(tasks).length ? `<div class="field-hint">Some items couldn't be loaded, so this list may be incomplete.</div>` : ''}
   </section>`;
 }

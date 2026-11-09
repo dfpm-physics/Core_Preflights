@@ -55,6 +55,22 @@ retire icons — this table is the source of truth for what the UI expects.
 
 ## Adding a new icon
 
+## Row actions on the Assignments table (added 2026-11-09)
+
+Five icons came from the course director's own gradebook project, in the same lineal colour style. They are 512×512 and
+the CSS shows them at 24 px. Their author is not recorded there: confirm it is Freepik on Flaticon, or add their
+author to the footer credit, before this ships.
+
+| File | Description | Used in |
+|------|-------------|---------|
+| `ic-questions.png` | Book with a light bulb | Assignments row: Questions |
+| `ic-grade-a.png` | Page with a letter grade | Assignments row: Grade |
+| `ic-report.png` | Bar chart with a curve | Assignments row: Report |
+| `ic-preview.png` | Profile card | Assignments row: Preview as a cadet |
+| `ic-edit.png` | Pencil | Assignments row: Edit |
+
+Launch tutor uses `ic-rocket.png` and Remove uses `ic-error.png`, both already in this folder.
+
 1. Pick a `ic-<name>.png` (Freepik, lineal color, 256×256) and drop it in this folder.
 2. Add a row above with its description, search terms, and `✅` status.
 3. Reference it in the UI: `iconHTML('<name>', '<emoji>')` (JS) or

@@ -67,6 +67,50 @@ export function onIconError(ev) {
 }
 if (typeof document !== 'undefined' && document.addEventListener) document.addEventListener('error', onIconError, true);
 
+/* ── Info control ───────────────────────────────────────────────────────────────
+ * Explanation a person does not need in order to act sits behind a small info button beside its heading or control,
+ * not on the page. The text is real text in the page (not an alt or a title), so a screen reader reads it through
+ * aria-describedby, a keyboard reaches it by focusing the button, a pointer by hovering it, and a touch screen by
+ * tapping it. It closes on Escape or on a click anywhere else. One listener set, installed here, serves every page.
+ * Keep visible, never put here: errors and warnings, deadlines, statuses, counts, consequences, the reason a list is
+ * empty, confirmations, and what a person needs in order to fill a field correctly.
+ * `text` is plain text and is escaped. `label` names the button for assistive technology.
+ */
+let infoSeq = 0;
+export function infoHTML(text, label = 'More information') {
+  const id = 'info-pop-' + (++infoSeq);
+  return `<span class="info-wrap"><button type="button" class="info-btn" aria-label="${esc(label)}" aria-expanded="false" ` +
+    `aria-describedby="${id}">${iconHTML('info', 'i', 'ic ic-sm')}</button>` +
+    `<span class="info-pop" role="tooltip" id="${id}">${esc(text)}</span></span>`;
+}
+
+function closeInfo(except) {
+  document.querySelectorAll('.info-wrap.open').forEach((w) => {
+    if (w === except) return;
+    w.classList.remove('open');
+    w.querySelector('.info-btn')?.setAttribute('aria-expanded', 'false');
+  });
+}
+if (typeof document !== 'undefined' && document.addEventListener) {
+  document.addEventListener('click', (ev) => {
+    const btn = ev.target.closest?.('.info-btn');
+    if (!btn) { closeInfo(null); return; }
+    const wrap = btn.closest('.info-wrap');
+    const willOpen = !wrap.classList.contains('open');
+    closeInfo(willOpen ? wrap : null);
+    wrap.classList.toggle('open', willOpen);
+    btn.setAttribute('aria-expanded', String(willOpen));
+    if (!willOpen) btn.blur();      // focus alone also shows it; a second tap must hide it
+    ev.preventDefault();
+  });
+  document.addEventListener('keydown', (ev) => {
+    if (ev.key !== 'Escape') return;
+    closeInfo(null);
+    const a = document.activeElement;
+    if (a?.classList?.contains('info-btn')) a.blur();
+  });
+}
+
 /* ── Failure surfacing ────────────────────────────────────────────────────────
  * Every portal page opens with a `.center-load` spinner and replaces it once its data
  * arrives. That means ANY thrown error — a bad query, a renamed export, a bootstrap that

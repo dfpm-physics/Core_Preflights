@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8=' 'sha256-Xyv7lK29o8rxerhcCOkP+/Y93ibifZHczkCj51CrFRo='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8=' 'sha256-hw61U5+45YGMeb8w7PLPcougUWkJHBOCg2A0y6hnGws='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Gradebook · PREP</title>
   <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
@@ -181,8 +181,8 @@
         ${eiMode ? `<th class="gb-pick"><input type="checkbox" id="gb-all" aria-label="Select all students" style="width:auto;margin:0"></th>` : ''}
         <th class="gb-name">Student</th>
         <th class="gb-sec">Sec</th>
-        ${columns.map(c => `<th class="gb-col" title="${esc(c.title)}${c.dueAt ? ` — due ${fmtDate(new Date(c.dueAt))}` : ''}">
-            <span aria-label="${esc(c.title)}">${esc(c.code)}</span></th>`).join('')}
+        ${columns.map(c => `<th class="gb-col" title="${esc(c.title)}${c.dueAt ? ` — due ${fmtDate(new Date(c.dueAt))}` : ''}. Opens the class report.">
+            <a href="report.html?i=${esc(encodeURIComponent(c.offeringId))}" aria-label="${esc(c.title)}: open the class report">${esc(c.code)}</a></th>`).join('')}
         <th class="gb-total">Total</th></tr>`;
 
       const body = rows.map(r => `<tr>

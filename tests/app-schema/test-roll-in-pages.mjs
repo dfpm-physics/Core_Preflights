@@ -151,7 +151,7 @@ const m2 = H.shapeHealth(rawFor(linkSet));
 const finds = H.runChecks(m2).find(c => c.id === 'unpublished-but-due').findings;
 const hrefOf = (slug) => finds.find(f => f.where.endsWith(slug))?.href;
 eq('a row entered on a newer page links to its deep link', hrefOf('newpub'), 'items.html?a=newpub');
-eq('an older row keeps the older page', hrefOf('oldpub'), 'lessons.html');
+eq('an older row opens on the same page as any other', hrefOf('oldpub'), 'items.html?a=oldpub');
 const finds2 = H.runChecks(H.shapeHealth(rawFor([
   hRow('nolink', [{ modality: 'interactive', delivery: 'interactive_tutor', grading: 'effort' }], { entered_on_new_page: true }),
 ]))).find(c => c.id === 'artifact-url-missing').findings;

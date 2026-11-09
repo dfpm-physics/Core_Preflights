@@ -499,7 +499,24 @@ section('database: reading');
   let it = (await Q.loadItem(db, 'o1')).item;
   check('an unpublished new-page item with one questions path can take questions', it.reason === null && it.activityId === 'a1' && it.grading === 'auto_checked');
   reset({ 'assignment_offerings.select': mk({ entered_on_new_page: false }) });
-  check('an item from the older page is refused with a reason', /older page/.test((await Q.loadItem(db, 'o1')).item.reason));
+  {
+    // An item the older page entered, switched to questions on the site: it loads exactly like a newer one, and a save sends the same
+    // payload (the module never receives the marker, and it writes only the questions and keys tables, never activities.content).
+    const older = (await Q.loadItem(db, 'o1')).item;
+    check('an item from the older page is not refused for that reason', older.reason === null && older.activityId === 'a1' && older.isNew === false, String(older.reason));
+    reset({ 'assignment_offerings.select': mk() });
+    const newer = (await Q.loadItem(db, 'o1')).item;
+    eq('...and is otherwise identical to a newer one', { ...older, isNew: true }, newer);
+    const prev = { id: 'q-id', position: 3, updatedAt: 'T', maxVersion: 1, keyRow: { id: 'k-id', version: 1, correct_choice_ids: ['b'] } };
+    reset({ 'rpc:save_question': [{ key_version: 1, new_version: false }] });
+    await Q.saveQuestion(db, mc({ key: { ...mc().key, correct: ['b'] } }), prev);
+    const first = JSON.stringify(rpcs('save_question')[0].payload);
+    reset({ 'rpc:save_question': [{ key_version: 1, new_version: false }] });
+    await Q.saveQuestion(db, mc({ key: { ...mc().key, correct: ['b'] } }), prev);
+    eq('saving a question unchanged sends the same payload each time, with no content write', [JSON.stringify(rpcs('save_question')[0].payload), CALLS.some(c => c.table === 'activities')], [first, false]);
+  }
+  reset({ 'assignment_offerings.select': mk({ entered_on_new_page: false, is_published: true }) });
+  check('a published item from the older page is still refused, for being published', /published/.test((await Q.loadItem(db, 'o1')).item.reason));
   reset({ 'assignment_offerings.select': mk({ is_published: true }) });
   check('a published item is refused with a reason', /published/.test((await Q.loadItem(db, 'o1')).item.reason));
   reset({ 'assignment_offerings.select': mk({ offering_activities: [{ position: 0, delivery: 'typed_response', grading: 'human_graded', activities: { id: 'a2', modality: 'written' } }] }) });

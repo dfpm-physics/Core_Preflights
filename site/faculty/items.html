@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-N3yXlxylKK00bcdNJ85/OOHI+9bx3MNK33T7q4Y7B3c=' 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8=' 'sha256-RthaPZUQzDJX2wfpu+ewT1iJB0MPoaKLsJJMIi+y6QQ='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Assignments · PREP</title>
   <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
@@ -34,27 +34,33 @@
           <div class="field-hint" id="i-due-note">Leave empty for no deadline.</div></div>
       </div>
       <section id="i-setup" style="display:none;margin:4px 0 16px">
-        <h3 style="margin:0 0 4px;font-size:1.02em">How cadets do this work</h3>
-        <div class="field-hint" id="i-setup-hint" style="margin-bottom:6px">Pick one. Questions, an interactive tutor, or both and let each cadet choose.</div>
+        <h3 style="margin:0 0 4px;font-size:1.02em">How cadets do this work <span id="i-setup-info"></span></h3>
+        <div class="field-hint" id="i-setup-hint" style="margin-bottom:6px">Pick one.</div>
         <div class="alert alert-info" id="i-setup-locked" style="display:none"></div>
-        <div class="choice-grid" id="i-cards" role="radiogroup" aria-label="How cadets do this work" style="margin:10px 0">
-          <button type="button" class="choice-card" role="radio" aria-checked="false" data-mode="questions">
-            <span class="choice-head"><span class="choice-ic">&#9998;</span><span class="choice-titles"><span class="choice-title">Questions</span><span class="choice-meta">Cadets answer questions</span></span></span>
-            <span class="choice-body">Cadets answer the questions you write.</span></button>
-          <button type="button" class="choice-card" role="radio" aria-checked="false" data-mode="tutor">
-            <span class="choice-head"><span class="choice-ic">&#9889;</span><span class="choice-titles"><span class="choice-title">Interactive tutor</span><span class="choice-meta">Guided conversation</span></span></span>
-            <span class="choice-body">Cadets work through the material with an AI tutor.</span></button>
-          <button type="button" class="choice-card" role="radio" aria-checked="false" data-mode="both">
-            <span class="choice-head"><span class="choice-ic">&#8644;</span><span class="choice-titles"><span class="choice-title">Both (cadets choose)</span><span class="choice-meta">Questions or tutor</span></span></span>
-            <span class="choice-body">Each cadet picks the one they prefer.</span></button>
-        </div>
+        <div class="choice-grid" id="i-cards" role="radiogroup" aria-label="How cadets do this work" style="margin:10px 0"></div>
+        <div class="field-hint" id="i-older" style="display:none;margin:-4px 0 10px"></div>
+        <div class="alert alert-info" id="i-ai-gap" role="status" style="display:none;margin:0 0 10px"></div>
         <div id="i-q-panel" style="display:none;margin-bottom:10px"></div>
       <div class="form-grid" id="i-twopath" style="--fg-min:240px;display:none">
         <div class="field"><label for="i-policy">What earns credit</label><select id="i-policy"></select>
           <div class="field-hint" id="i-policy-hint"></div></div>
         <div class="field" id="i-switch-wrap"><label for="i-switch">Once a cadet commits</label><select id="i-switch"></select>
           <div class="field-hint">Applies when the cadet chooses.</div></div>
+        <div class="field" id="i-access-wrap"><label class="check-inline"><input type="checkbox" id="i-access"> <span>Typed response needs your permission</span></label>
+          <div class="field-hint" id="i-access-hint"></div></div>
       </div>
+      <div id="i-tutor-setup" style="display:none;margin:0 0 14px">
+        <div class="tutor-drop" id="i-drop" tabindex="-1">
+          <div class="tutor-drop-t" id="i-drop-t">Drop the tutor setup file here</div>
+          <div class="field-hint">The file your AI tutor builder gives you. It fills in the tutor for you. Nothing is saved until you click Save.</div>
+          <button type="button" class="btn btn-secondary btn-sm" id="i-drop-pick">Choose file</button>
+          <input type="file" id="i-drop-file" accept=".json,application/json" hidden>
+        </div>
+        <div class="alert alert-error" id="i-drop-err" style="display:none;margin-top:8px"></div>
+        <div class="alert alert-info" id="i-drop-sum" style="display:none;margin-top:8px"></div>
+      </div>
+      <details class="more-options" id="i-hand" style="display:none">
+        <summary>Enter the details by hand</summary>
       <div class="form-grid" id="i-interactive" style="--fg-min:200px;display:none">
         <div class="field"><label for="i-islug">Tutor id</label><input id="i-islug" type="text" placeholder="lesson-02-charge">
           <div class="field-hint">The id the tutor lesson posts to: lowercase letters, numbers and hyphens. It cannot be changed once a link is saved.</div></div>
@@ -66,6 +72,7 @@
           <div class="field-hint">One line about the tutor.</div></div>
         <div class="field-action" id="i-swap-wrap" style="display:none"><button type="button" class="btn btn-ghost btn-sm" id="i-swap">Replace this tutor…</button></div>
       </div>
+      </details>
       </section>
       <div id="i-written" style="display:none;margin-bottom:14px"></div>
 
@@ -119,8 +126,34 @@
         <div class="field-hint">Cadets see it only in the days before their own deadline, or from the date set under More options. Leave it unticked to keep working on it.</div>
       </div>
       <div class="row" style="justify-content:flex-end;gap:10px;margin-top:6px">
+        <button class="btn btn-ghost" id="i-preview" type="button" style="display:none">Preview as a cadet</button>
         <button class="btn btn-ghost" data-close>Cancel</button>
         <button class="btn btn-primary" id="im-save">Save assignment</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Student preview (every staff member). The typed-response questions as a cadet sees them, read-only. -->
+  <div class="modal-backdrop" id="preview-modal">
+    <div class="modal" style="max-width:680px">
+      <div class="modal-head"><h2 id="preview-title">Cadet preview</h2><button class="modal-close" data-close>×</button></div>
+      <div id="preview-body"></div>
+      <div class="row" style="margin-top:16px"><button class="btn btn-secondary" data-close>Close</button></div>
+    </div>
+  </div>
+
+  <!-- Remove an assignment that has cadet work (directors). Removing it deletes that work with it, so the numbers come first and
+       the button must be held. Without work, a plain confirmation is used instead. -->
+  <div class="modal-backdrop" id="rm-modal">
+    <div class="modal" style="max-width:520px">
+      <div class="modal-head"><h2>Remove assignment</h2><button class="modal-close" data-close>×</button></div>
+      <p id="rm-msg" style="margin:0 0 12px"></p>
+      <div class="alert alert-warn" id="rm-info" style="margin-bottom:16px"></div>
+      <div class="lb-del-actions">
+        <button class="btn btn-secondary" data-close>Cancel</button>
+        <button class="btn hold-btn" id="rm-hold" type="button">
+          <span class="hold-fill"></span>
+          <span class="hold-label" id="rm-hold-label">Hold 5s · delete it and its work</span></button>
       </div>
     </div>
   </div>
@@ -161,21 +194,28 @@
     import { renderNav } from '../js/nav.js';
     import { initTheme } from '../js/theme.js';
     import { db } from '../js/supabase.js';
-    import { esc, runPage, wireModalDismiss } from '../js/util.js';
+    import { esc, runPage, wireModalDismiss, iconHTML, infoHTML } from '../js/util.js';
     import * as I from '../js/faculty-items.js';
     import * as LK from '../js/lesson-link.js';
     import { mountFreeResponse, loadManifest } from '../js/free-response-ui.js';
-    import { emptyEditor, editorFromContent, applyKeys } from '../js/free-response.js';
+    import { emptyEditor, editorFromContent, applyKeys, contentFromEditor } from '../js/free-response.js';
     import { loadQuestionKeys } from '../js/faculty-lessons.js';
+    import { previewHtml } from '../js/question-preview.js';
+    import { wireHoldButton } from '../js/hold-button.js';
+    import { loadBackups, backupFor } from '../js/faculty-artifacts.js';
+    import { artifactUrlOf, isArtifactLaunchable } from '../js/schema.js';
+    import { parseTutorSetup, summaryLines, MAX_FILE_BYTES } from '../js/tutor-setup-file.js';
 
     const ctx = await bootstrap({ require: 'faculty' });
     runPage(ctx, init);
 
     let vm = null;               // { items, sections, kinds }
+    let backups = { builds: {}, error: null };   // the Gemini build list, only used to pick the Launch address
     let editing = null;          // the assignment being edited, or null for a new one
     let saving = false;
     let fr = null;               // the free-response question editor (shown when the work is a typed response)
-    let pathMode = 'questions';  // the chosen card under "How cadets do this work": questions, tutor or both
+    let pathMode = 'questions';  // the tutor flag of the chosen card: 'both' puts a tutor beside the typed response, 'tutor' is the tutor alone
+    let pendingObjectives = null; // [{key,label}] read from a tutor setup file; written with the next Save, null leaves the objectives alone
     let countSeq = 0;            // a question count that arrives after the card changed is ignored
     let swapOn = false;          // the person chose to replace the saved tutor with a different id
     let formSlug = '';           // the assignment id a prefill link names, used when a new assignment is first saved
@@ -191,8 +231,9 @@
 
     function init() {
       initTheme();
+      loadBackups().then(b => { backups = b; }).catch(() => {});
       renderNav(ctx, { active: 'items', onCourseChange });
-      fr = mountFreeResponse($('i-written'), { moreHost: $('i-written-more'), aiDrafted: () => $('i-grading').value === 'ai_drafted' });
+      fr = mountFreeResponse($('i-written'), { moreHost: $('i-written-more'), aiDrafted: () => $('i-grading').value === 'ai_drafted', onChange: () => renderAiGap() });
       loadManifest().then(list => fr.setManifest(list));
       wireForm();
       return load().then(handleQuery);
@@ -221,12 +262,6 @@
           <div><h1>Assignments</h1><div class="sub">Everything graded in ${where}.</div></div>${extra}</div></div>`;
 
       if (!ctx.currentOffering) { root.innerHTML = head() + `<div class="alert alert-warn">No course access found.</div>`; return; }
-      if (!isDirector()) {
-        root.innerHTML = head() + `<div class="empty-state"><div class="es-ic">🔒</div><h3>Directors only</h3>
-          <p>Only a director of this course can enter and change assignments. Ask a director of ${esc(ctx.courseTitleOf(ctx.currentOffering))} if something here needs to change.</p></div>`;
-        return;
-      }
-
       root.innerHTML = head() + `<div class="center-load"><span class="spinner"></span><span>Loading…</span></div>`;
       vm = await I.loadItems(db, ctx.currentOffering);
       if (vm.error) {
@@ -237,21 +272,35 @@
         return;
       }
 
-      const newBtn = `<span class="row" style="gap:8px"><a class="btn btn-ghost btn-sm" id="scale-link" href="scale.html">Letter scale</a>
-        <button class="btn btn-primary" id="new-btn">+ New assignment</button></span>`;
-      const banner = `<div class="alert alert-info" id="unpublished-note">Students cannot see an assignment until it is published.
-        Tick Published on its form when it is ready.</div>`;
-      const rows = vm.items.map(rowHtml).join('');
-      root.innerHTML = head(newBtn) + banner + (vm.items.length ? `<div class="table-wrap"><table id="items-table">
+      // Everyone on staff sees the list and can go on to grading. Only a director sees the controls that change an
+      // assignment; the database refuses an instructor's write whatever this page shows.
+      const gradeBtn = `<a class="btn btn-primary" id="grade-assignments-btn" href="entry.html">Grade assignments</a>`;
+      const newBtn = isDirector()
+        ? `<span class="row" style="gap:8px"><a class="btn btn-ghost btn-sm" id="scale-link" href="scale.html">Letter scale</a>
+        ${gradeBtn}<button class="btn btn-primary" id="new-btn">+ New assignment</button></span>`
+        : `<span class="row" style="gap:8px">${gradeBtn}</span>`;
+      const banner = isDirector()
+        ? `<div class="alert alert-info" id="unpublished-note">Students cannot see an assignment until it is published.
+        Tick Published on its form when it is ready.</div>`
+        : `<div class="alert alert-info" id="readonly-note">Only directors change assignments. You can see them here, open a report, and go on to grading.</div>`;
+      // An instructor sees what students can see. A draft is a director's working copy.
+      const shown = isDirector() ? vm.items : vm.items.filter(it => it.isPublished);
+      const rows = shown.map(rowHtml).join('');
+      root.innerHTML = head(newBtn) + banner + (shown.length ? `<div class="table-wrap"><table id="items-table">
           <thead><tr><th>Assignment</th><th>Kind</th><th>Delivery</th><th>Grading</th><th>Points</th><th>Dates</th><th>State</th><th></th></tr></thead>
           <tbody>${rows}</tbody></table></div>`
         : `<div class="empty-state"><div class="es-ic">🧾</div><h3>No assignments yet</h3>
-            <p>Click <strong>+ New assignment</strong> to enter the first one.</p></div>`);
-      $('new-btn').addEventListener('click', () => openForm(null));
+            <p>${isDirector() ? 'Click <strong>+ New assignment</strong> to enter the first one.' : 'Nothing has been published yet.'}</p></div>`);
+      $('new-btn')?.addEventListener('click', () => openForm(null));
       root.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', () =>
         openForm(vm.items.find(x => x.offeringId === b.dataset.edit))));
       root.querySelectorAll('[data-remove]').forEach(b => b.addEventListener('click', () =>
         doRemove(vm.items.find(x => x.offeringId === b.dataset.remove))));
+      root.querySelectorAll('[data-prev]').forEach(b => b.addEventListener('click', () => {
+        const it = vm.items.find(x => x.offeringId === b.dataset.prev);
+        const typed = it?.paths.find(p => p.delivery === 'typed_response' && p.modality === 'written');
+        if (it) showPreview(it.title, contentFromEditor(editorFromContent(typed?.content, null), { keepKeys: true }).questions);
+      }));
     }
 
     function flags(it) {
@@ -259,29 +308,66 @@
         .filter(Boolean).map(t => `<span class="score-badge pending" style="font-size:0.72em">${esc(t)}</span>`).join(' ');
     }
 
+    /* One icon action in a row. Its label is both the tooltip and the name a screen reader says. An action that is switched
+     * off sits in a span that carries the reason, because a browser shows no tooltip on a disabled button. */
+    function iconAct(icon, label, { href = '', attrs = '', off = '', danger = false, newTab = false } = {}) {
+      const img = iconHTML(icon, '', 'ic');
+      const cls = 'btn btn-ghost btn-sm btn-icon' + (danger ? ' btn-icon-danger' : '');
+      if (off) {
+        const why = esc(`${label}: ${off}`);
+        return `<span class="btn-icon-off" title="${why}"><button type="button" class="${cls}" disabled aria-label="${why}">${img}</button></span> `;
+      }
+      const tip = `title="${esc(label)}" aria-label="${esc(label)}"`;
+      if (href) return `<a class="${cls}" href="${esc(href)}"${newTab ? ' target="_blank" rel="noopener"' : ''} ${attrs} ${tip}>${img}</a> `;
+      return `<button type="button" class="${cls}" ${attrs} ${tip}>${img}</button> `;
+    }
+
     /* Questions are entered on their own page, for an item delivered as questions on the site. */
     function questionsLink(it) {
       const p = it.paths.length === 1 ? it.paths[0] : null;
       if (!p || p.delivery !== 'online_questions') return '';
-      return `<a class="btn btn-ghost btn-sm" data-questions="${esc(it.offeringId)}" href="questions.html?a=${encodeURIComponent(it.offeringId)}">Questions</a> `;
+      return iconAct('questions', 'Questions', { href: `questions.html?a=${encodeURIComponent(it.offeringId)}`, attrs: `data-questions="${esc(it.offeringId)}"` });
     }
 
     /* The class report for one assignment. A draft has nothing to report yet, so it is shown off, with the reason. */
     function reportLink(it) {
       return it.isPublished
-        ? `<a class="btn btn-ghost btn-sm" href="report.html?i=${encodeURIComponent(it.offeringId)}" title="See how the class did on this assignment">Report</a> `
-        : `<button class="btn btn-ghost btn-sm" disabled title="Cadets cannot have done an unpublished assignment, so there is no report yet.">Report</button> `;
+        ? iconAct('report', 'Report: how the class did', { href: `report.html?i=${encodeURIComponent(it.offeringId)}` })
+        : iconAct('report', 'Report', { off: 'no report yet, because cadets cannot do an unpublished assignment' });
+    }
+
+    /* Grade opens the grading panel on this assignment, the same link the older page and the dashboard use. */
+    function gradeLink(it) {
+      return iconAct('grade-a', 'Grade', { href: `grade.html?a=${encodeURIComponent(it.offeringId)}` });
+    }
+
+    /* Open the interactive tutor in a new tab: the Gemini build when there is one (the page a cadet is sent to), else the
+     * Claude artifact. Shown only for an assignment that has a tutor path; a tutor with no usable address is shown off,
+     * with the reason. */
+    function launchLink(it) {
+      const tutor = it.paths.find(p => p.modality === 'interactive');
+      if (!tutor) return '';
+      const bk = tutor.slug && !backups.error ? backupFor(backups, tutor.slug) : null;
+      if (bk) return iconAct('rocket', 'Launch tutor (new tab)', { href: bk.router, newTab: true });
+      if (isArtifactLaunchable(tutor)) return iconAct('rocket', 'Launch tutor (new tab)', { href: artifactUrlOf(tutor), newTab: true });
+      return iconAct('rocket', 'Launch tutor', { off: 'this tutor has no web address saved yet' });
+    }
+
+    /* What a cadet would see of the stored typed-response questions. Every staff member may open it: reading is not editing. */
+    function previewButton(it) {
+      const typed = it.paths.find(p => p.delivery === 'typed_response' && p.modality === 'written');
+      const n = Array.isArray(typed?.content?.questions) ? typed.content.questions.length : 0;
+      return n
+        ? iconAct('preview', 'Preview as a cadet', { attrs: `data-prev="${esc(it.offeringId)}"` })
+        : iconAct('preview', 'Preview', { off: 'no typed-response questions to preview' });
     }
 
     function rowHtml(it) {
-      const state = it.isNew
-        ? `<span class="score-badge ${it.isPublished ? 'full' : 'pending'}">${it.isPublished ? 'Published' : 'Unpublished'}</span>`
-        : `<span class="score-badge ${it.isPublished ? 'full' : 'pending'}">${it.isPublished ? 'Published' : 'Unpublished'}</span>
-           <div class="muted" style="font-size:0.78em;margin-top:3px">Entered on the older page</div>`;
-      const actions = it.isNew
-        ? `${questionsLink(it)}${reportLink(it)}<button class="btn btn-ghost btn-sm" data-edit="${esc(it.offeringId)}">Edit</button>
-           <button class="btn btn-ghost btn-sm" style="color:var(--red)" data-remove="${esc(it.offeringId)}">Remove</button>`
-        : `${reportLink(it)}<a class="btn btn-ghost btn-sm" href="lessons.html" title="This assignment was entered on the older page. It is read-only here.">Open in the older editor</a>`;
+      const state = `<span class="score-badge ${it.isPublished ? 'full' : 'pending'}">${it.isPublished ? 'Published' : 'Unpublished'}</span>`;
+      const reads = `${gradeLink(it)}${reportLink(it)}${previewButton(it)}${launchLink(it)}`;
+      const actions = !isDirector()
+        ? reads
+        : `${questionsLink(it)}${reads}${iconAct('edit', 'Edit', { attrs: `data-edit="${esc(it.offeringId)}"` })}${iconAct('error', 'Remove', { attrs: `data-remove="${esc(it.offeringId)}"`, danger: true })}`;
       return `<tr data-item="${esc(it.offeringId)}" data-new="${it.isNew ? '1' : '0'}">
         <td><div style="font-weight:600">${esc(it.title)}</div><div class="muted" style="font-size:0.78em"><code>${esc(it.slug)}</code></div>
             <div style="margin-top:4px">${flags(it)}</div></td>
@@ -299,13 +385,15 @@
       const modal = document.getElementById('item-modal');
       wireModalDismiss(modal, closeForm);
       $('i-kind').addEventListener('change', () => {
-        // Kind only prefills. Once an item exists its path is its own.
-        if (editing) return;
-        const kind = vm.kinds.find(k => k.id === $('i-kind').value);
-        const p = I.prefillFromKind(kind);
-        pathMode = I.modeFromDelivery(p.delivery, pathMode);
-        fillDelivery(p.delivery); fillGrading(p.delivery, p.grading); showInteractive(); syncPoints();
-        if (p.delivery === 'typed_response' && !fr.get()) fr.set(emptyEditor());
+        // Kind only prefills. Once an item exists its path is its own: the cards then re-read which set the kind gets, and
+        // the setting stays as saved.
+        if (editing) { renderSetup(); return; }
+        // A new item re-picks: the kind's own set of cards, on the card the kind starts on.
+        const kind = currentKind();
+        const r = I.applyCard(I.defaultCardFor(kind));
+        pathMode = I.modeOfSetting(r);
+        fillDelivery(r.delivery); fillGrading(r.delivery, r.grading); showInteractive(); syncPoints();
+        if (r.delivery === 'typed_response' && !fr.get()) fr.set(emptyEditor());
       });
       $('i-delivery').addEventListener('change', () => {
         const d = $('i-delivery').value;
@@ -313,18 +401,32 @@
         fillGrading(d, I.gradingsFor(d)[0]); showInteractive(); syncPoints();
         if (d === 'typed_response' && !fr.get()) fr.set(emptyEditor());
       });
-      $('i-grading').addEventListener('change', () => { syncPoints(); fr.redraw(); });
-      document.querySelectorAll('#i-cards [data-mode]').forEach(b => b.addEventListener('click', () => chooseMode(b.dataset.mode)));
+      $('i-grading').addEventListener('change', () => { syncPoints(); fr.redraw(); renderSetup(); });
+      // The cards are drawn again on every change, so one listener on the group serves them all.
+      $('i-cards').addEventListener('click', (ev) => { const b = ev.target.closest('[data-mode]'); if (b) chooseMode(b.dataset.mode); });
+      wireTutorFile();
       $('i-policy').addEventListener('change', showInteractive);
       $('i-swap').addEventListener('click', () => {
         swapOn = !swapOn; syncSwap();
         if (swapOn) $('i-islug').focus();
       });
       $('i-release').addEventListener('change', onReleaseChange);
+      $('i-access').addEventListener('change', () => {
+        if (fr.get()) fr.get().access = $('i-access').checked ? 'by_permission' : 'open';
+        showInteractive();
+      });
+      $('i-preview').addEventListener('click', () => {
+        const ed = fr.get();
+        showPreview($('i-title').value.trim(), ed ? contentFromEditor(ed, { keepKeys: true }).questions : []);
+      });
+      wireModalDismiss(document.getElementById('preview-modal'), () => $('preview-modal').classList.remove('open'));
+      $('preview-modal').querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => $('preview-modal').classList.remove('open')));
       $('i-policy').innerHTML = LK.POLICIES.map(p => `<option value="${esc(p)}">${esc(I.POLICY_LABEL[p])}</option>`).join('');
       $('i-switch').innerHTML = I.SWITCH_POLICIES.map(p => `<option value="${esc(p)}">${esc(I.SWITCH_LABEL[p])}</option>`).join('');
       $('i-release').innerHTML = I.RELEASE_CHOICES.map(r => `<option value="${esc(r.id)}">${esc(r.label)}</option>`).join('');
       wireModalDismiss(document.getElementById('dest-modal'), () => $('dest-modal').classList.remove('open'));
+      wireModalDismiss(document.getElementById('rm-modal'), () => closeRm());
+      $('rm-modal').querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => closeRm()));
       // One Due date on top. On a course with M-day and T-day sections it sets both tracks, which the dates under
       // "More options" can then differ from. The two stay in step: a changed track date updates the top one.
       $('i-alldate').addEventListener('input', () => {
@@ -337,6 +439,12 @@
       $('i-daybox').addEventListener('input', () => { syncTopDate(); syncDueNote(); });
       $('i-time').addEventListener('input', syncDueNote);
       $('im-save').addEventListener('click', save);
+    }
+
+    function showPreview(title, questions) {
+      $('preview-title').textContent = 'Cadet preview';
+      $('preview-body').innerHTML = previewHtml(title, questions);
+      $('preview-modal').classList.add('open');
     }
 
     function fillDelivery(value) {
@@ -361,39 +469,65 @@
       $('i-points-note').textContent = owned
         ? 'Set by the questions. Add them with the Questions button on the assignment once it is saved.' : '';
     }
-    /* A card was chosen: set the delivery, its grading and the tutor beside it exactly as the boxes under More options would. */
-    function chooseMode(mode) {
+    const currentKind = () => vm.kinds.find(k => k.id === $('i-kind').value) || null;
+    const currentSetting = () => ({ delivery: $('i-delivery').value, grading: $('i-grading').value, withTutor: pathMode === 'both' && $('i-delivery').value === 'typed_response' });
+    /* A card was chosen: set the delivery, its grading and the tutor beside it exactly as the boxes under More options would.
+     * A grayed card does nothing: it is not offered for this kind, and an assignment that already has it keeps it usable. */
+    function chooseMode(id) {
       if (isLocked(editing)) return;
-      const kind = vm.kinds.find(k => k.id === $('i-kind').value);
-      const r = I.applyMode(mode, { delivery: $('i-delivery').value, grading: $('i-grading').value }, kind ? I.prefillFromKind(kind) : null);
+      const state = I.chooserState(currentKind(), currentSetting(), !!editing, editing?.paths);
+      const card = state.cards.find(c => c.id === id);
+      if (!card || !card.usable) return;
+      const r = I.applyCard(card);
       if (r.delivery !== $('i-delivery').value) fillDelivery(r.delivery);
       fillGrading(r.delivery, r.grading);
       if (I.isTypedResponse(r.delivery) && !fr.get()) fr.set(emptyEditor());
-      pathMode = mode;
+      pathMode = I.modeOfSetting(r);
+      if (I.isTypedResponse(r.delivery)) fr.redraw();
       showInteractive(); syncPoints();
     }
     /* The setup section: the cards, and under them only what the chosen card needs. */
     function renderSetup() {
       const d = $('i-delivery').value;
       const locked = isLocked(editing);
-      const tutorOnly = d === 'interactive_tutor';
-      const two = I.isTypedResponse(d) && pathMode === 'both';
-      const cards = I.cardsApply(d);
-      // A new assignment starts short. The section appears for a saved one, or when a link already carries a tutor.
-      $('i-setup').style.display = editing || two || tutorOnly ? 'block' : 'none';
+      const kind = currentKind();
+      const state = I.chooserState(kind, currentSetting(), !!editing, editing?.paths);
+      const chooser = I.chooserFor(kind);
+      $('i-setup').style.display = 'block';
       const lockedBox = $('i-setup-locked');
-      lockedBox.style.display = locked || (editing && !cards) ? 'block' : 'none';
+      lockedBox.style.display = locked ? 'block' : 'none';
       lockedBox.textContent = locked
-        ? `This assignment has ${editing.paths.length === 0 ? 'no path' : editing.paths.length + ' paths'}, so how cadets do the work is changed on a later page. Everything else here still saves.`
-        : (editing && !cards ? `Cadets do this one ${I.DELIVERY_LABEL[d] ? I.DELIVERY_LABEL[d].toLowerCase() : 'outside the site'}, so there are no questions or tutor to set up. To change that, use "How the work is done" under More options.` : '');
-      $('i-cards').style.display = locked || !cards ? 'none' : '';
-      document.querySelectorAll('#i-cards [data-mode]').forEach(b => {
-        const on = b.dataset.mode === pathMode;
-        b.classList.toggle('selected', on); b.setAttribute('aria-checked', on ? 'true' : 'false');
-      });
-      $('i-setup-hint').style.display = locked || !cards ? 'none' : '';
+        ? `This assignment has ${editing.paths.length === 0 ? 'no path' : editing.paths.length + ' paths'}, so how cadets do the work is changed on a later page. Everything else here still saves.` : '';
+      const cardsEl = $('i-cards');
+      cardsEl.style.display = locked ? 'none' : '';
+      // The cards are drawn from the kind's set. The focused card is found again afterwards so the keyboard stays where it was.
+      const focused = document.activeElement?.closest?.('#i-cards [data-mode]')?.dataset.mode;
+      const one = (c) => {
+        const off = !c.usable;
+        const why = off ? c.offReason || 'Not offered for this kind of work.' : '';
+        return `<button type="button" class="choice-card${c.selected ? ' selected' : ''}${off ? ' is-off' : ''}" role="radio" aria-checked="${c.selected ? 'true' : 'false'}" data-mode="${esc(c.id)}"` +
+          `${off ? ` aria-disabled="true" title="${esc(why)}"` : ''}>` +
+          `<span class="choice-head"><span class="choice-ic">${c.icon}</span><span class="choice-titles"><span class="choice-title">${esc(c.title)}</span><span class="choice-meta">${esc(c.meta)}</span></span></span>` +
+          `<span class="choice-body">${esc(c.body)}${off ? ` <span class="choice-why">${esc(why)}</span>` : ''}</span></button>`;
+      };
+      const cur = state.current
+        ? `<button type="button" class="choice-card selected" role="radio" aria-checked="true" data-mode="current">` +
+          `<span class="choice-head"><span class="choice-ic">&#9881;</span><span class="choice-titles"><span class="choice-title">Current setting</span><span class="choice-meta">${editing ? 'Saved this way' : 'Set by the link'}</span></span></span>` +
+          `<span class="choice-body">${esc(state.current.text)}</span></button>` : '';
+      cardsEl.dataset.chooser = chooser;
+      cardsEl.innerHTML = state.cards.map(one).join('') + cur;
+      if (focused) cardsEl.querySelector(`[data-mode="${CSS.escape(focused)}"]`)?.focus();
+      $('i-setup-info').innerHTML = infoHTML(I.CHOOSER_HELP[chooser], 'About these choices');
+      $('i-setup-hint').style.display = locked ? 'none' : '';
+      $('i-setup-hint').textContent = chooser === 'typed' ? 'Pick one. Questions, an interactive tutor, or both and let each cadet choose.' : 'Pick one.';
+      const older = $('i-older');
+      older.style.display = !locked && (state.older || state.current) ? 'block' : 'none';
+      older.textContent = state.older
+        ? 'This is an older setting for this kind of work, and it stays as it is until you click a card. Any other combination is under "How the work is done" in More options.'
+        : (state.current ? 'This setting is not one of the usual choices. Any other combination is under "How the work is done" in More options.' : '');
+      renderAiGap();
       const panel = $('i-q-panel');
-      const showQ = !locked && cards && (pathMode === 'questions' || pathMode === 'both') && !tutorOnly;
+      const showQ = !locked && (d === 'online_questions' || d === 'typed_response');
       panel.style.display = showQ ? 'block' : 'none';
       if (!showQ) return;
       const saved = editing ? mainOf(editing) : null;
@@ -415,6 +549,12 @@
         panel.innerHTML = `<span class="muted">Cadets answer in writing. The questions are written in the box just below.${n == null ? '' : n === 1 ? ' 1 question is saved.' : ` ${n} questions are saved.`}</span>`;
       }
     }
+    /* Says plainly what an AI-graded setting still lacks. It never blocks a save; it is shown so the gap is not found later. */
+    function renderAiGap() {
+      const box = $('i-ai-gap');
+      const text = isLocked(editing) ? '' : I.aiGuidanceGap(currentSetting(), fr && fr.get());
+      box.textContent = text; box.style.display = text ? 'block' : 'none';
+    }
     function showInteractive() {
       const typed = $('i-delivery').value === 'typed_response';
       const locked = isLocked(editing);
@@ -423,9 +563,19 @@
       $('i-switch-wrap').style.display = $('i-policy').value === 'choice' ? 'block' : 'none';
       $('i-policy-hint').textContent = $('i-policy').value === 'tutor' && $('i-grading').value === 'ai_drafted'
         ? 'A typed response that is only practice cannot be drafted by the AI.' : '';
-      $('i-interactive').style.display = $('i-delivery').value === 'interactive_tutor' || two ? 'grid' : 'none';
+      const tutorOn = $('i-delivery').value === 'interactive_tutor' || two;
+      $('i-interactive').style.display = tutorOn ? 'grid' : 'none';
+      $('i-tutor-setup').style.display = tutorOn && !locked ? 'block' : 'none';
+      $('i-hand').style.display = tutorOn ? 'block' : 'none';
       $('i-swap-wrap').style.display = tutorOf(editing) ? 'block' : 'none';
       const showWritten = typed && !locked;
+      // The permission setting only means something when both paths earn credit and the cadet chooses; hidden otherwise, never cleared.
+      const accessOn = two && $('i-policy').value === 'choice';
+      $('i-access-wrap').style.display = accessOn ? 'block' : 'none';
+      $('i-access-hint').textContent = $('i-access').checked
+        ? 'Cadets see the tutor as the assignment, with the typed response offered underneath as a fallback they need your permission to use. Both still carry full credit.'
+        : 'Cadets see both paths side by side and pick either one, with no permission needed.';
+      $('i-preview').style.display = showWritten ? '' : 'none';
       $('i-written').style.display = showWritten ? 'block' : 'none';
       $('i-written-more').style.display = showWritten ? 'block' : 'none';
       renderSetup();
@@ -486,6 +636,7 @@
       // The tutor and credit controls now sit in the setup section, which is always in view: point at them, open nothing.
       const hidden = $('i-more').contains(el);
       if (hidden) $('i-more').open = true;
+      if ($('i-hand').contains(el)) $('i-hand').open = true;       // the tutor boxes sit under the hand-entry disclosure
       el.scrollIntoView({ block: 'center' });
       if (el.focus && el.tagName !== 'DIV') el.focus();
       return hidden;
@@ -525,8 +676,10 @@
       const path = mainOf(item);
       const tutor = tutorOf(item);
       const locked = isLocked(item);
-      const delivery = path ? path.delivery : (item ? '' : form.delivery);
-      const grading = path ? path.grading : (item ? '' : form.grading);
+      // A new assignment starts on the card its kind starts on. A saved one shows what it has, whatever that is.
+      const start = item ? null : I.applyCard(I.defaultCardFor(kind0));
+      const delivery = path ? path.delivery : (item ? '' : start.delivery);
+      const grading = path ? path.grading : (item ? '' : start.grading);
       fillDelivery(delivery || I.deliveries()[0]);
       fillGrading($('i-delivery').value, grading);
       $('i-delivery').disabled = locked; $('i-grading').disabled = locked;
@@ -534,9 +687,11 @@
       // rollover starts so) can still be given the id its lesson will post to; the save re-checks that nobody has used it.
       const tutorHasLink = !!(tutor && String(tutor.content?.artifact_url || '').trim());
       const shape = shapeOf(item);
-      pathMode = item ? I.modeOfShape(shape) : I.modeFromDelivery($('i-delivery').value, 'questions');
+      pathMode = item ? I.modeOfShape(shape) : I.modeOfSetting(start);
+      pendingObjectives = null; clearTutorFile();
       $('i-policy').value = shape && shape.kind === 'choice' ? shape.policy : 'choice';
       $('i-switch').value = item?.switchPolicy || 'lock_on_commit';
+      $('i-access').checked = false;
       $('i-islug').value = tutor ? tutor.slug : '';
       $('i-iurl').value = tutor?.content?.artifact_url || '';
       $('i-ititle').value = tutor && tutor.title !== item.title ? tutor.title : '';
@@ -555,6 +710,8 @@
       fr.set(emptyEditor());
       if (path && path.delivery === 'typed_response' && path.modality === 'written') {
         fr.set(editorFromContent(path.content, null));
+        // What the questions hold as opened. A save that finds them unchanged leaves the stored set exactly as it is.
+        fr.get().baseline = I.contentSnapshot(fr.get());
         // Work on the item locks the stored questions: the count arrives after the form is usable, and the save checks again.
         I.countWork(db, item.offeringId).then(w => {
           if (editing !== item || !fr.get() || w.error || !(w.submissions || w.grades)) return;
@@ -587,6 +744,7 @@
           .catch((e) => settle({ error: e || { message: 'read failed' } }, { error: e || { message: 'read failed' }, qids: [] }));
       } else if (item) fr.set(null);
       formSlug = '';
+      $('i-access').checked = fr.get()?.access === 'by_permission';
       showInteractive(); syncSwap();
       syncPoints();
 
@@ -606,11 +764,13 @@
       syncDueNote();
       // A new form is closed. A saved one opens when anything in it is not the default, so nothing set is hidden.
       const kindOfItem = item && vm.kinds.find(k => k.id === item.kindId);
-      $('i-more').open = I.needsMoreOptions(item, { prefill: kindOfItem ? I.prefillFromKind(kindOfItem) : null, sections: vm.sections, sched });
+      $('i-more').open = I.needsMoreOptions(item, { prefill: kindOfItem ? I.prefillFromKind(kindOfItem) : null, kind: kindOfItem || null, sections: vm.sections, sched });
       if (lay) applyLay(lay);
       if (overlay) applyOverlay(overlay, item);
       showInteractive(); syncSwap(); syncPoints();
       if (lay || overlay) $('i-more').open = true;
+      // The tutor boxes stay closed under the file drop, unless something is already in them: a value that is set is never hidden.
+      $('i-hand').open = ['i-islug', 'i-iurl', 'i-ititle', 'i-idesc'].some(id => $(id).value.trim());
 
       $('item-modal').classList.add('open');
       $('i-title').focus();
@@ -624,14 +784,14 @@
       const set = (id, v) => { if (v != null && v !== '') $(id).value = v; };
       set('i-title', f.title); set('i-desc', f.description); set('i-num', f.lessonNumber);
       if (f.withTutor) {
-        const kind = vm.kinds.find(k => I.isTypedResponse(I.prefillFromKind(k).delivery));
-        if (kind) {
-          $('i-kind').value = kind.id;
-          const p = I.prefillFromKind(kind);
-          fillDelivery(p.delivery); fillGrading(p.delivery, p.grading);
-          if (!fr.get()) fr.set(emptyEditor());
-        }
-        pathMode = 'both';
+        // A link with a tutor selects a card: Both (AI-graded typed side plus the tutor), or the Interactive tutor when the link
+        // asks for the tutor alone. Only a NEW form comes here; a saved assignment is never given a setting by a link.
+        const kind = vm.kinds.find(k => I.chooserFor(k) === 'typed');
+        if (kind) $('i-kind').value = kind.id;
+        const s = I.settingForLink(f);
+        fillDelivery(s.delivery); fillGrading(s.delivery, s.grading);
+        if (I.isTypedResponse(s.delivery) && !fr.get()) fr.set(emptyEditor());
+        pathMode = I.modeOfSetting(s);
         set('i-islug', f.interactiveSlug); set('i-iurl', f.interactiveUrl); set('i-ititle', f.interactiveTitle); set('i-idesc', f.interactiveDesc);
         if (f.policy) $('i-policy').value = f.policy;
       }
@@ -657,6 +817,61 @@
       showNote(!cur ? 'The tutor will be added to this assignment when you save.'
         : swapOn ? 'The tutor id differs from the saved one, so saving replaces the tutor and deletes its reports. If it has reports or cadets who chose it, you will be asked to confirm first.'
         : 'The tutor id is the same, so saving updates the link, keeps every report, and also sets the tutor\'s title and description to the ones the link carries (check them above).');
+    }
+    /* ── The tutor setup file ─────────────────────────────────────────────────
+     * A file made by the tutor builder holds the tutor's id, title, link and objectives, so none of it is typed. Reading a file only
+     * fills the boxes (and keeps the objectives for the next Save); nothing is written until the director clicks Save. The rules
+     * the file must meet are the form's own (tutor-setup-file.js). Format: docs/contracts/TUTOR-SETUP-FILE.md. */
+    function clearTutorFile() {
+      $('i-drop-err').style.display = 'none'; $('i-drop-sum').style.display = 'none';
+      $('i-drop-err').textContent = ''; $('i-drop-sum').textContent = '';
+      $('i-drop').classList.remove('over');
+    }
+    function showFileError(text) {
+      $('i-drop-sum').style.display = 'none';
+      $('i-drop-err').textContent = text; $('i-drop-err').style.display = 'block';
+    }
+    async function readTutorFile(file) {
+      clearTutorFile();
+      if (!file) return;
+      if (file.size > MAX_FILE_BYTES) { showFileError('That file is too large to be a tutor setup file.'); return; }
+      let text;
+      try { text = await file.text(); } catch { showFileError('That file could not be read. Try again, or enter the details by hand.'); return; }
+      const r = parseTutorSetup(text, { course: ctx.currentCourseCode });
+      if (!r.ok) { showFileError(r.problem); return; }
+      const t = r.setup;
+      // A saved assignment that already has a linked tutor is changed the way a link changes it: the id differing from the saved one is
+      // a replacement, and the save asks first. A new form just fills the boxes.
+      if (editing && !I.canCarryTutor(editing)) { showFileError(I.tutorRefusal(editing)); return; }
+      if (editing) {
+        const cur = tutorOf(editing);
+        swapOn = !!(cur && t.slug !== cur.slug);
+        syncSwap();
+      }
+      if (!$('i-title').value.trim() && !editing) $('i-title').value = t.title;
+      $('i-islug').value = t.slug;
+      $('i-iurl').value = t.url;
+      $('i-ititle').value = t.title !== $('i-title').value.trim() ? t.title : '';
+      $('i-idesc').value = t.description;
+      if (t.lessonNo != null && !$('i-num').value.trim()) $('i-num').value = String(t.lessonNo);
+      pendingObjectives = t.objectives.length ? t.objectives : null;
+      const sum = $('i-drop-sum');
+      sum.replaceChildren(...summaryLines(t).map(line => { const d = document.createElement('div'); d.textContent = line; return d; }),
+        Object.assign(document.createElement('div'), { textContent: 'Nothing is saved until you click Save.' }));
+      sum.style.display = 'block';
+    }
+    function wireTutorFile() {
+      const zone = $('i-drop'), input = $('i-drop-file');
+      $('i-drop-pick').addEventListener('click', () => input.click());
+      input.addEventListener('change', async () => { await readTutorFile(input.files[0]); input.value = ''; });
+      zone.addEventListener('dragover', (ev) => { ev.preventDefault(); zone.classList.add('over'); });
+      zone.addEventListener('dragleave', () => zone.classList.remove('over'));
+      zone.addEventListener('drop', async (ev) => {
+        ev.preventDefault(); zone.classList.remove('over');
+        const files = ev.dataTransfer?.files;
+        if (!files || files.length !== 1) { clearTutorFile(); showFileError('Drop one file at a time.'); return; }
+        await readTutorFile(files[0]);
+      });
     }
     function showNote(text) { const n = $('im-note'); n.textContent = text; n.style.display = 'block'; }
 
@@ -686,6 +901,7 @@
         interactiveUrl: $('i-iurl').value,
         interactiveTitle: $('i-ititle').value,
         interactiveDesc: $('i-idesc').value,
+        objectives: pendingObjectives,
         withTutor: pathMode === 'both' && $('i-delivery').value === 'typed_response',
         policy: $('i-policy').value,
         switchPolicy: $('i-switch').value,
@@ -792,14 +1008,65 @@
       } finally { saving = false; $('im-save').disabled = false; }
     }
 
+    /* An assignment with cadet work: say what goes with it, and ask for a held press, not a click. */
+    /* One hold control, wired for ONE item at a time. Every way out of the dialog (cancel, close, Escape, outside click, a
+     * completed hold) disposes it, and opening the dialog for another item disposes the last one first, so a hold can only
+     * ever act on the assignment the dialog is showing now. */
+    let rmHold = null;
+    function closeRm() {
+      rmHold?.dispose();
+      rmHold = null;
+      $('rm-modal').classList.remove('open');
+    }
+    function removeWithWork(item, pre, note = '') {
+      rmHold?.dispose();
+      rmHold = null;
+      $('rm-msg').innerHTML = `Remove <strong>${esc(item.title)}</strong> (<code>${esc(item.slug)}</code>)?`;
+      const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+      const bits = [];
+      if (pre.work.submissions) bits.push(plural(pre.work.submissions, 'submission', 'submissions'));
+      if (pre.work.reports) bits.push(plural(pre.work.reports, 'tutor report', 'tutor reports'));
+      if (pre.work.grades) bits.push(plural(pre.work.grades, 'grade', 'grades'));
+      const q = pre.impact.questions || pre.impact.keys
+        ? ` It also deletes its ${plural(pre.impact.questions, 'question', 'questions')} and ${plural(pre.impact.keys, 'answer key version', 'answer key versions')}.` : '';
+      $('rm-info').textContent = `${note}This permanently deletes ${bits.join(', ')} from this term.${q} There is no copy to bring them back from. ` +
+        'Hold the red button for 5 seconds to confirm.';
+      $('rm-modal').classList.add('open');
+      const mine = wireHoldButton({
+        button: $('rm-hold'), label: $('rm-hold-label'), ms: 5000, idleText: 'Hold 5s · delete it and its work',
+        onComplete: async () => {
+          if (rmHold !== mine) return;                 // stood down: this hold is not for the dialog on screen
+          closeRm();
+          const res = await I.removeItem(db, item.offeringId,
+            { questions: pre.impact.questions, keys: pre.impact.keys, keysConfirmed: pre.impact.keys > 0 },
+            { withWork: true, shown: { submissions: pre.work.submissions, grades: pre.work.grades, reports: pre.work.reports } });
+          if (res.needsWorkConfirm) {
+            // What would go changed while the dialog was open: nothing was deleted, and the dialog shows the new numbers.
+            removeWithWork(item, { work: res.needsWorkConfirm, impact: res.impact },
+              'The work on this assignment changed while you were deciding. Nothing was deleted. Check the new numbers. ');
+            return;
+          }
+          if (res.needsConfirm) {
+            window.alert('The questions on this assignment changed while you were deciding. Nothing was removed. Try again to see the new numbers.');
+          } else if (res.error) {
+            console.error('item remove failed', res.error);
+            window.alert(res.refused ? res.error.message : 'Could not remove: ' + I.plainError(res.error));
+          }
+          await load();
+        },
+      });
+      rmHold = mine;
+    }
+
     async function doRemove(item) {
       if (!item) return;
-      const pre = await I.previewRemoval(db, item.offeringId);
+      const pre = await I.previewRemoval(db, item.offeringId, { withWork: true });
       if (pre.error) {
         console.error('item remove check failed', pre.error);
         window.alert(pre.refused ? pre.error.message : 'Could not check this assignment: ' + I.plainError(pre.error));
         return;
       }
+      if (pre.work && (pre.work.submissions || pre.work.grades)) { await removeWithWork(item, pre); return; }
       const impact = pre.impact;
       if (!window.confirm(I.removalWarning(item.title, impact))) return;
       if (impact.keys > 0 && !window.confirm(I.KEYS_SECOND_CONFIRM)) return;
@@ -837,6 +1104,14 @@
     }
 
     async function handleQuery() {
+      // Nothing in an address can open a form for someone who may not change assignments.
+      if (!isDirector()) {
+        // Said, not skipped: an address that asks to add or open an assignment gets one plain line and the read-only list.
+        if (LK.hasPrefill(location.search) || new URLSearchParams(location.search).has('a')) {
+          showPageNotice('Only directors add or change assignments. Ask your course director.');
+        }
+        return;
+      }
       if (!LK.hasPrefill(location.search)) return openFromQuery();
       return LK.runPrefill(location.search, {
         courses: ctx.courses, authorable, currentOffering: () => ctx.currentOffering,
@@ -898,31 +1173,29 @@
       const known = LK.sameIdItem(vm.items, prefill);
       $('dest-pick-note').textContent = 'Pick the assignment to add it to. Red cards already have a tutor: a different id would replace it, and its reports with it.';
       $('dest-lessons').innerHTML = items.length ? items.map(it => {
-        const c = LK.destinationCard({ tutorSlug: it.tutorSlug, isNew: it.isNew, isPublished: it.isPublished, lessonNumber: it.position,
+        // Either page may have made the assignment; the older-page badge no longer applies, so every one is offered.
+        const c = LK.destinationCard({ tutorSlug: it.tutorSlug, isNew: true, isPublished: it.isPublished, lessonNumber: it.position,
           carriesTutor: I.canCarryTutor(it), tutorRefusal: I.tutorRefusal(it) }, iid, { sameId: known === it });
         return `<div class="lb-orphan les${c.swap ? ' swap' : ''}" data-lid="${esc(it.offeringId)}" title="${esc(it.title)}"${c.selectable ? '' : ' style="opacity:.55;cursor:not-allowed"'}>
           <span class="lb-orphan-badge">${esc(c.badge)}</span><span class="lb-orphan-title">${esc(it.title)}</span><span class="lb-orphan-meta">${esc(c.meta)}</span></div>`;
       }).join('') : '<div class="muted">No assignments in this course and term yet. Choose “Create new assignment”.</div>';
       $('dest-lessons').querySelectorAll('[data-lid]').forEach(el => el.addEventListener('click', () => {
         const it = vm.items.find(x => x.offeringId === el.dataset.lid);
-        if (!it || !it.isNew) return;       // entered on the older page: read-only here
+        if (!it) return;
         if (!I.canCarryTutor(it)) { $('dest-pick-note').textContent = I.tutorRefusal(it); return; }
         $('dest-modal').classList.remove('open');
         openForm(it, null, LK.overlayForExisting(prefill));
       }));
     }
 
-    /* A link from the older Assignments page: items.html?a=<offering id>. */
+    /* A link to one assignment: items.html?a=<offering id>. The old address, lessons.html, forwards here with its query kept. */
     function openFromQuery() {
       const id = new URLSearchParams(location.search).get('a');
       if (!id || !vm || vm.error) return;
       const item = vm.items.find(x => x.offeringId === id);
       const root = $('main');
-      if (item && item.isNew) { openForm(item); return; }
-      const msg = item
-        ? 'That assignment was entered on the older page, so it is read-only here.'
-        : 'That assignment is not in the course offering you have selected. Choose its course from the menu at the top.';
-      root.insertAdjacentHTML('afterbegin', `<div class="alert alert-warn">${esc(msg)}</div>`);
+      if (item) { openForm(item); return; }
+      root.insertAdjacentHTML('afterbegin', `<div class="alert alert-warn">That assignment is not in the course offering you have selected. Choose its course from the menu at the top.</div>`);
     }
   </script>
 </body>

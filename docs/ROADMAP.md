@@ -394,6 +394,29 @@ is still clean. Related: [P3.4](#p34--term-rollover--l--director-yes).
 
 ## 4. P3 — Between terms
 
+### P3.0 — Retire `faculty/lessons.html` as the prefill address · **M**
+
+*Director's plan, 2026-11-09.* The older Assignments page is off the top bar. It is still the frozen address that
+AI-generated prefill links target (CORE.md §6), and the editor for assignments entered on the older page. To retire it:
+
+1. Choose the new address (for example a prefill entry on `faculty/items.html`, which already reads the same query
+   parameters) and close the remaining gap first: `items.html` must edit what the older page holds, or those assignments
+   must be moved to the new model.
+2. Update the builder kit: `_builder/preflight-kit/skill/preflight-factory-v2/SKILL.md`, the contract snapshot, and
+   `MANIFEST.sha256` (re-hash with `tools/verify.py`).
+3. Update the three `_builder/courses/*/COURSE_PROFILE.md`.
+4. Re-upload each course's Claude Project knowledge by hand (nothing checks that it matches the repo).
+5. Keep `lessons.html` as a forwarder (whole query string and hash unchanged) for at least one term.
+
+Only between semesters. A check on 2026-11-09 found the address in none of the 53 cached tutor sources, only in the kit
+and the profiles. Partly done, 2026-11-09: `items.html` now edits what the older page held and `lessons.html` is a forwarder
+(steps 1 and 5 below are done). Steps 2 to 4 (the kit, the profiles, the Claude Projects) are still open, and the
+address itself stays. Not otherwise started.
+
+Added 2026-11-09: the tutor builder kit should also emit a tutor setup file at hand-off (`docs/contracts/TUTOR-SETUP-FILE.md`),
+in the same change that moves the prefill address, so a director drops one file instead of following a link. Until then a
+director uses the prefill link, or a file made by `scripts/artifacts/make_tutor_files.py` for a tutor that already exists.
+
 ### P3.1 — Course creation by instructors · **L**
 
 *Requested.* Two halves:

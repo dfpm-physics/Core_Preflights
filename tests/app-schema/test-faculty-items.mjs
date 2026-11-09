@@ -310,7 +310,7 @@ const item = (o = {}) => ({ offeringId: 'o-1', assignmentId: 'a-1', slug: 'x', i
 {
   reset({ 'assignment_offerings.select': { id: 'o-1', entered_on_new_page: false } });
   let r = await I.updateItem(db, ctx, item(), form());
-  check('an item the older page owns is refused, and nothing is written', r.error && CALLS.length === 0);
+  check('an item the older page owns is no longer refused: either page may edit it', !r.error && !(r.refused));
 
   reset({ 'assignment_offerings.select': { id: 'o-1', entered_on_new_page: true } });
   r = await I.updateItem(db, ctx, item(), form({ delivery: 'in_person', grading: 'hand_entered' }));
@@ -392,7 +392,7 @@ section('removeItem');
 
   reset({ 'assignment_offerings.select': { id: 'o-1', assignment_id: 'a-1', entered_on_new_page: false } });
   r = await I.removeItem(db, 'o-1');
-  check('an item the older page owns is refused', r.refused && /older page/.test(r.error.message) && CALLS.length === 0);
+  check('an item the older page owns is removed like any other when no work is attached', !r.error && CALLS.some(c => c.verb === 'delete'));
 }
 
 section('plain errors');
@@ -409,7 +409,7 @@ section('plain errors');
   check('a permission refusal says who can', /director/.test(I.plainError({ code: '42501', message: 'x' })));
   check('a database without the columns says so', /not been upgraded/.test(I.plainError({ code: '42703', message: 'x' })));
   check('databaseNotReady spots a missing column', I.databaseNotReady({ code: '42703', message: 'x' }) && !I.databaseNotReady({ message: 'timeout' }));
-  const html = read('site/faculty/lessons.html');
+  const html = read('tests/app-schema/fixtures/older-lessons-page.html');
   check('the older editor calls the helper where it shows the publish error',
     /publishRefusalMessage\(error\)/.test(html) && /console\.warn\('Publish refused:'/.test(html));
 }
@@ -436,11 +436,12 @@ section('the page is for directors, and only directors see the entry');
   const nav = await import('../../site/js/nav.js');
   const link = nav.FACULTY_LINKS.find(l => l.key === 'items');
   check('the bar has an Assignments entry pointing at items.html', link?.href === 'items.html');
-  check('and it is director-only, not admin-only', link?.directorOnly === true && !link?.adminOnly);
+  check('and it is for every staff role (an instructor reads it, read-only), not admin-only', !link?.directorOnly && !link?.adminOnly);
   eq('the older pages link to the same file', G.NEW_PAGE_HREF, 'items.html');
   const html = read('site/faculty/items.html');
-  check('the page checks the director test before it loads any item',
-    html.indexOf('if (!isDirector())') > -1 && html.indexOf('if (!isDirector())') < html.indexOf('I.loadItems('));
+  check('an instructor sees only published items, and the write controls are director-gated in the page',
+    html.includes('vm.items.filter(it => it.isPublished)') && html.includes('const newBtn = isDirector()'));
+  check('the address handler refuses an instructor before it opens anything', /if \(!isDirector\(\)\) \{[\s\S]{0,400}?return;\s*\}\s*if \(!LK\.hasPrefill\(location\.search\)\) return openFromQuery\(\);/.test(html));
   check('the page says students cannot see an assignment until it is published, and no longer waits for step 2', !/until step 2/.test(html) && /Students cannot see an assignment until it is published/.test(html));
   check('the page escapes what it renders (no data goes into innerHTML without esc)',
     !/\$\{(it|item|s)\.(title|slug|description|kindLabel|deliveryText|gradingText|dueText)\}/.test(html));
@@ -877,9 +878,113 @@ section('one word for "not yet visible to cadets": Unpublished (roll-in fix 5)')
 {
   const html = read('site/faculty/items.html');
   check('the Assignments list says Unpublished for newer and older rows', !/'Draft'/.test(html));
-  check('the older-page rows still say which page owns them', /Entered on the older page/.test(html));
+  check('the rows no longer label or fence off the older page', !/Entered on the older page/.test(html) && !/Open in the older editor/.test(html));
   // The tutor destination card keeps the older page's word on purpose: test-lesson-link.mjs pins it to the frozen older page.
   check('the artifacts page says Unpublished', !/>Draft</.test(read('site/faculty/artifacts.html')));
+}
+
+section('one editor: an item the older page made opens and saves unchanged, and either page writes the full schedule');
+{
+  const secs = [{ id: 's-m', code: 'M1A', meeting_days: ['M'] }, { id: 's-t', code: 'T1A', meeting_days: ['T'] }];
+  const ctx2 = I.saveContext({ currentCourse: 'course-1', currentCourseCode: 'gate-entry', currentOffering: 'co-1', user: { id: 'user-director' } }, secs);
+  // Stored the way the older page stores it: per-day deadlines, and a T-day time the form cannot show exactly (17:59, not 23:59).
+  const dueAt = '2026-11-11T06:59:59Z';
+  const dueByDay = { M: '2026-11-11T06:59:59Z', T: '2026-11-13T00:59:00Z' };
+  const dueRows = [{ section_id: 's-m', due_at: dueByDay.M }, { section_id: 's-t', due_at: dueByDay.T }];
+  const opensAt = '2026-11-05T07:00:00Z';
+  const older = item({ isNew: false, kindId: 'homework', title: 'Problem Set 3', description: 'Made up.', dueAt, dueByDay, dueRows, opensAt,
+    paths: [{ delivery: 'in_person', grading: 'hand_entered', modality: I.DELIVERY_MODALITY.in_person, activityId: 'act-1', content: {} }] });
+  const shown = I.scheduleToForm({ due_at: dueAt, due_by_day: dueByDay }, dueRows, secs);
+  const rel = I.releaseFromOpensAt(opensAt);
+  const same = () => form({ delivery: 'in_person', grading: 'hand_entered', points: '10', ...shown, opensDate: rel.date, opensTime: rel.time });
+
+  check('a deadline the form cannot show exactly counts as unchanged when the form is untouched', I.datesUnchanged(older, same(), secs));
+  check('... and as changed once a date moves', !I.datesUnchanged(older, { ...same(), dayDates: { ...shown.dayDates, M: '2026-11-17' } }, secs));
+  check('the opening date counts as unchanged when untouched', I.opensUnchanged(older, same()));
+  check('... and as changed when the date moves', !I.opensUnchanged(older, { ...same(), opensDate: '2026-11-06' }));
+
+  reset({ 'assignment_offerings.select': { id: 'o-1', entered_on_new_page: false } });
+  let r = await I.updateItem(db, ctx2, older, same());
+  eq('an older-page item saves with no error', r.error, null);
+  eq('... and no deadline row is rewritten', writesTo('assignment_due_dates').length, 0);
+  eq('... and the assignment row is not touched when its text is the same', writesTo('assignments', 'update').length, 0);
+  const u = writesTo('assignment_offerings', 'update')[0].payload;
+  check('... and the offering update carries no deadline or opening date', !('due_at' in u) && !('due_by_day' in u) && !('opens_at' in u), Object.keys(u).join());
+  check('... and never the owning-page marker', !('entered_on_new_page' in u));
+
+  // A real change to the schedule writes both the per-day map and the per-section rows, from the Assignments page.
+  reset({ 'assignment_offerings.select': { id: 'o-1', entered_on_new_page: false } });
+  r = await I.updateItem(db, ctx2, older, { ...same(), dayDates: { M: '2026-11-17', T: '2026-11-19' }, sectionDates: {}, time: '23:59' });
+  const u2 = writesTo('assignment_offerings', 'update')[0]?.payload || {};
+  check('a changed schedule writes due_by_day for each meeting day', u2.due_by_day && Object.keys(u2.due_by_day).sort().join() === 'M,T', JSON.stringify(u2.due_by_day) + ' ' + JSON.stringify(r));
+  check('... and the earliest as due_at', typeof u2.due_at === 'string' && u2.due_at === u2.due_by_day?.M);
+  const ins = writesTo('assignment_due_dates', 'insert')[0]?.payload || [];
+  eq('... and one per-section row for every section', [].concat(ins).map(x => x.section_id).sort(), ['s-m', 's-t']);
+  check('... each at its own track\'s deadline', [].concat(ins).every(x => x.due_at === u2.due_by_day?.[x.section_id === 's-m' ? 'M' : 'T']));
+
+  // The release date
+  reset({ 'assignment_offerings.select': { id: 'o-1', entered_on_new_page: false } });
+  await I.updateItem(db, ctx2, older, { ...same(), opensDate: '2026-11-06', opensTime: '07:00' });
+  check('a moved opening date is written', 'opens_at' in (writesTo('assignment_offerings', 'update')[0]?.payload || {}));
+
+  // Removal of an item that has cadet work is refused by default, and goes through only when asked for explicitly.
+  reset({ 'assignment_offerings.select': { id: 'o-1', assignment_id: 'a-1', entered_on_new_page: false }, 'submissions.select': { __count: 2 } });
+  r = await I.removeItem(db, 'o-1');
+  check('with cadet work, removal is refused by default and writes nothing', r.refused && CALLS.filter(c => c.verb === 'delete').length === 0);
+  const pre = await I.previewRemoval(db, 'o-1', { withWork: true });
+  check('the preview with work reports the counts instead of refusing', !pre.error && pre.work.submissions === 2);
+  reset({ 'assignment_offerings.select': { id: 'o-1', assignment_id: 'a-1', entered_on_new_page: false }, 'submissions.select': { __count: 2 } });
+  r = await I.removeItem(db, 'o-1', { questions: 0, keys: 0, keysConfirmed: false }, { withWork: true, shown: { submissions: 2, grades: 0, reports: 0 } });
+  check('asked for explicitly, the removal deletes the offering and its assignment', !r.error && CALLS.some(c => c.table === 'assignment_offerings' && c.verb === 'delete'), r.error?.message);
+
+  // The counts the person was shown are counted again right before the delete.
+  const ofr = { 'assignment_offerings.select': { id: 'o-1', assignment_id: 'a-1', entered_on_new_page: false } };
+  const withReports = (subs, grades, reps, extra = {}) => ({
+    ...ofr,
+    'submissions.select': (st) => (st.opts?.head ? { __count: subs } : Array.from({ length: subs }, (_, i) => ({ id: 's' + i }))),
+    'grades.select': { __count: grades },
+    'submission_activities.select': { __count: reps },
+    ...extra,
+  });
+  const deleted = () => CALLS.some(c => c.verb === 'delete');
+  const ack0 = { questions: 0, keys: 0, keysConfirmed: false };
+  reset(withReports(2, 1, 3));
+  const p3 = await I.previewRemoval(db, 'o-1', { withWork: true });
+  eq('the preview counts submissions, grades and tutor reports', p3.work, { submissions: 2, grades: 1, reports: 3 });
+  reset(withReports(2, 1, 3));
+  r = await I.removeItem(db, 'o-1', ack0, { withWork: true, shown: { submissions: 2, grades: 1, reports: 3 } });
+  check('the numbers shown still match: it deletes', !r.error && deleted(), JSON.stringify(r));
+  reset(withReports(2, 1, 3));
+  r = await I.removeItem(db, 'o-1', ack0, { withWork: true });
+  check('with work and no numbers shown, nothing is deleted and the current numbers come back', !deleted() && r.needsWorkConfirm?.submissions === 2, JSON.stringify(r));
+  reset(withReports(2, 2, 3));
+  r = await I.removeItem(db, 'o-1', ack0, { withWork: true, shown: { submissions: 2, grades: 1, reports: 3 } });
+  check('a grade written while the dialog was open: nothing is deleted, the new numbers come back',
+    !deleted() && !r.error && r.needsWorkConfirm?.grades === 2 && r.impact && r.impact.questions === 0, JSON.stringify(r));
+  reset(withReports(3, 1, 3));
+  r = await I.removeItem(db, 'o-1', ack0, { withWork: true, shown: { submissions: 2, grades: 1, reports: 3 } });
+  check('a submission arrived while the dialog was open: nothing is deleted', !deleted() && r.needsWorkConfirm?.submissions === 3);
+  reset(withReports(2, 1, 4));
+  r = await I.removeItem(db, 'o-1', ack0, { withWork: true, shown: { submissions: 2, grades: 1, reports: 3 } });
+  check('a tutor report arrived while the dialog was open: nothing is deleted', !deleted() && r.needsWorkConfirm?.reports === 4);
+  // A count that fails is not zero.
+  reset(withReports(2, 1, 3, { 'submission_activities.select': { __error: { message: 'boom' } } }));
+  r = await I.removeItem(db, 'o-1', ack0, { withWork: true, shown: { submissions: 2, grades: 1, reports: 0 } });
+  check('a failed tutor-report count blocks the delete with a plain sentence',
+    !deleted() && r.refused === true && r.error?.message === 'Could not count the work on this assignment. Nothing was deleted.', JSON.stringify(r));
+  reset(withReports(2, 1, 3, { 'submissions.select': (st) => (st.opts?.head ? { __count: 2 } : { __error: { message: 'boom' } }) }));
+  r = await I.removeItem(db, 'o-1', ack0, { withWork: true, shown: { submissions: 2, grades: 1, reports: 3 } });
+  check('a failed read of the submissions blocks the delete too', !deleted() && r.refused === true && /Nothing was deleted/.test(r.error?.message || ''));
+
+  const html = read('site/faculty/items.html');
+  check('the page holds the removal behind a 5 second press and shows the counts first', /wireHoldButton/.test(html) && /ms: 5000/.test(html) && /id="rm-modal"/.test(html));
+  check('the page passes the shown counts to the delete and shows new ones if they moved', /shown: \{ submissions: pre\.work\.submissions/.test(html) && /res\.needsWorkConfirm/.test(html));
+  check('a person who only reads is told so when an address asks to add or open an assignment', /Only directors add or change assignments\. Ask your course director\./.test(html));
+  check('the page has the access control and the cadet preview', /id="i-access"/.test(html) && /id="i-preview"/.test(html) && /id="preview-modal"/.test(html));
+  const fwd = read('site/faculty/lessons.html');
+  check('lessons.html forwards with its script file only', /lessons-forward\.js/.test(fwd) && !/<script>/.test(fwd));
+  check('the forwarder keeps the query string and the hash', /location\.replace\('items\.html' \+ location\.search \+ location\.hash\)/.test(read('site/js/lessons-forward.js')));
+  check('the page opens any assignment from a ?a= link, whichever page made it', !/entered on the older page, so it is read-only/.test(html));
 }
 
 process.exit(summary() ? 0 : 1);

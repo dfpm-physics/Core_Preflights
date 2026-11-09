@@ -188,8 +188,8 @@ saved to each student's record. This is separate from the assignments system.
 
 > **⚠ SUPERSEDED — `interactions-admin.html` was deleted at the 2026-07-28 promotion**, along with
 > `admin.html`, `interactions.html` and `review.html` (CORE.md §0). **The live equivalent is
-> `site/faculty/lessons.html`**, where an interactive activity is attached to an assignment rather
-> than managed as a separate list — that page is a frozen contract URL and is also what an
+> `site/faculty/items.html`** (Assignments), where an interactive activity is attached to an assignment rather
+> than managed as a separate list. `site/faculty/lessons.html` is a frozen contract URL that now forwards there, and is also what an
 > AI-generated prefill link targets. Student reports are read on `site/faculty/student.html`, from
 > the cadet's own assignment row, not from a submissions column. The slug rule below is unchanged
 > and is still the one manual coordination point. The retired procedure follows.

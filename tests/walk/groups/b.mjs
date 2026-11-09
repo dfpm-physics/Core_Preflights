@@ -14,7 +14,7 @@ export async function runB(W) {
   await L.check('B1', 'cadet: the published assignment is in the list, marked as a choice of format', async () => {
     await c1.go('student/lessons.html');
     const t = await c1.until(new RegExp(esc(title)));
-    const row = await c1.page.evaluate((tt) => { const a = [...document.querySelectorAll('a.list-item')].find(x => x.innerText.includes(tt)); return a ? a.innerText : null; }, title);
+    const row = await c1.page.evaluate((tt) => { const a = [...document.querySelectorAll('a.list-item, .next-action')].find(x => x.innerText.includes(tt)); return a ? a.innerText : null; }, title);
     L.assert(row, 'no list row'); L.assert(/Your choice of format/.test(row), 'the row does not say it is a choice of format: ' + row.replace(/\s+/g, ' '));
   });
   await L.check('B2', 'cadet: opening it shows the chooser with a Questions card and a tutor card', async () => {
@@ -98,7 +98,7 @@ export async function runB(W) {
     try {
       await c.go('student/dashboard.html');
       await c.until(new RegExp(esc(hwTitle)));
-      const row = await c.page.evaluate((tt) => { const a = [...document.querySelectorAll('a.list-item')].find(x => x.innerText.includes(tt)); return a ? a.innerText.replace(/\s+/g, ' ') : null; }, hwTitle);
+      const row = await c.page.evaluate((tt) => { const a = [...document.querySelectorAll('a.list-item, .next-action')].find(x => x.innerText.includes(tt)); return a ? a.innerText.replace(/\s+/g, ' ') : null; }, hwTitle);
       L.assert(row, 'the homework is not on the dashboard');
       // The lesson page for the same item says "Homework, checked as you answer".
       await c.go(`student/lessons.html?l=${L.itemByTitle(hwTitle).id}`);

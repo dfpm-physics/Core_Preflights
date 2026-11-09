@@ -225,9 +225,10 @@ Read these repo docs before deep work: `docs/operations/SYSTEM_GUIDE.md`,
   deadline is one instant). The hour is still a per-course decision and could diverge again; there
   is nowhere to store a per-course setting — no table under `app` carries course configuration and
   DDL is sealed (§0) — so the policy is hardcoded in **three places that must move together**:
-  - `DUE_TIME_BY_COURSE` in `site/faculty/lessons.html` — what a NEW assignment's time box
-    defaults to, and what a bare-date prefill link resolves to. It is now **empty** (both courses
-    take the `23:59` fallback); a course wanting a different hour adds a line. An EXISTING deadline
+  - `DEFAULT_TIME` in `site/js/faculty-items.js` — what a NEW assignment's time box
+    defaults to, and what a bare-date prefill link resolves to. Both courses take `23:59`; a course
+    wanting a different hour needs a per-course map added there (the older page's empty
+    `DUE_TIME_BY_COURSE` went with that page on 2026-11-09). An EXISTING deadline
     is reloaded from `due_by_day` and keeps whatever it was saved with, so this default never rewrites.
   - `DUE_TIME = (23, 59, 59)` in `scripts/fall2026/build_fall_preflights.py` (phys-215) and the
     `23, 59, 59` in `build_110_preflights.py` (phys-110) — what a term build writes.
@@ -244,9 +245,13 @@ Read these repo docs before deep work: `docs/operations/SYSTEM_GUIDE.md`,
   `extension > assignment_due_dates > due_by_day > due_at`, and `{}` means *"`due_at` applies to
   everyone"* — a documented default, not a gap. So a T-day section inherits the M-day date and is
   due **one to four days early**, four whenever the T meeting follows a weekend.
-  - **Only the lesson editor writes the per-day map.** `site/faculty/lessons.html` populates
-    `due_by_day` *and* materializes the per-section `assignment_due_dates` rows on save
-    (`dueByDayRow` / `dueDateRows` in `site/js/faculty-lessons.js`). An offering created any other
+  - **Only the Assignments page writes the per-day map.** `site/faculty/items.html` populates
+    `due_by_day` *and* materializes the per-section `assignment_due_dates` rows on every save that sets
+    a deadline (`buildSchedule` in `site/js/faculty-items.js`, over `dueByDayRow` / `dueRowsFor` in
+    `site/js/faculty-lessons.js`; `site/faculty/lessons.html` used to, and now forwards there). A save
+    that leaves the dates as they were opened writes none of the three places, so an older item whose
+    deadline the form cannot show exactly (a different time on each track) is not rewritten by a save
+    that changed nothing. An offering created any other
     way — a term builder, a REST insert, a hand-written script — gets neither, and looks correct
     because `due_at` is right.
   - **It is invisible to a spot check.** Every M-day date reads correctly, because `due_at` *is*
@@ -296,7 +301,7 @@ Read these repo docs before deep work: `docs/operations/SYSTEM_GUIDE.md`,
     measuring from an extension would let granting a cadet more time remove the assignment from
     their list. Work with a submission or a grade is never withdrawn, whatever the dates say.
   - `assignment_offerings.opens_at` **overrides it per lesson**, in both directions, and the
-    "Students can see it" control in `site/faculty/lessons.html` writes it. **NULL is the default
+    "Students can see it" control in `site/faculty/items.html` writes it. **NULL is the default
     answer, not a missing one** — it selects the rolling window. Relative presets there resolve to
     a fixed instant at save time because a `timestamptz` cannot hold "N days before" and DDL is
     sealed (§0); a fixed date therefore does **not** follow a due date edited afterwards.
@@ -545,7 +550,11 @@ The full table catalog, JSONB shapes, roles, and edge functions are in
   `site/student/interaction-submit.html`, and AI-generated prefill links target
   `site/faculty/lessons.html`. Both were forwarding stubs until the 2026-07-28 promotion replaced
   them with the real pages **at the identical URLs**, which is what the stubs existed to guarantee.
-  Neither URL changed at go-live and **neither may be moved**.
+  Neither URL changed at go-live and **neither may be moved**. *(2026-11-09: `faculty/items.html` now edits every
+  assignment, whichever page made it, so `faculty/lessons.html` became a forwarder: it sends the whole query string and
+  hash, unchanged, to `items.html`, which reads the same prefill parameters and `?a=`. The address stays, because AI
+  tutor builds and bookmarks point at it. Retiring it as the address is still a between-terms task, tracked in
+  `docs/ROADMAP.md` P3.0.)*
   Any multi-term work must be additive (new columns) and must not change that wire format.
   Changing a contract URL means rebuilding every deployed artifact by hand — only ever done
   between semesters (last: 2026-07-16), never mid-term.

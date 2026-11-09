@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-DqK81CWItllplHxqNEX4tNNk1AbPMrJ4rZFhhA8Lmyg=' 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8=' 'sha256-y+LKA7TZpIwcx0pJHKuXky0z0Ito1wCh6DfOl7ivJTU='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Dashboard · PREP</title>
   <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
@@ -48,10 +48,36 @@
           <div class="sub">${esc(ctx.courseTitleOf(ctx.currentOffering))} · Section ${esc(ctx.sectionCodeOf(ctx.sectionIds[0]) || '—')}${ctx.currentIsPast ? ' · Past term, read only' : ''}</div>
         </div>
         ${vm.totalError ? `<div class="alert alert-warn">Your running total could not be loaded: ${esc(vm.totalError)}</div>` : ''}
+        ${nextActionBlock(vm)}
         ${statTiles(vm.stats, vm)}
-        ${upNextSection(vm.upNext, vm.lockedCount)}
+        ${upNextSection(vm.upNext, vm.lockedCount, vm)}
         ${vm.missed.length ? missedSection(vm.missed) : ''}
         ${gradedSection(vm.graded)}`;
+    }
+
+    /* The next piece of work, ahead of the totals. It is chosen from the lessons this page already loaded
+     * (vm.toDo: not started or a saved draft): the one whose deadline comes first, undated work last. Nothing
+     * is shown that the row does not hold, and the action goes to the same page as every list row, which shows
+     * both ways of doing the work when both exist, so no way is preferred here. Overdue work is not
+     * featured; it has its own section below. */
+    function pickNext(items) {
+      const t = (l) => (l.due ? l.due.getTime() : Infinity);
+      return [...items].sort((a, b) => t(a) - t(b))[0] || null;
+    }
+    function nextActionBlock(vm) {
+      const l = pickNext(vm.toDo || []);
+      if (!l) return '';
+      const draft = l.state === STATE.DRAFT;
+      const due = l.due ? `Due ${fmtDateTime(l.due)} · ${relativeDue(l.due)}` : 'No due date';
+      return `<section class="next-action" aria-labelledby="na-title">
+        <div class="na-eyebrow">Next up</div>
+        <h2 class="na-title" id="na-title">${l.lesson_number != null ? esc(l.lesson_number) + '. ' : ''}${esc(l.title)}</h2>
+        <div class="na-meta">
+          <span class="deadline ${deadlineClass(l.due, l.isPast)}">${esc(due)}</span>
+          <span class="na-status"><span class="status-dot ${l.dot}"></span>${draft ? 'Draft saved' : 'Not started'}</span>
+        </div>
+        <a class="btn btn-primary" href="lessons.html?l=${encodeURIComponent(l.id)}">${draft ? 'Continue' : 'Open assignment'}</a>
+      </section>`;
     }
 
     function statTiles(s, vm) {
@@ -64,11 +90,12 @@
       // says so; it is never shown as 0.
       const tv = totalView(vm.total);
       const points = vm.totalError ? 'Unavailable' : (tv && tv.possible ? `${tv.earned}/${tv.possible}` : '—');
-      return `<div class="stat-grid">
-        ${tile('blue',  'todo',    '📝', s.toDo, 'To do')}
-        ${tile('red',   'overdue', '⏰', s.missed, 'Past due')}
-        ${tile('green', 'award',   '🏅', points, 'Points so far')}
-        ${tile('gold',  'done',    '✅', s.graded, 'Graded')}
+      // Routine counts stay neutral; colour is spent only where something needs attention.
+      return `<div class="stat-grid quiet">
+        ${tile('none', 'todo',    '📝', s.toDo, 'To do')}
+        ${tile(s.missed ? 'red' : 'none', 'overdue', '⏰', s.missed, 'Past due')}
+        ${tile('none', 'award',   '🏅', points, 'Points so far')}
+        ${tile('none', 'done',    '✅', s.graded, 'Graded')}
       </div>`;
     }
 
@@ -100,17 +127,27 @@
      * It matters most in the empty state: "All caught up. Nice work." is the wrong thing to tell
      * a cadet whose next four preflights simply have not opened yet, because it invites them to
      * stop checking. With work still to come the heading says so instead. */
-    function upNextSection(items, lockedCount) {
+    function upNextSection(allItems, lockedCount, vm) {
       const locked = releaseNote(lockedCount);
+      // The featured assignment above is not listed twice.
+      const featured = pickNext(vm.toDo || []);
+      const items = featured ? allItems.filter(l => l.id !== featured.id) : allItems;
+      if (featured && !items.length) {
+        return locked ? `<div class="field-hint" style="margin-bottom:18px">${esc(locked)}</div>` : '';
+      }
+      // "All caught up" is only said when it is true: nothing open AND nothing past due.
       const body = items.length
         ? `<div class="list">${items.map(lessonItem).join('')}</div>`
         : locked
         ? `<div class="empty-state"><div class="es-ic">${iconHTML('due-soon', '⏳', 'ic')}</div><h3>Nothing open right now</h3>
              <p>${esc(locked)}</p></div>`
+        : vm.missed.length
+        ? `<div class="empty-state"><h3>No open assignments</h3>
+             <p>Past-due work is listed below.</p></div>`
         : `<div class="empty-state"><div class="es-ic">${iconHTML('rocket', '🚀', 'ic')}</div><h3>All caught up</h3>
              <p>You have no open assignments right now. Nice work.</p></div>`;
       return `<section class="dash-section">
-        <div class="section-head"><h2>${iconHTML('due-soon', '⏳', 'ic')} Up next</h2>
+        <div class="section-head"><h2>${iconHTML('due-soon', '⏳', 'ic')} ${featured ? 'Also open' : 'Up next'}</h2>
           ${items.length ? `<span class="count-pill">${items.length}</span>` : ''}
           <span class="grow"></span>
           <a class="btn btn-ghost btn-sm" href="lessons.html">View all</a>

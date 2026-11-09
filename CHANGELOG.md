@@ -8,6 +8,131 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-11-09 — Matthew Recker via Claude (Assignments: locked cards explained, prefill link lands on Both; branch `v2-review-pass`, not committed)
+
+- **Locked card, explained on the card.** On a saved assignment, a card that would switch it to or from auto-graded questions is
+  grayed, with "A saved assignment cannot switch to or from auto-graded questions. Make a new assignment instead." on hover, to
+  screen readers, and as visible text. The rule is unchanged and still refuses at Save; a test compares the lock with that refusal
+  for every pair and card. A new assignment is never locked.
+- **A prefill link with a tutor selects a card on a new form.** Both (typed side AI-graded plus the tutor), or Interactive tutor when
+  the link's policy asks for the tutor alone. Before, it opened as instructor-graded plus tutor ("Current setting"). A saved
+  assignment is never changed by a link. When the card is AI-graded, a note under the cards says how many graded questions still
+  lack a description of a good answer; it does not block Save.
+- Not done: no change to `docs/contracts/`, to the refusal at Save, or to any link's wire format.
+
+## 2026-11-09 — Matthew Recker via Claude
+
+**Design review pass and a shorter staff bar (branch `v2-review-pass`, not committed).** The site keeps its current
+look. The earlier design notes are kept; the new icon set that was tried is not (the original icons are back, byte for
+byte).
+
+- **Filled controls.** Tokens `--action*` and `--on-action` separate a filled control's colour from link text, in both
+  themes. White text on every filled blue, green, red, gold and grey control is at least 4.5:1. The primary button has
+  distinct default, hover, pressed, focus and disabled states.
+- **Static tiles** no longer lift on hover; only a real link does.
+- **Student dashboard.** The nearest open assignment is first, with its real deadline and status and one button to the
+  same page every list row opens. Counts follow in a quieter row. "All caught up" is said only when true.
+- **Type sizes.** Deadlines, status and counts are about 14px; 12px only for secondary notes.
+- **Header.** A long course name is cut with an ellipsis at every width; the full name is the button's name.
+- **Task list failure.** A task list that cannot load on the faculty dashboard shows "Couldn't load your task list" with
+  Retry, never the all-clear. Tests in `tests/app-schema/test-tasks.mjs`.
+- **Sign-in copy** is shorter, with the account guidance under "Need help signing in?".
+- **Icons.** The original icon files are unchanged. Nothing from the thin-line set remains.
+- **Staff bar.** Reports, Backlog, Grade assignments and Older assignments are off it (director's call). Each page
+  keeps its address. Grade assignments is a button on Assignments, Backlog and Recent reports are sections on the
+  faculty dashboard, and the Report link stays on each Assignments row.
+- **Faculty dashboard.** A Backlog section (counts per pile, a link to the full page; loading, empty and failed are
+  separate states) from the Backlog page's own loader and grouping, and a Recent reports section (about five, a link to
+  each, and All reports) from the Reports page's own list loader.
+- **Assignments** (`faculty/items.html`) now opens for instructors, read-only: published assignments only, with Grade,
+  Report and Launch tutor, a plain line that only directors change assignments, and no create, edit or remove control
+  and no form from an address. The database refusing an instructor's writes is unchanged. Every staff role gets a
+  Grade assignments button; directors also get Grade and Launch tutor per row.
+- **One assignment editor (later the same day).** `faculty/items.html` now opens, saves and removes every assignment,
+  whichever page made it, and `faculty/lessons.html` is a forwarder: `site/js/lessons-forward.js` sends the whole query
+  string and hash to `items.html` (bare visit, `?new=1&id=&course=&title=&desc=&url=&pub=` prefill, `?a=<offering>`, and a
+  prefill aimed at an older assignment all arrive intact; the chooser now offers older assignments too). The address stays
+  because AI tutor builds and bookmarks point at it. What was added to `items.html`: opening and saving an older-page row
+  (an untouched deadline, opening date, question set, assignment row and tutor path are not rewritten, so a save that
+  changed nothing leaves every stored value as it was), the "typed response needs your permission" setting, a cadet-view
+  Preview (shared `site/js/question-preview.js`), and removal of an assignment that has cadet work behind a counted
+  modal and a 5 second held button. Every save that sets a deadline writes `due_by_day` and the per-section rows. Every
+  job of the older page was listed and checked against this one before the change. CORE.md, PROJECT.md, the help topic and the
+  roadmap (P3.0 steps 1 and 5 done, 2 to 4 open) are updated, as are the Health links, `new-page-guard.js`'s header and
+  the staging seed (`test-lesson-09`, an older-page-shaped item). `tests/app-schema/fixtures/older-lessons-page.html`
+  keeps the retired page for the parity tests. `entered_on_new_page` is not flipped by an edit.
+- **Dashboard tiles.** Each faculty tile is a number and a one to three word label; the longer explanations moved into
+  the info control. The only line kept visible is "diagnostic" on the understanding tile, which says what kind of number it
+  is. Icons are larger (60px box, 38px image; 52 and 34 below 480px). The student tiles already were number plus label.
+- **Assignments row actions are icons.** Questions, Grade, Report, Preview, Launch tutor, Edit and Remove are icon
+  buttons; each label is the tooltip and the accessible name, and an action that is off still shows its reason on hover.
+  Five icons came from the director's gradebook project (`site/media/icons/ICONS.md` lists them; their author is still to
+  be confirmed for the footer credit). Checked with the offline suites and in a browser; no full walk was run for this.
+- **Gradebook.** A column heading is now a link to that assignment's class report (before: a plain label with a tooltip).
+- **All classes** (`student/summary.html`), the student's landing page: work due across every active class, soonest
+  first (past due, due soon, later), one card per class linking to its dashboard. It calls the course loader once per
+  enrollment, so the release window and the states are the course pages' own. A class that fails shows its own error.
+  Links name the class with `?offering=<id>`, which the sign-in code honours only among the student's own classes.
+- **Info control.** One shared helper (`infoHTML` in `util.js`) and shared CSS: a real button beside a heading shows an
+  explanation on hover, keyboard focus and tap, and closes on Escape or outside click. Used for the explanatory lines
+  on Backlog, Reports, Grade assignments and All classes. Errors, deadlines, statuses, counts, consequences, empty-state
+  reasons and form-field instructions stay visible.
+- **Staging seed.** `scripts/staging/seed_staging.py` adds a made-up course (phys-120) and enrols one existing test
+  cadet in it as well, so that cadet has open work in two courses. Run on staging only; verify counts are unchanged.
+- **Help and docs.** New student topic "All classes"; the instructor and director help topics, PROJECT.md, CORE.md and
+  the roadmap updated. Walk checks that asserted the removed bar links now reach those pages the new way; new walk
+  group J and offline suite `test-review-pass.mjs`.
+
+- **Review fixes (same day).** An independent review of the editor merge found one blocker and three smaller problems; all
+  are fixed.
+  - The five-second hold button added its listeners on each open of the removal dialog and never removed them, so after
+    the dialog had been opened and cancelled for one assignment, a single hold on another could remove both.
+    `wireHoldButton` (`site/js/hold-button.js`) now returns `dispose()`, which removes every listener on the button and the
+    document and makes the control inert; the Assignments page keeps one control for one assignment and disposes it on
+    cancel, close, Escape, outside click, a completed hold and before wiring another. It is the only page that uses it.
+  - The removal re-counts submissions, grades and tutor reports right before the delete and compares them with what the
+    dialog showed. If any differs, nothing is deleted and the dialog opens again with the new numbers. Tutor reports are
+    counted by the same function as the rest (`previewRemoval`); a count that fails blocks the removal ("Could not count
+    the work on this assignment. Nothing was deleted.") instead of showing 0. `countActivityReports` returns `null` on a
+    failed count rather than 0.
+  - The Questions link on an assignment the older page entered no longer ends in a refusal. The questions page edits only
+    the questions and answer-key tables, which the older page never wrote, and no database rule reads the marker any
+    more, so `loadItem` (`site/js/faculty-questions.js`) no longer refuses for that reason (a published item is still
+    refused). The marker is not changed on save. `new-page-guard.js` and the other pages that read it were checked and left:
+    the older lesson data layer's refusals are no longer reached from any page, and the Health page's one marker check
+    only decides which older rule applies to a tutor-only item.
+  - A person who may not edit, arriving by `?new=1`, `?a=` or a prefill link, now sees "Only directors add or change
+    assignments. Ask your course director." above the read-only list.
+  - Checked, not changed: the older editor replaced `activities.content` with its five keys (questions, reading link,
+    reference PDF, pages, access) wholesale, and every builder and seed writes the same five, so the Assignments page does
+    the same and no other key is carried.
+  - Tests: new offline suite `test-hold-button.mjs`; new checks in `test-faculty-items.mjs` and `test-faculty-questions.mjs`;
+    walk J12 now opens the dialog for one assignment, cancels, opens it for a second and checks only the second is gone;
+    walk J6 checks the instructor line.
+
+Not done: no database change, no migration, nothing on production, nothing pushed. No one-click Publish button on an
+Assignments card (publishing is the form's checkbox, as before), and a save of an older item whose day map misses a
+meeting day still asks for the missing dates. Changing one date on an older item whose tracks had different times
+writes every track at the form's single time, as the older editor did; the earlier-deadline warning still applies. Most field-level hints on the assignment form stayed visible (instructions a person needs to fill the
+field), and the student lesson pages, Schedule, My grades, Admin and Health pages were not audited for explanatory text.
+`site/student/interaction-submit.html` only changes through shared styles.
+
+---
+- **The setup chooser depends on the kind of work, and a tutor can be set up from a file.** On Assignments, "How cadets do
+  this work" now shows for every assignment, in one of two sets chosen from the kind's own `default_delivery` (never its id).
+  A kind whose default is a typed response or the tutor (today the preflight and the case study) gets AI-graded questions,
+  Instructor-graded questions, Interactive tutor and Both (cadets choose; the typed side is AI-graded). Every other kind gets
+  In class, Auto-graded questions and Done elsewhere (scores imported). Auto-graded questions is grayed, with a reason on
+  hover and for screen readers, unless the kind's default is questions answered on the site (today homework). Done elsewhere
+  is a decided option (director's call, 2026-11-09). A saved assignment shows the setting it has, selected and usable, with a
+  plain line when that is an older setting; opening it changes nothing. The other pairs stay reachable under More options.
+  Tutor setup file: format in `docs/contracts/TUTOR-SETUP-FILE.md`; a drop zone and a Choose file button on the tutor card
+  fill the tutor boxes, show a summary and write nothing until Save; a file for another course or with a bad id or link is
+  refused in plain words. Objectives in a file go to the existing `assignments.objectives` column with the same Save (no
+  DDL). `scripts/artifacts/make_tutor_files.py` builds a file for each published tutor from the course catalogues. Not done:
+  the builder kit does not emit the file yet (roadmap P3.0); nothing in `_builder/` changed. New offline suite
+  `test-tutor-setup-file.mjs`, rewritten `test-items-setup.mjs`, a Python test for the script, and walk group K.
+
 ## 2026-11-07 — Matthew Recker via Claude
 
 - **Assignment form**: a new save now clears the old error message, so an old refusal no longer stays on screen while the new save runs. `site/faculty/items.html`, page hashes rebuilt.

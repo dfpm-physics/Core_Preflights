@@ -27,7 +27,7 @@
 
 import { NEW_PAGE_COLUMN, publishRefusalMessage } from './new-page-guard.js';
 import { dueRowsFor, defaultDueFrom, dueByDayRow, toEditorDue, pointsChanged, retroactivelyUpdateGrades } from './faculty-lessons.js';
-import { contentFromEditor, checkEditor, REMOVAL_LOCKED_NOTE } from './free-response.js';
+import { contentFromEditor, checkEditor, missingGuidance, REMOVAL_LOCKED_NOTE } from './free-response.js';
 import { rolesFor, policyFromRoles, POLICIES } from './lesson-link.js';
 import { LOOKAHEAD_DAYS } from './schema.js';
 
@@ -183,53 +183,160 @@ export function pathPlan(form) {
 export const wantsTwoPaths = (form) => isTypedResponse(form.delivery) && !!form.withTutor;
 
 /* ══════════════════════════════════════════════════════════════════════════════
- * "How cadets do this work": the three cards on an assignment's setup
+ * "How cadets do this work": the cards on an assignment's setup
  * ════════════════════════════════════════════════════════════════════════════ */
 
 /**
  * The cards are a plain way to set three things the form already had: the delivery, its grading, and whether a tutor sits
- * beside a typed response. They write the same form fields as before, so a save writes the same data for the same choice.
- *   questions  the work is answered questions (on the site, or typed): no tutor
- *   tutor      the work is the interactive tutor alone
- *   both       a typed response with the tutor beside it; the cadet picks (the policy below says what earns credit)
- * Nothing here reads a kind to decide what is allowed. A kind only sets which delivery the Questions card starts on.
+ * beside a typed response. Each card is one exact setting of those three, so a save writes the same data for the same card.
+ *
+ * WHICH SET OF CARDS A KIND GETS comes from the kind's own `default_delivery`, a column of the kinds table, and never from the
+ * kind's id: a kind whose default is a typed response or the tutor gets the typed-work cards, every other kind gets the others.
+ * (Today that is the preflight and the case study for the first set. The database says so; nothing here names either.)
+ *
+ * A card is OFF (grayed, with a reason) when it needs something the kind does not have: Auto-graded questions needs a kind
+ * whose default delivery is questions answered on the site. A card is never off while it is the setting an assignment
+ * already has: a saved assignment shows its real setting, selected and usable, and only a click changes it.
  */
-export const SETUP_MODES = ['questions', 'tutor', 'both'];
+export const CARD_SETS = {
+  typed: [
+    { id: 'ai', delivery: 'typed_response', grading: 'ai_drafted', withTutor: false, icon: '&#9998;',
+      title: 'AI-graded questions', meta: 'Typed answers, marked by AI', body: 'Cadets answer in writing. The AI drafts the marks overnight and you review them.' },
+    { id: 'human', delivery: 'typed_response', grading: 'human_graded', withTutor: false, icon: '&#9998;',
+      title: 'Instructor-graded questions', meta: 'Typed answers, marked by you', body: 'Cadets answer in writing and an instructor marks each answer.' },
+    { id: 'tutor', delivery: 'interactive_tutor', grading: 'effort', withTutor: false, icon: '&#9889;',
+      title: 'Interactive tutor', meta: 'Guided conversation', body: 'Cadets work through the material with an AI tutor.' },
+    { id: 'both', delivery: 'typed_response', grading: 'ai_drafted', withTutor: true, icon: '&#8644;',
+      title: 'Both (cadets choose)', meta: 'AI tutor or AI-graded questions', body: 'Each cadet picks the one they prefer.' },
+  ],
+  other: [
+    { id: 'class', delivery: 'in_person', grading: 'hand_entered', withTutor: false, icon: '&#127979;',
+      title: 'In class', meta: 'Done in person', body: 'Cadets do it in the room. Staff type in the scores.' },
+    { id: 'auto', delivery: 'online_questions', grading: 'auto_checked', withTutor: false, icon: '&#9998;',
+      onlyForDelivery: 'online_questions', offReason: 'Only homework is answered on the site.',
+      title: 'Auto-graded questions', meta: 'Answered on the site', body: 'Cadets answer on the site and it is marked for them.' },
+    // A decided option (director's call, 2026-11-09): quizzes, labs and group projects default to work done in another system, and the
+    // score-import tools need that setting. It is one object, so it is also one edit to remove.
+    { id: 'elsewhere', delivery: 'elsewhere', grading: 'imported', withTutor: false, icon: '&#8599;',
+      title: 'Done elsewhere', meta: 'Scores imported', body: 'Done in another system, such as WebAssign or Gradescope. You import the scores.' },
+  ],
+};
 
-/** Deliveries the cards describe. In person and done elsewhere are not questions or a tutor, so no card applies. */
-export const cardsApply = (delivery) => ['online_questions', 'typed_response', 'interactive_tutor'].includes(delivery);
+/** The longer explanation of each set, shown behind the information control beside the heading (never inside a card). */
+export const CHOOSER_HELP = {
+  typed: 'AI-graded questions: cadets write their answers and the AI drafts the marks overnight; a person reviews every draft before it counts. '
+    + 'Instructor-graded questions: the same typed answers, marked by hand. Interactive tutor: cadets talk it through with the AI tutor and are graded on effort. '
+    + 'Both: each cadet chooses the tutor or the AI-graded questions.',
+  other: 'In class: done in person, and staff type in the scores. Auto-graded questions: answered on the site and marked automatically, which only homework does. '
+    + 'Done elsewhere: done in another system, and you import the scores.',
+};
 
-/** The card an item starts on: two paths is Both, a lone tutor is Tutor, anything else is Questions. */
+/** Which set a kind gets, from the kind's own default delivery. */
+export const chooserFor = (kind) => ['typed_response', 'interactive_tutor'].includes(kind?.default_delivery) ? 'typed' : 'other';
+export const cardsFor = (kind) => CARD_SETS[chooserFor(kind)];
+
+/** Whether the kind itself offers a card. Whether the card is usable also depends on whether an assignment already has it. */
+export const cardOffered = (card, kind) => !card.onlyForDelivery || kind?.default_delivery === card.onlyForDelivery;
+
+/** The id of the card that is exactly this setting, or null when none is (an older or unusual setting). */
+export function cardOf(kind, { delivery, grading, withTutor }) {
+  const two = !!withTutor && delivery === 'typed_response';
+  return cardsFor(kind).find(c => c.delivery === delivery && c.grading === grading && c.withTutor === two)?.id || null;
+}
+
+/** Why a saved assignment cannot move to or from auto-graded questions. The rule itself is in updateItem, and stays the backstop. */
+export const SWITCH_LOCK_REASON = 'A saved assignment cannot switch to or from auto-graded questions. Make a new assignment instead.';
+
+/**
+ * True when choosing this card on a SAVED assignment with these paths would be refused at Save because it begins or ends on
+ * auto-graded questions with a different kind of delivery (the same test updateItem applies). A new assignment is never locked.
+ * An assignment holding a typed response and a tutor cannot take auto-graded questions either (it must drop the tutor first).
+ */
+export function switchLocked(paths, card) {
+  const shape = pathShape(paths);
+  if (shape.kind === 'choice') return card.grading === 'auto_checked';
+  if (shape.kind !== 'single') return false;
+  const s = shape.main;
+  if (s.delivery === card.delivery && s.grading === card.grading) return false;
+  if (DELIVERY_MODALITY[card.delivery] === s.modality) return false;
+  return s.grading === 'auto_checked' || card.grading === 'auto_checked';
+}
+
+/**
+ * The setting a prefill link puts on a NEW form when it carries a tutor. A link that asks for the tutor alone (its policy is
+ * the interaction-only one) selects the Interactive tutor card; any other link with a tutor selects Both (AI-graded typed side
+ * plus the tutor). A link with no tutor changes nothing here. A saved assignment is never given a setting this way.
+ */
+export function settingForLink(link) {
+  if (!link?.withTutor) return null;
+  const id = link.policy === 'tutor' ? 'tutor' : 'both';
+  return applyCard(CARD_SETS.typed.find(c => c.id === id));
+}
+
+/**
+ * What is still missing when the typed side is graded by AI drafts: each graded free-response question needs a description of
+ * a good answer. Empty when nothing is missing or the setting is not AI-graded. Saving is not refused for it; the director is told.
+ */
+export function aiGuidanceGap(setting, editor) {
+  if (!setting || setting.delivery !== 'typed_response' || setting.grading !== 'ai_drafted' || !editor) return '';
+  const n = missingGuidance(editor).length;
+  if (!n) return '';
+  return `AI-graded questions need a description of a good answer on each question worth points, because the AI draft is checked against it. ${n === 1 ? '1 question has' : `${n} questions have`} none yet. Add them in the questions box below.`;
+}
+
+/** What choosing a card sets: { delivery, grading, withTutor }. */
+export const applyCard = (card) => ({ delivery: card.delivery, grading: card.grading, withTutor: card.withTutor });
+
+/** The card a NEW assignment of this kind starts on: the one that is the kind's own prefill when it is offered, else the first offered. */
+export function defaultCardFor(kind) {
+  const cards = cardsFor(kind).filter(c => cardOffered(c, kind));
+  const p = prefillFromKind(kind);
+  return cards.find(c => c.delivery === p.delivery && c.grading === p.grading && !c.withTutor) || cards[0];
+}
+
+/** A plain description of a setting that is not one of the cards. */
+export function settingText({ delivery, grading, withTutor }) {
+  const two = !!withTutor && delivery === 'typed_response';
+  return `${DELIVERY_LABEL[delivery] || delivery}, ${(GRADING_LABEL[grading] || grading || '').toLowerCase()}${two ? ', with the interactive tutor beside it' : ''}`;
+}
+
+/**
+ * What the chooser shows for a kind and a setting. `saved` is true for an assignment that already exists.
+ *   cards    each card of the kind's set with `selected` and `usable`
+ *   current  null, or { text } when the setting is none of the cards (shown as one more selected card)
+ *   older    true when a SAVED assignment holds a setting its kind's chooser would not offer
+ */
+export function chooserState(kind, setting, saved = false, paths = null) {
+  const selectedId = cardOf(kind, setting);
+  const cards = cardsFor(kind).map(c => {
+    const selected = c.id === selectedId;
+    // A saved assignment cannot change to or from auto-graded questions (updateItem refuses it at Save), so say so on the card.
+    const locked = !!saved && !selected && !!paths && switchLocked(paths, c);
+    return { ...c, selected, locked, usable: !locked && (cardOffered(c, kind) || selected), ...(locked ? { offReason: SWITCH_LOCK_REASON } : {}) };
+  });
+  const sel = cards.find(c => c.selected);
+  return {
+    cards,
+    current: selectedId ? null : { text: settingText(setting) },
+    older: !!saved && (!selectedId || !cardOffered(sel, kind)),
+  };
+}
+
+/** The card an item starts on: two paths is Both, a lone tutor is Tutor, anything else is Questions. (The form's tutor flag.) */
 export function modeOfShape(shape) {
   if (shape?.kind === 'choice') return 'both';
   if (shape?.kind === 'single' && shape.main.modality === 'interactive') return 'tutor';
   return 'questions';
 }
 
-/** The card a delivery implies after the delivery box itself is changed. Both survives only on a typed response. */
+/** The tutor flag a delivery implies after the delivery box itself is changed. Both survives only on a typed response. */
 export function modeFromDelivery(delivery, previous = 'questions') {
   if (delivery === 'interactive_tutor') return 'tutor';
   return delivery === 'typed_response' && previous === 'both' ? 'both' : 'questions';
 }
 
-/**
- * What choosing a card sets: { delivery, grading, withTutor }. `current` is the form's present delivery and grading;
- * `kindPrefill` is prefillFromKind(kind) (or null). A choice that keeps the present delivery keeps its grading too.
- */
-export function applyMode(mode, current, kindPrefill = null) {
-  const d = current.delivery;
-  const fresh = (delivery) => ({ delivery, grading: gradingsFor(delivery)[0] });
-  if (mode === 'tutor') {
-    return d === 'interactive_tutor' ? { delivery: d, grading: current.grading, withTutor: false } : { ...fresh('interactive_tutor'), withTutor: false };
-  }
-  if (mode === 'both') {
-    return d === 'typed_response' ? { delivery: d, grading: current.grading, withTutor: true } : { ...fresh('typed_response'), withTutor: true };
-  }
-  if (d !== 'interactive_tutor') return { delivery: d, grading: current.grading, withTutor: false };
-  const kd = kindPrefill?.delivery;
-  if (kd === 'online_questions' || kd === 'typed_response') return { delivery: kd, grading: kindPrefill.grading, withTutor: false };
-  return { ...fresh('typed_response'), withTutor: false };
-}
+/** The page's tutor flag for a setting: 'both', 'tutor' or 'questions'. */
+export const modeOfSetting = ({ delivery, withTutor }) => withTutor && delivery === 'typed_response' ? 'both' : delivery === 'interactive_tutor' ? 'tutor' : 'questions';
 
 /* ══════════════════════════════════════════════════════════════════════════════
  * When cadets can see it (the release window), in Mountain time
@@ -618,6 +725,7 @@ export const emptyForm = (kind, sections) => ({
   interactiveUrl: '',
   interactiveTitle: '',
   interactiveDesc: '',
+  objectives: null,            // [{key,label}] from a tutor setup file; null leaves the assignment's objectives alone
   withTutor: false,            // also offer an interactive tutor beside a typed response
   policy: 'choice',            // who earns credit when there are two paths (POLICIES)
   switchPolicy: 'lock_on_commit',
@@ -751,7 +859,7 @@ export function checkForm(form, { kinds = [], sections = [], slugFrozen = false,
  * between tracks or sections. Pure.
  *
  * @param {object|null} item     the saved assignment, or null for a new one (a new form is closed)
- * @param {object} ctx           { prefill: prefillFromKind(its kind), sections, sched: scheduleToForm(...) }
+ * @param {object} ctx           { prefill: prefillFromKind(its kind), kind: its kind row (optional; the cards then show delivery and grading), sections, sched: scheduleToForm(...) }
  */
 /** Whether a stored typed-response set holds a value in the reading fields, or has a standard question turned off.
  *  A value that is set is never hidden, and a switch that is off is a setting too. */
@@ -762,7 +870,7 @@ function typedFieldsSet(content) {
   return !(roles.has('reading_time') && roles.has('reading_reflection'));
 }
 
-export function needsMoreOptions(item, { prefill = null, sections = [], sched = null } = {}) {
+export function needsMoreOptions(item, { prefill = null, kind = null, sections = [], sched = null } = {}) {
   if (!item) return false;
   if (String(item.description || '').trim()) return true;
   if (item.lateAllowed === false || item.isBonus || item.progIncluded) return true;
@@ -774,7 +882,8 @@ export function needsMoreOptions(item, { prefill = null, sections = [], sched = 
   if (item.position != null || item.opensAt) return true;   // an assignment number or a fixed opening date lives in there
   const p = paths.find(x => x.modality !== 'interactive');   // the typed side; a tutor alone has none
   if (p && p.delivery === 'typed_response' && p.modality === 'written' && typedFieldsSet(p.content)) return true;   // reading fields, or a switch turned off
-  if (p && prefill && (p.delivery !== prefill.delivery || p.grading !== prefill.grading)) return true;
+  // With the kind known, the cards show the setting (a setting that is none of them is named there), so it does not open this.
+  if (!kind && p && prefill && (p.delivery !== prefill.delivery || p.grading !== prefill.grading)) return true;
   if (sched) {
     if (sched.time && sched.time !== DEFAULT_TIME) return true;
     if (Object.values(sched.sectionDates || {}).some(Boolean)) return true;
@@ -859,6 +968,19 @@ export function describeDates(row, sections = []) {
   return `${list.length} dates${some}, ${fmtDue(new Date(list[0]).toISOString())} to ${fmtDue(new Date(list[list.length - 1]).toISOString())}`;
 }
 
+/**
+ * The (delivery, grading) a path has. A path made before those two columns existed may still hold nothing in them; the
+ * database fills them from the kind of activity on the first write (migration 027), and this does the same for reading, so
+ * an item made on the older page opens exactly as one made here: a written path is a typed response graded by a person, an
+ * interactive path is the tutor graded by effort. A path that holds a pair keeps it.
+ */
+export function effectivePair(modality, delivery, grading) {
+  if (delivery && grading) return { delivery, grading };
+  if (modality === 'written') return { delivery: 'typed_response', grading: 'human_graded' };
+  if (modality === 'interactive') return { delivery: 'interactive_tutor', grading: 'effort' };
+  return { delivery: delivery || null, grading: grading || null };
+}
+
 export function shapeItem(r, kinds = [], sections = []) {
   const kind = kinds.find(k => k.id === r.assignments?.kind_id);
   const paths = [...(r.offering_activities || [])].sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
@@ -884,15 +1006,17 @@ export function shapeItem(r, kinds = [], sections = []) {
     opensAt: r.opens_at || null,
     switchPolicy: r.switch_policy || 'lock_on_commit',
     paths: paths.map(p => ({
-      delivery: p.delivery, grading: p.grading, role: p.grading_role,
+      ...effectivePair(p.activities?.modality, p.delivery, p.grading), role: p.grading_role,
       modality: p.activities?.modality, activityId: p.activities?.id, slug: p.activities?.slug,
       title: p.activities?.title || '', order: p.position ?? 0,
       availableAfter: p.available_after || 'always', isVisible: p.is_visible !== false,
       content: p.activities?.content || {},
     })),
     tutorSlug: (paths.find(p => p.activities?.modality === 'interactive')?.activities?.slug) || null,
-    deliveryText: paths.map(p => DELIVERY_LABEL[p.delivery] || p.delivery || p.activities?.modality || '').join(' / '),
-    gradingText: paths.map(p => GRADING_LABEL[p.grading] || p.grading || '').join(' / '),
+    deliveryText: paths.map(p => { const e = effectivePair(p.activities?.modality, p.delivery, p.grading);
+      return DELIVERY_LABEL[e.delivery] || e.delivery || p.activities?.modality || ''; }).join(' / '),
+    gradingText: paths.map(p => { const e = effectivePair(p.activities?.modality, p.delivery, p.grading);
+      return GRADING_LABEL[e.grading] || e.grading || ''; }).join(' / '),
     dueText: describeDates(r, sections),
     firstDue: dues.length ? Math.min(...dues) : null,
     dueRows: r.assignment_due_dates || [],
@@ -912,15 +1036,17 @@ const attemptLimitOf = (form) => {
   return s === '' ? null : Number(s);
 };
 
-const offeringColumns = (form, sched, pointsOwned, { position = true } = {}) => ({
+const offeringColumns = (form, sched, pointsOwned, { position = true, dates = true, opens = true } = {}) => ({
   ...(form.grading === 'auto_checked' ? { attempt_limit: attemptLimitOf(form) } : {}),
   ...(pointsOwned ? {} : { points_possible: Number(form.points) }),
-  due_at: sched.dueAt,
-  due_by_day: sched.dueByDay,
+  // The deadline columns are written only when the dates on the form differ from the dates the form was opened with.
+  // An item made on the older page may hold a deadline the form cannot show exactly (a different time on each track, say),
+  // and a save that did not touch the dates must not rewrite them.
+  ...(dates ? { due_at: sched.dueAt, due_by_day: sched.dueByDay } : {}),
   late_allowed: !!form.lateAllowed,
   is_bonus: !!form.isBonus,
   prog_included: !!form.progIncluded,
-  opens_at: opensAtFor(form),
+  ...(opens ? { opens_at: opensAtFor(form) } : {}),
   ...(position ? { position: positionFor(form) } : {}),
   // The rule for a cadet who has committed only means something when there are two paths to choose between.
   ...(wantsTwoPaths(form) && (form.policy || 'choice') === 'choice' ? { switch_policy: form.switchPolicy || 'lock_on_commit' } : {}),
@@ -995,7 +1121,8 @@ export async function createItem(db, ctx, form) {
 
   let r = await db.from('assignments').insert({
     course_id: ctx.courseId, kind_id: form.kindId, slug: slugged.slug,
-    title: String(form.title).trim(), description: String(form.description || '').trim() || null, objectives: [],
+    title: String(form.title).trim(), description: String(form.description || '').trim() || null,
+    objectives: Array.isArray(form.objectives) ? form.objectives : [],
   }).select('id').single();
   if (r.error) return { error: r.error };
   made.assignmentId = r.data.id;
@@ -1134,6 +1261,40 @@ export function earlierSections(item, sched, sections = []) {
   return out;
 }
 
+/** One stable text for a schedule, so two can be compared. */
+const scheduleKey = (s) => JSON.stringify({
+  dueAt: s?.dueAt || null,
+  dueByDay: Object.fromEntries(Object.entries(s?.dueByDay || {}).sort()),
+  rows: (s?.rows || []).map(r => [r.section_id, r.due_at]).sort(),
+});
+
+/**
+ * True when the dates on the form are the dates the form shows for this item as saved. Then the save leaves the three stored
+ * date places (due_at, due_by_day and the per-section rows) exactly as they are. The form reads a stored deadline back as a date
+ * and one time, so an item whose tracks were saved at different times, or whose seconds are not :59, would be rewritten by a
+ * save that changed nothing. Pure.
+ */
+export function datesUnchanged(item, form, sections = []) {
+  const shown = scheduleToForm({ due_at: item.dueAt, due_by_day: item.dueByDay }, item.dueRows, sections);
+  return scheduleKey(buildSchedule(form, sections, item.offeringId)) === scheduleKey(buildSchedule(shown, sections, item.offeringId));
+}
+
+/** True when the opening date on the form is the one the form shows for this item as saved (the standard window is empty). Pure. */
+export function opensUnchanged(item, form) {
+  const was = releaseFromOpensAt(item.opensAt);
+  const wasDate = was.mode === 'custom' ? was.date : '';
+  const nowDate = form.opensDate || '';
+  if (!wasDate && !nowDate) return true;
+  return wasDate === nowDate && (was.time || '00:00') === (form.opensTime || '00:00');
+}
+
+/**
+ * The text of the content a question set would store, for telling whether the person changed it. The page takes this when the
+ * form opens and again at save; if the two match, the stored questions are not rewritten. A save that rewrote them would stamp
+ * roles and trim fields on a set the person never touched.
+ */
+export const contentSnapshot = (editor) => JSON.stringify(contentFromEditor(editor, { keepKeys: false }));
+
 /**
  * Of the active cadets in the given sections, how many have committed this assignment and how many have not.
  * @returns {Promise<{ error?: object, submitted: number, notSubmitted: number }>}
@@ -1215,7 +1376,7 @@ export const KEYS_SECOND_CONFIRM =
   'This deletes answer keys, which are versioned history and cannot be recovered. Are you sure you want to delete them?';
 
 /**
- * Save changes to an item entered on this page. Refuses an item the older page owns.
+ * Save changes to an item, whichever page entered it. Fields the form did not change are left as stored (dates, opening date, questions, tutor).
  * The kind, title, description, points, dates and flags always save. Delivery and grading save when
  * the item has exactly one path; with more, the form leaves them alone.
  *
@@ -1246,9 +1407,7 @@ export async function updateItem(db, ctx, item, form, ack = null) {
     .select(`id,updated_at,${NEW_PAGE_COLUMN}`).eq('id', item.offeringId).maybeSingle();
   if (fresh.error) return { error: fresh.error };
   if (!fresh.data) return { error: { message: 'This assignment no longer exists. Reload the page.' } };
-  if (fresh.data[NEW_PAGE_COLUMN] !== true) {
-    return { error: { message: 'This assignment was entered on the older page. Edit it there. Nothing was changed.' } };
-  }
+  // Either page may have made the item; the marker says which, and no longer decides whether it can be edited here.
   if (item.updatedAt && fresh.data.updated_at !== item.updatedAt) return { error: CHANGED_ERROR };
 
   // ---- decide the path step, and refuse or ask, before anything is written ----
@@ -1389,7 +1548,9 @@ export async function updateItem(db, ctx, item, form, ack = null) {
 
   // A deadline moved earlier, or an unpublish, on an item that already has cadet work is a person's decision: ask, with the
   // counts. Confirming always lets the save through; nothing here blocks.
-  const earlier = earlierSections(item, sched, ctx.sections);
+  const datesSame = datesUnchanged(item, form, ctx.sections);
+  const opensSame = opensUnchanged(item, form);
+  const earlier = datesSame ? [] : earlierSections(item, sched, ctx.sections);
   const unpublishing = form.publish === false && item.isPublished === true;
   if (attemptLimitLowers(item, form)) {
     const lim = attemptLimitOf(form);
@@ -1413,7 +1574,7 @@ export async function updateItem(db, ctx, item, form, ack = null) {
   const o = await db.from('assignment_offerings')
     // The assignment number is written only when the person changed it: an item's number may also have been set by a term
     // build, and a save that did not touch it must not rewrite it.
-    .update(offeringColumns(form, sched, owned || ownershipMoves, { position: String(form.lessonNumber ?? '') !== String(item.position ?? '') }))
+    .update(offeringColumns(form, sched, owned || ownershipMoves, { position: String(form.lessonNumber ?? '') !== String(item.position ?? ''), dates: !datesSame, opens: !opensSame }))
     .eq('id', item.offeringId).eq('updated_at', fresh.data.updated_at).select('id');
   if (o.error) return { error: o.error };
   if (!o.data || o.data.length !== 1) {
@@ -1430,10 +1591,13 @@ export async function updateItem(db, ctx, item, form, ack = null) {
     partial: 'The points, dates and flags were already saved; the rest of this save was not. Reload the page to see the assignment as it is.',
   });
 
-  const a = await db.from('assignments').update({
-    kind_id: form.kindId, title: String(form.title).trim(), description: String(form.description || '').trim() || null,
-  }).eq('id', item.assignmentId);
-  if (a.error) return partial(a.error);
+  const aRow = { kind_id: form.kindId, title: String(form.title).trim(), description: String(form.description || '').trim() || null };
+  // The objectives a tutor setup file carried. Only a form that was given some writes them; every other save leaves the column alone.
+  if (Array.isArray(form.objectives) && form.objectives.length) aRow.objectives = form.objectives;
+  if (aRow.kind_id !== item.kindId || aRow.title !== item.title || aRow.description !== (item.description || null) || aRow.objectives) {
+    const a = await db.from('assignments').update(aRow).eq('id', item.assignmentId);
+    if (a.error) return partial(a.error);
+  }
   let rescored = 0;      // grades rewritten because a question's points changed (the page says so)
 
   /** Save a typed path's questions and rewrite the grades a changed question value touches. Returns an error or null. */
@@ -1442,6 +1606,13 @@ export async function updateItem(db, ctx, item, form, ack = null) {
     // does the same; faculty-lessons.js, ANSWER KEYS).
     const content = contentFromEditor(form.freeResponse, { keepKeys: false });
     const prevQs = path.content?.questions || [];
+    // A set the person did not touch is not rewritten: only the activity's title follows the assignment's, if that changed.
+    if (form.freeResponse.baseline && form.freeResponse.baseline === contentSnapshot(form.freeResponse)) {
+      const t = String(form.title).trim();
+      if ((path.title || '') === t) return null;
+      const r = await db.from('activities').update({ title: t }).eq('id', path.activityId);
+      return r.error || null;
+    }
     const u = await db.from('activities').update({ title: String(form.title).trim(), content }).eq('id', path.activityId);
     if (u.error) return u.error;
     if (pointsChanged(prevQs, content.questions)) {
@@ -1554,8 +1725,10 @@ export async function updateItem(db, ctx, item, form, ack = null) {
     }
   }
 
-  const err = await replaceDueRows(db, item.offeringId, sched.rows);
-  if (err) return partial(err);
+  if (!datesSame) {
+    const err = await replaceDueRows(db, item.offeringId, sched.rows);
+    if (err) return partial(err);
+  }
   if (typeof form.publish === 'boolean' && form.publish !== (item.isPublished === true)) {
     const pubErr = await publishStep(db, item.offeringId, form.publish);
     if (pubErr) return { error: null, offeringId: item.offeringId, assignmentId: item.assignmentId, rescored, publishError: pubErr };
@@ -1667,6 +1840,8 @@ async function updateTutorInPlace(db, item, form, cur) {
   }
   const patch = { title: tutorTitleFrom(form), content };
   const wantSlug = String(form.interactiveSlug || '').trim();
+  const stable = (o) => JSON.stringify(Object.fromEntries(Object.entries(o || {}).sort()));
+  if (!(wantSlug && wantSlug !== cur.slug) && patch.title === (cur.title || '') && stable(content) === stable(cur.content)) return null;
   if (wantSlug && wantSlug !== cur.slug) {
     // A tutor id is the address the lesson posts to. It can still be corrected while no link has been saved and no
     // student has used it (a copy made by a rollover starts like that, with an id nobody has built a lesson for).
@@ -1833,19 +2008,16 @@ export function pointsChangeWarning(title, impact) {
  * @returns {Promise<{ error?: object, refused?: boolean, impact?: { questions: number, keys: number }, assignmentId?: string }>}
  *   `impact` counts the questions and key versions that would go: none when another offering shares the item.
  */
-export async function previewRemoval(db, offeringId) {
+export async function previewRemoval(db, offeringId, { withWork = false } = {}) {
   const fresh = await db.from('assignment_offerings')
     .select(`id,assignment_id,${NEW_PAGE_COLUMN}`).eq('id', offeringId).maybeSingle();
   if (fresh.error) return { error: fresh.error, refused: false };
   if (!fresh.data) return { error: { message: 'This assignment no longer exists. Reload the page.' }, refused: true };
-  if (fresh.data[NEW_PAGE_COLUMN] !== true) {
-    return { error: { message: 'This assignment was entered on the older page. Remove it there. Nothing was changed.' }, refused: true };
-  }
   const w = await countWork(db, offeringId);
   if (w.error) {
     return { error: { message: 'Could not check whether students have work on this assignment, so it was not removed.' }, refused: true };
   }
-  if (w.submissions || w.grades) {
+  if ((w.submissions || w.grades) && !withWork) {
     const parts = [];
     if (w.submissions) parts.push(`${w.submissions} submission${w.submissions === 1 ? '' : 's'}`);
     if (w.grades) parts.push(`${w.grades} grade${w.grades === 1 ? '' : 's'}`);
@@ -1863,18 +2035,52 @@ export async function previewRemoval(db, offeringId) {
     if (c.error) return { error: { message: 'Could not count the questions on this assignment, so it was not removed.' }, refused: true };
     impact = { questions: c.questions, keys: c.keys };
   }
-  return { error: null, impact, assignmentId: fresh.data.assignment_id, shared: (others.data || []).length > 0 };
+  // Tutor reports hang off the submissions, so they go with them. Counted only when there are submissions, and a count
+  // that fails is never read as zero: it blocks the removal.
+  const rep = await countReportsOf(db, offeringId, w.submissions);
+  if (rep.error) return { error: { message: COUNT_FAILED_MESSAGE }, refused: true };
+  return { error: null, impact, assignmentId: fresh.data.assignment_id, shared: (others.data || []).length > 0,
+           work: { submissions: w.submissions, grades: w.grades, reports: rep.reports } };
+}
+
+export const COUNT_FAILED_MESSAGE = 'Could not count the work on this assignment. Nothing was deleted.';
+
+/** How many tutor reports (submission_activities rows) belong to this offering's submissions. */
+async function countReportsOf(db, offeringId, submissions) {
+  if (!submissions) return { error: null, reports: 0 };
+  const ids = [];
+  for (let from = 0; ; from += 1000) {
+    const r = await db.from('submissions').select('id').eq('assignment_offering_id', offeringId).order('id').range(from, from + 999);
+    if (r.error) return { error: r.error, reports: 0 };
+    ids.push(...(r.data || []).map(x => x.id));
+    if ((r.data || []).length < 1000) break;
+  }
+  let reports = 0;
+  for (const part of chunks(ids, 100)) {
+    const r = await db.from('submission_activities').select('*', { count: 'exact', head: true }).in('submission_id', part);
+    if (r.error) return { error: r.error, reports: 0 };
+    reports += r.count || 0;
+  }
+  return { error: null, reports };
 }
 
 /**
- * Remove an item that has no submissions and no grades. Anything else is refused with the counts.
- * An item the older page owns is refused too. If the removal would delete questions or answer keys, nothing is
+ * Remove an item that has no submissions and no grades. Anything else is refused with the counts, unless the caller passes
+ * `{ withWork: true }`, which the page does only behind a held button after showing those counts (the work goes with it).
+ * With `withWork`, `shown` must be the submission, grade and tutor-report counts the person was shown. They are counted again
+ * right before the delete, and if any differs (a cadet submitted, a grade was written) nothing is deleted and
+ * `{ needsWorkConfirm, impact }` comes back with the new numbers, for the dialog to show again.
+ * If the removal would delete questions or answer keys, nothing is
  * deleted unless `ack` states exactly those numbers (and `keysConfirmed` when keys are among them): otherwise
  * `{ needsConfirm }` comes back with the numbers as they are now.
  */
-export async function removeItem(db, offeringId, ack = null) {
-  const pre = await previewRemoval(db, offeringId);
+export async function removeItem(db, offeringId, ack = null, { withWork = false, shown = null } = {}) {
+  const pre = await previewRemoval(db, offeringId, { withWork });
   if (pre.error) return { error: pre.error, refused: pre.refused };
+  if (withWork && (pre.work.submissions || pre.work.grades || pre.work.reports)) {
+    const same = !!shown && shown.submissions === pre.work.submissions && shown.grades === pre.work.grades && shown.reports === pre.work.reports;
+    if (!same) return { error: null, refused: false, needsWorkConfirm: pre.work, impact: pre.impact };
+  }
   if ((pre.impact.questions || pre.impact.keys) && !ackCovers(ack, pre.impact)) {
     return { error: null, refused: false, needsConfirm: pre.impact };
   }

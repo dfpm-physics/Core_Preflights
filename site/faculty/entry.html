@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8=' 'sha256-XXAQAbd8yqANpbB6VwrpVFevMMAPVgtPcHdQnsUeDbg='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8=' 'sha256-teD4SWNpuE7eh8Vr/ShSd3ns9tLK2XbdSNAzsC70Tzs='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Grade assignments · PREP</title>
   <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
@@ -21,7 +21,7 @@
     import { renderNav } from '../js/nav.js';
     import { initTheme } from '../js/theme.js';
     import { db } from '../js/supabase.js';
-    import { esc, runPage, lastFirst, fmtDateTime } from '../js/util.js';
+    import { esc, runPage, lastFirst, fmtDateTime, infoHTML } from '../js/util.js';
     import * as P from '../js/faculty-entry-parse.js';
     import * as E from '../js/faculty-entry.js';
 
@@ -62,7 +62,7 @@
     }
 
     const head = (extra = '') => `<div class="page-head"><div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:10px">
-      <div><h1>Grade assignments</h1><div class="sub">${itemId && item() ? `Type or import scores for ${esc(item().title)}, in ${esc(ctx.courseTitleOf(ctx.currentOffering) || '')}.`
+      <div><h1>Grade assignments${infoHTML('Scores typed in by staff or imported open a table here, where you can type them or drop in a file. Work that a person reads answer by answer opens the Grade page.', 'About this page')}</h1><div class="sub">${itemId && item() ? `Type or import scores for ${esc(item().title)}, in ${esc(ctx.courseTitleOf(ctx.currentOffering) || '')}.`
         : `Pick an assignment that still needs grading, in ${esc(ctx.courseTitleOf(ctx.currentOffering) || '')}.`}</div></div>${extra}</div></div>`;
 
     // Which assignment is open is kept in the address (?i=), so a reload or a shared link lands on the same table.
@@ -120,7 +120,6 @@
       $('main').innerHTML = head() + `
         ${note ? `<div class="alert alert-${note.kind}" id="note">${esc(note.text)}</div>` : ''}
         ${listError ? `<div class="alert alert-error">Could not load the list of assignments: ${esc(listError)}<div style="margin-top:8px"><button class="btn btn-ghost btn-sm" id="list-retry">Try again</button></div></div>` : ''}
-        <div class="field-hint" style="margin-bottom:10px">Scores typed in by staff or imported open a table here, where you can type them or drop in a file. Work that a person reads answer by answer opens the Grade page.</div>
         ${listError ? '' : `<label class="check-inline" style="margin-bottom:10px"><input type="checkbox" id="show-finished"${showFinished ? ' checked' : ''}> <span>Also show assignments with nothing waiting</span></label>`}
         ${table}`;
       document.querySelectorAll('[data-open]').forEach(b => b.onclick = () => { setItem(b.dataset.open); render(); });

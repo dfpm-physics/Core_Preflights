@@ -34,11 +34,13 @@
 // would be worse than what was there before, not better.
 
 import { loadFacultyDashboard } from './faculty-data.js';
-import { summarizeReports } from './faculty-rollup.js';
-import { loadTasks, renderTasks } from './faculty-tasks.js';
+import { summarizeReports, loadManager, reportPickerRows, recentReportRows } from './faculty-rollup.js';
+import { loadBacklog, groupBacklog, backlogSummary } from './faculty-backlog.js';
+import { db } from './supabase.js';
+import { loadTasks, renderTasks, renderTasksError, failedSources } from './faculty-tasks.js';
 import { actionableSections, titleTopic, dueDayDates } from './schema.js';
 import { loadEiForSections, summarizeEi, renderEiPanel } from './faculty-ei.js';
-import { esc, iconHTML, fmtDate } from './util.js';
+import { esc, iconHTML, fmtDate, infoHTML } from './util.js';
 
 let CTX = null, ROOT = null, MODEL = null;
 // STATE.scope is 'all', 'mine', or a section uuid. The uuid case is P1.7: the control could
@@ -51,6 +53,12 @@ let TASKS = null;
 // query is in flight, `{ stats, nameOf }` once it lands. It renders nothing when nothing has been
 // logged, which is most instructors in week one — see renderEiPanel().
 let EI = null;
+// The Backlog and Recent reports sections follow the same late-arriving contract, with three states each and
+// never two merged: null while the read is in flight, { error } when it failed (shown as an error with a retry,
+// never as "nothing waiting"), and the data once it landed. They are read with the loaders the Backlog page
+// and the Reports page already use, so no total is computed here.
+let BACKLOG = null;
+let REPORTS = null;
 // Bumped on every mount. The task load is async and ctx is the SAME OBJECT across a course
 // switch, so an identity check on ctx/root cannot tell a stale response from a current one — a
 // slow phys-110 load would paint its boxes over phys-215. The generation can.
@@ -68,20 +76,19 @@ export async function mountDashboard(ctx, root) {
   STATE.metric = 'completion';
   STATE.viewLesson = MODEL.activeId;
   TASKS = null;
+  TASKS_ERR = false;
   EI = null;
+  BACKLOG = null;
+  REPORTS = null;
   render();
   wireGlobalObservers();
 
   // Deliberately AFTER the first paint and not awaited into it. These are five extra round
   // trips; blocking the whole dashboard on them would make every page load as slow as the
   // slowest one, to show a panel that is empty most of the term.
-  loadTasks(ctx)
-    .catch(() => [])
-    .then(tasks => {
-      if (gen !== MOUNT_GEN) return;      // belongs to a course the reader has left
-      TASKS = tasks;
-      paintTasks();
-    });
+  runTasks(ctx, gen);
+  runBacklog(ctx, gen);
+  runReports(ctx, gen);
 
   // Same contract, same reasoning, separate failure: EI is a nice-to-have panel and its two
   // queries must not be able to cost the reader the due-out row, or vice versa.
@@ -119,7 +126,10 @@ export function renderModel(ctx, root, model, state = {}) {
   // Defaults to [] rather than null: this path never queries, so leaving it null would render
   // the loading skeleton forever in an offline preview. Pass state.tasks to exercise the panel.
   TASKS = state.tasks || [];
+  TASKS_ERR = !!state.tasksError;
   EI = state.ei || { stats: { total: 0 }, nameOf: () => '' };
+  BACKLOG = state.backlog !== undefined ? state.backlog : { summary: { piles: [], waiting: 0 } };
+  REPORTS = state.reports !== undefined ? state.reports : { rows: [] };
   render();
   wireGlobalObservers();
 }
@@ -233,7 +243,7 @@ function render() {
     ROOT.innerHTML = head(firstName, roleLabel) + `<div class="empty-state"><div class="es-ic">💡</div>
       <h3>No published assignments yet</h3><p>Once interactions are published for ${esc(MODEL.courseTitle)},
       this dashboard fills in with completion, effort, and misconception trends.
-      ${dir() ? '<a href="lessons.html">Manage assignments →</a>' : ''}</p></div>`;
+      ${dir() ? '<a href="items.html">Manage assignments →</a>' : ''}</p></div>`;
     return;
   }
 
@@ -256,6 +266,8 @@ function render() {
     statTiles(agg, ctx) +
     spotlight(agg, ctx) +
     `<div id="dashTasks">${tasksMarkup()}</div>` +
+    `<div id="dashBacklog">${backlogMarkup()}</div>` +
+    `<div id="dashReports">${reportsMarkup()}</div>` +
     yourSections() +
     // Below your sections, because it is a record of what you have done rather than something
     // waiting on you — the due-out row above owns that job and should not have to share the
@@ -269,7 +281,125 @@ function render() {
 /* The tasks panel is the one part of the dashboard that arrives late, so it owns a stable host
  * element and repaints into it. Re-rendering the whole dashboard when the queries land would
  * discard the reader's lesson navigation and scope pick for a panel above the fold. */
+/* A task list that FAILED to load is its own state. It was once collapsed to an empty list, which the
+ * panel renders as "Nothing outstanding", turning a failed request into reassurance. It now shows an
+ * error with a Retry, and the rest of the dashboard is untouched. */
+let TASKS_ERR = false;
+function runTasks(ctx, gen) {
+  return loadTasks(ctx)
+    .then(tasks => {
+      if (gen !== MOUNT_GEN) return;      // belongs to a course the reader has left
+      TASKS_ERR = !tasks.length && failedSources(tasks).length > 0;
+      TASKS = tasks;
+      paintTasks();
+    })
+    .catch(() => {
+      if (gen !== MOUNT_GEN) return;
+      TASKS_ERR = true; TASKS = [];
+      paintTasks();
+    });
+}
+function wireTasksRetry() {
+  const b = ROOT?.querySelector('[data-retry-tasks]');
+  if (!b) return;
+  b.onclick = () => { TASKS = null; TASKS_ERR = false; paintTasks(); runTasks(CTX, MOUNT_GEN); };
+}
+
+/* ── Backlog ─────────────────────────────────────────────────────────────────
+ * What is waiting on a person, from the same loader and the same piles as the Backlog page (backlog.html).
+ * The page keeps the full tables; this is the summary and the way in. */
+function runBacklog(ctx, gen) {
+  return loadBacklog(db, ctx.currentOffering)
+    .then(d => {
+      if (gen !== MOUNT_GEN) return;
+      BACKLOG = d.error ? { error: d.error } : { summary: backlogSummary(groupBacklog(d.cells)) };
+      if (d.error) console.error('[dashboard] backlog read failed', d.error);
+      paintBacklog();
+    })
+    .catch(err => {
+      if (gen !== MOUNT_GEN) return;
+      console.error('[dashboard] backlog read failed', err);
+      BACKLOG = { error: err }; paintBacklog();
+    });
+}
+function backlogMarkup() {
+  const head = (extra = '') => `<div class="section-head"><h2>Backlog</h2>${extra}<span class="grow"></span>
+      <a class="duo-link" href="backlog.html">Open backlog →</a></div>`;
+  if (BACKLOG === null) {
+    return `<section class="dash-section" data-backlog="loading">${head()}<div class="muted">Loading…</div></section>`;
+  }
+  if (BACKLOG.error) {
+    return `<section class="dash-section" data-backlog="error">${head()}
+      <div class="alert alert-error" role="alert">Couldn't load the backlog. Nothing here means the request failed, not that nothing is waiting.
+        <button type="button" class="btn btn-secondary btn-sm" data-retry-backlog style="margin-left:10px">Retry</button></div></section>`;
+  }
+  const s = BACKLOG.summary;
+  if (!s.waiting) {
+    return `<section class="dash-section" data-backlog="empty">${head()}
+      <div class="muted">Nothing is waiting. Every grade the database can judge is entered or not yet due.</div></section>`;
+  }
+  const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+  return `<section class="dash-section" data-backlog="ready">${head(`<span class="count-pill">${s.waiting}</span>`)}
+    <div class="table-wrap"><table class="dash-backlog"><thead><tr><th>What is waiting</th><th>Cadets</th><th>Assignments</th></tr></thead><tbody>
+      ${s.piles.map(p => `<tr title="${esc(p.hint)}"><td>${esc(p.title)}</td><td>${p.cadets}</td><td>${p.assignments}</td></tr>`).join('')}
+    </tbody></table></div>
+    <div class="field-hint">${plural(s.waiting, 'item')} across ${plural(s.piles.length, 'group')}.</div>
+  </section>`;
+}
+function paintBacklog() {
+  const host = ROOT?.querySelector('#dashBacklog');
+  if (host) host.innerHTML = backlogMarkup();
+  const b = ROOT?.querySelector('[data-retry-backlog]');
+  if (b) b.onclick = () => { BACKLOG = null; paintBacklog(); runBacklog(CTX, MOUNT_GEN); };
+}
+
+/* ── Recent reports ──────────────────────────────────────────────────────────
+ * The newest few assignments with a report, linking the way the Reports page does (report.html?i=<key>). The list
+ * is loadManager's, so who may see a report is unchanged: the database filters it. */
+function runReports(ctx, gen) {
+  return loadManager(ctx)
+    .then(vm => {
+      if (gen !== MOUNT_GEN) return;
+      REPORTS = { rows: recentReportRows(reportPickerRows(vm.interactions), new Date(), 5) };
+      paintReports();
+    })
+    .catch(err => {
+      if (gen !== MOUNT_GEN) return;
+      console.error('[dashboard] reports read failed', err);
+      REPORTS = { error: err }; paintReports();
+    });
+}
+function reportsMarkup() {
+  const head = `<div class="section-head"><h2>Recent reports</h2><span class="grow"></span>
+      <a class="duo-link" href="report.html">All reports →</a></div>`;
+  if (REPORTS === null) return `<section class="dash-section" data-reports="loading">${head}<div class="muted">Loading…</div></section>`;
+  if (REPORTS.error) {
+    return `<section class="dash-section" data-reports="error">${head}
+      <div class="alert alert-error" role="alert">Couldn't load the reports list. Nothing here means the request failed, not that there are no reports.
+        <button type="button" class="btn btn-secondary btn-sm" data-retry-reports style="margin-left:10px">Retry</button></div></section>`;
+  }
+  if (!REPORTS.rows.length) {
+    return `<section class="dash-section" data-reports="empty">${head}<div class="muted">No assignment has a report yet. One appears after its deadline, or once a cadet finishes it.</div></section>`;
+  }
+  return `<section class="dash-section" data-reports="ready">${head}
+    <div class="table-wrap"><table class="dash-reports"><thead><tr><th>Assignment</th><th>Due</th><th>Done</th><th></th></tr></thead><tbody>
+      ${REPORTS.rows.map(r => `<tr>
+        <td><strong>${esc(r.title)}</strong></td>
+        <td>${r.dueAt ? esc(fmtDate(new Date(r.dueAt))) : '<span class="muted">no date</span>'}</td>
+        <td>${r.total ? `${r.done} of ${r.total}` : '<span class="muted">-</span>'}</td>
+        <td style="white-space:nowrap"><a class="btn btn-primary btn-sm" href="report.html?i=${esc(encodeURIComponent(r.id))}">Open report</a></td></tr>`).join('')}
+    </tbody></table></div>
+  </section>`;
+}
+function paintReports() {
+  const host = ROOT?.querySelector('#dashReports');
+  if (host) host.innerHTML = reportsMarkup();
+  const b = ROOT?.querySelector('[data-retry-reports]');
+  if (b) b.onclick = () => { REPORTS = null; paintReports(); runReports(CTX, MOUNT_GEN); };
+}
+
 function tasksMarkup() {
+  if (TASKS_ERR) return renderTasksError({ esc });
   if (TASKS === null) {
     return `<section class="dash-section"><div class="duo-row duo-loading">
       <span class="duo-box duo-skel"></span><span class="duo-box duo-skel"></span>
@@ -281,6 +411,7 @@ function tasksMarkup() {
 function paintTasks() {
   const host = ROOT?.querySelector('#dashTasks');
   if (host) host.innerHTML = tasksMarkup();
+  wireTasksRetry();
 }
 
 /* P1.8's panel, on the same late-arriving/stable-host contract as the tasks row. No skeleton:
@@ -322,28 +453,31 @@ function head(firstName, roleLabel) {
  * so nothing about the reload path changed, only who triggers it. */
 
 function statTiles(a, ctx) {
-  const tile = (accent, icon, emoji, num, label, sub) => `
+  // A tile is the number, a label of one to three words, and an info button holding the detail. `tag` is the one
+  // thing that may stay visible: a short word without which the number would read as something it is not.
+  const tile = (accent, icon, emoji, num, label, info, tag = '') => `
     <div class="stat-tile accent-${accent}">
       <div class="stat-ic">${iconHTML(icon, emoji, 'ic')}</div>
       <div class="stat-body"><div class="stat-num">${num}</div>
-        <div class="stat-label">${esc(label)}</div><div class="stat-sub">${esc(sub)}</div></div>
+        <div class="stat-label">${esc(label)}${tag ? ` <span class="stat-tag">${esc(tag)}</span>` : ''}${infoHTML(info, 'About ' + label)}</div></div>
     </div>`;
   const scopeLabel = (dir() && STATE.scope === 'all') ? 'all sections' : 'your sections';
   const L = ctx.lesson.short;
-  const compLabel = ctx.status === 'today' ? 'Active preflight complete'
-    : ctx.status === 'past' ? `Lesson ${L} complete` : `Upcoming preflight (L${L})`;
-  const compSub = ctx.status === 'today' ? `Lesson ${L} · ${a.done}/${a.total} · in class now`
-    : ctx.status === 'past' ? `Lesson ${L} · ${a.done}/${a.total} · already covered`
-    : `Lesson ${L} · ${a.done}/${a.total} · not yet due · early submissions`;
-  return `<div class="stat-grid">
+  const compLabel = ctx.status === 'today' ? 'Preflight complete'
+    : ctx.status === 'past' ? 'Lesson complete' : 'Preflight early';
+  const compSub = ctx.status === 'today' ? `Lesson ${L}: ${a.done} of ${a.total} submitted. In class now.`
+    : ctx.status === 'past' ? `Lesson ${L}: ${a.done} of ${a.total} submitted. Already covered.`
+    : `Lesson ${L}: ${a.done} of ${a.total} submitted. Not yet due, so these are early submissions.`;
+  const effortSub = (pathNote(a.paths) ? pathNote(a.paths) + '. ' : '') +
+    `Average engagement, 0 to 5, across ${scopeLabel}. This counts toward the grade.`;
+  const undSub = (a.undFrom?.written && a.undFrom?.interactive ? 'Taken from both the interactive lesson and the question set. '
+    : a.undFrom?.written ? 'Taken from the free-response question. ' : '') +
+    'Average understanding, 0 to 5. It is a diagnostic only and is never part of a grade.';
+  return `<div class="stat-grid big">
     ${tile('blue',  'completion', '📨', Math.round(a.pct * 100) + '%', compLabel, compSub)}
-    ${tile('gold',  'bolt',       '⚡', f1(a.effort), 'Avg effort (graded)',
-           pathNote(a.paths) || `engagement · ${scopeLabel}`)}
-    ${tile('red',   'warning',    '🚩', a.flags, 'Flagged for follow-up', 'low engagement or major gap')}
-    ${tile('green', 'analytics',  '🧭', f1(a.und), 'Avg understanding',
-           a.undFrom?.written && a.undFrom?.interactive ? 'diagnostic · both paths'
-           : a.undFrom?.written ? 'diagnostic · free response'
-           : 'diagnostic · not graded')}
+    ${tile('gold',  'bolt',       '⚡', f1(a.effort), 'Avg effort', effortSub)}
+    ${tile('red',   'warning',    '🚩', a.flags, 'Flagged', 'Students flagged for follow-up: low engagement or a major gap in understanding.')}
+    ${tile('green', 'analytics',  '🧭', f1(a.und), 'Avg understanding', undSub, 'diagnostic')}
   </div>`;
 }
 
@@ -650,6 +784,7 @@ function rerender() {
 
 /* ── wiring ─────────────────────────────────────────────────────────────────── */
 function wire() {
+  wireTasksRetry();
   const ss = ROOT.querySelector('#scopeSeg');
   if (ss) ss.querySelectorAll('button').forEach(b => b.onclick = () => { STATE.scope = b.dataset.scope; rerender(); });
 

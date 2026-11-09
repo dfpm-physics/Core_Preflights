@@ -37,7 +37,8 @@ const APP_ROOT = /\/(student|faculty)\/[^/]*$/.test(location.pathname) ? '../' :
 // and readable, and it survives a re-run of the migration that would issue new uuids.
 const LS_OFFERING = 'cp.currentOffering';
 
-const roleHome = (role) => `${APP_ROOT}${role === 'faculty' ? 'faculty' : 'student'}/dashboard.html`;
+// A student lands on the summary across all their classes (student/summary.html), a staff member on the dashboard.
+const roleHome = (role) => `${APP_ROOT}${role === 'faculty' ? 'faculty/dashboard.html' : 'student/summary.html'}`;
 
 function go(url) { location.replace(url); }
 
@@ -299,8 +300,13 @@ function sortAndPick(ctx) {
   // ctx.courses, which was built from staff_assignments, so a hand-edited preference naming an
   // offering the caller does not staff simply falls through to the first real one.
   const stored = getPref(LS_OFFERING);
+  // A link may NAME an offering (?offering=<id>), which the all-classes summary uses to open one class. Like the
+  // stored pick it only SELECTS: the lookup runs against ctx.courses, so an id the caller has no part in is ignored.
+  let named = null;
+  try { named = new URLSearchParams(location.search).get('offering'); } catch { /* no address to read */ }
   // With no usable stored pick, a current term wins over a past one even if the past term sorts first.
-  const chosen = ctx.courses.find(c => offeringKey(c) === stored)
+  const chosen = (named && ctx.courses.find(c => c.offeringId === named))
+    || ctx.courses.find(c => offeringKey(c) === stored)
     || ctx.courses.find(c => !c.past) || ctx.courses[0] || null;
   if (chosen) {
     applyCurrent(ctx, chosen);

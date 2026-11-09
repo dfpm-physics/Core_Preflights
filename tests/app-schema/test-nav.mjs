@@ -51,11 +51,16 @@ check('nor System — it is in the user dropdown now', !keys.includes('system'))
 check('Course Admin is, and is director-gated', linkFor('admin').directorOnly === true);
 check('…pointing at the page that carries all four tabs', linkFor('admin').href === 'admin.html');
 
-// 2026-11-06: "Enter scores" became "Grade assignments", and the rollup got a bar entry. A director could not find a
-// report because the only routes were a dashboard link and the older assignments list.
-eq('Enter scores is now Grade assignments, and still opens entry.html', [linkFor('entry').label, linkFor('entry').href], ['Grade assignments', 'entry.html']);
-check('Reports is on the bar, for every staff member (the database decides who sees a report)',
-      linkFor('report')?.label === 'Reports' && linkFor('report').href === 'report.html' && !linkFor('report').directorOnly && !linkFor('report').adminOnly);
+// 2026-11-09 (the course director's call): the bar is shorter. Grade assignments, Backlog, Reports and Older assignments
+// came off it. Each page still exists and each has a way in, which is what the pairs below pin: a removal that left a
+// page with no route would pass a "not on the bar" check just as well.
+check('Grade assignments, Backlog, Reports and Older assignments are not on the bar',
+      !['entry', 'backlog', 'report', 'lessons'].some(k => keys.includes(k)));
+eq('the staff bar is Dashboard, Gradebook, Assignments, Admin, Feedback', keys, ['dashboard', 'gradebook', 'items', 'admin', 'feedback']);
+eq('Assignments is items.html, for every staff member (an instructor reads it; the database refuses their writes)',
+   [linkFor('items').label, linkFor('items').href, !!linkFor('items').directorOnly], ['Assignments', 'items.html', false]);
+for (const page of ['entry.html', 'backlog.html', 'report.html', 'lessons.html'])
+  check(`${page} still exists at its own address`, readdirSync(new URL('../../site/faculty/', import.meta.url)).includes(page));
 
 // Every href must be a page that exists. This is the check that would have caught a nav entry
 // left pointing at a deleted file — the failure mode of every page merge.

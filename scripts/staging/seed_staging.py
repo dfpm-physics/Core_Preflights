@@ -49,6 +49,21 @@ BREADTH ADDED 2026-11-04, so later proofs run on more than a handful of rows:
   Grades    Cadets 307 to 318 on test-lesson-01 and 02: final, AI-suggested, zero, and fractional
             (1.5 of 2) marks, plus submitted-but-ungraded and draft rows.
 
+AN OLDER-PAGE-SHAPED ITEM, added 2026-11-09, so a proof can open and save one with no changes:
+  test-lesson-09  published, written path only, per-day deadlines on all four meeting days (M and F at 2359, T and W at 1759, so the form cannot show
+                  the pair exactly), per-section rows, a custom opening date (about two days before the M deadline),
+                  a figure on Q3 and a reference PDF and pages. entered_on_new_page stays at its default (false).
+
+TWO CLASSES FOR ONE CADET, added 2026-11-09, so the student's "All classes" page has something to merge:
+  Course    phys-120 (STAGING TEST), term fall-2026, one section S1 that meets on M. Only a global admin sees it.
+  Cadet     cadet105@ (3000000105, T3A in phys-215) is also enrolled in phys-120 S1, and signs in with the usual
+            cadet rule (last 6 digits of the ID). In phys-215 that cadet has no work of their own, so lessons 02,
+            05, 06, 07 and 08 are open and lesson 01 is past due. In phys-120 the cadet has:
+            test-120-lesson-01  due in about 3 days, open.
+            test-120-lesson-02  due about tomorrow, open, so it sorts first on the summary.
+            test-120-lesson-03  due in 30 days: published but outside the 7-day window, so it must NOT be listed.
+  The new course is left out of the counts that verify() makes, so those counts are unchanged.
+
 RE-RUN IT to move the deadlines back around today. It changes nothing else that already exists.
 
 SAFETY  Dry run by default (it runs everything, then rolls back). --commit writes. Refuses the
@@ -229,7 +244,8 @@ def seed(cur):
 
     offerings, activities = {}, {}
 
-    def add_lesson(pos, slug, title, days, published, interactive, due_by_day, section_rows):
+    def add_lesson(pos, slug, title, days, published, interactive, due_by_day, section_rows,
+                   opens_at=None, content_extra=None, question_extra=None):
         """due_by_day: the map to store. section_rows: [(section code, due)] explicit per-section rows."""
         assignment = uid("assignment", slug)
         offerings[slug], activities[slug] = uid("ao", slug), uid("activity", slug)
@@ -246,14 +262,21 @@ def seed(cur):
                          SET due_at = EXCLUDED.due_at, due_by_day = EXCLUDED.due_by_day""",
                     (offerings[slug], assignment, offering, m_due,
                      json.dumps(due_by_day), published, pos))
+        if opens_at is not None:
+            cur.execute("UPDATE app.assignment_offerings SET opens_at = %s WHERE id = %s", (opens_at, offerings[slug]))
         for section, due in section_rows:
             cur.execute("""INSERT INTO app.assignment_due_dates (assignment_offering_id, section_id, due_at)
                            VALUES (%s, %s, %s)
                            ON CONFLICT (assignment_offering_id, section_id)
                            DO UPDATE SET due_at = EXCLUDED.due_at""",
                         (offerings[slug], sections[section], due))
-        content = {"questions": questions(), "reading_link": None, "reference_pdf": None,
+        qs = questions()
+        if question_extra:
+            for q in qs:
+                q.update(question_extra.get(q["id"], {}))
+        content = {"questions": qs, "reading_link": None, "reference_pdf": None,
                    "reference_pages": None, "access": "open"}
+        content.update(content_extra or {})
         cur.execute("""INSERT INTO app.activities (id, assignment_id, modality, slug, title, content, position)
                        VALUES (%s, %s, 'written', %s, %s, %s, 0) ON CONFLICT (id) DO NOTHING""",
                     (activities[slug], assignment, f"{slug}-written", title, json.dumps(content)))
@@ -282,6 +305,17 @@ def seed(cur):
     add_lesson(7, "test-lesson-07", "Test Lesson 7: Magnetism", 5, True, None, {}, [])
     add_lesson(8, "test-lesson-08", "Test Lesson 8: Induction", 6, True, None,
                {"M": None, "T": iso(deadline(7)), "W": iso(deadline(8)), "F": iso(deadline(9))}, [])
+
+    # An item shaped the way the older editor stored one: a different time on each track (T is 1759, not 2359), a row per
+    # section, a custom opening date, a figure and a reference PDF. A proof opens it on the Assignments page and saves it with no
+    # change. It is a re-runnable fixture: deadlines and the opening date move with today, the rest is fixed.
+    m9, t9 = deadline(8), deadline(9) - timedelta(hours=6)
+    add_lesson(9, "test-lesson-09", "Test Lesson 9: Older-page item", 8, True, None,
+               {"M": iso(m9), "T": iso(t9), "W": iso(t9), "F": iso(m9)},
+               [("M1A", m9), ("T3A", t9), ("W5A", t9), ("MT7A", m9)],
+               opens_at=m9 - timedelta(days=2, hours=16),
+               content_extra={"reference_pdf": "Text_Book_PDFs/215 Sections/test.pdf", "reference_pages": "1-3"},
+               question_extra={"q3": {"figure_url": "https://example.org/prep-staging-test-figure.png"}})
 
     answers = {"q1": "About 30 minutes.",
                "q2": "TEST ANSWER. I found the sign of the charge confusing at first.",
@@ -488,6 +522,51 @@ def seed(cur):
                 (offerings[slug3], activities[slug3]))
     grade(3000000321, slug3, submit(3000000321, slug3, True), final=True)
     submit(3000000322, slug3, True)
+
+    # A fourth course, so ONE cadet (3000000105) is in two classes at once and has open work in both. The course is
+    # not in the walk's or the verify's course lists, so nothing that counts rows changes. Deadlines move on a re-run.
+    course4, offering4 = uid("course", "phys-120"), uid("offering", "phys-120:fall-2026")
+    cur.execute("""INSERT INTO app.courses (id, code, title, department)
+                   VALUES (%s, 'phys-120', 'Physics 120 (STAGING TEST)', 'Physics')
+                   ON CONFLICT (id) DO NOTHING""", (course4,))
+    cur.execute("""INSERT INTO app.course_offerings (id, course_id, term_id, is_active)
+                   VALUES (%s, %s, %s, true) ON CONFLICT (id) DO NOTHING""", (offering4, course4, term))
+    section4 = uid("section", "phys-120:S1")
+    cur.execute("""INSERT INTO app.sections (id, course_offering_id, code, meeting_days, period)
+                   VALUES (%s, %s, 'S1', %s, 2) ON CONFLICT (id) DO NOTHING""", (section4, offering4, ["M"]))
+    two_class_cadet = 3000000105
+    enrollments[("120", two_class_cadet)] = uid("enrollment", f"120:{two_class_cadet}")
+    cur.execute("""INSERT INTO app.enrollments (id, student_id, section_id)
+                   VALUES (%s, %s, %s) ON CONFLICT (id) DO NOTHING""",
+                (enrollments[("120", two_class_cadet)], two_class_cadet, section4))
+    for n, days in ((1, 3), (2, 1), (3, 30)):
+        slug4 = f"test-120-lesson-{n:02d}"
+        title4 = f"Test 120 Lesson {n}"
+        assignment4 = uid("assignment", slug4)
+        offerings[slug4], activities[slug4] = uid("ao", slug4), uid("activity", slug4)
+        cur.execute("""INSERT INTO app.assignments (id, course_id, kind_id, slug, title)
+                       VALUES (%s, %s, 'preflight', %s, %s) ON CONFLICT (id) DO NOTHING""",
+                    (assignment4, course4, slug4, title4))
+        cur.execute("""INSERT INTO app.assignment_offerings
+                         (id, assignment_id, course_offering_id, due_at, due_by_day, grading_mode,
+                          points_possible, is_published, position)
+                       VALUES (%s, %s, %s, %s, %s, 'points', 2, true, %s)
+                       ON CONFLICT (id) DO UPDATE SET due_at = EXCLUDED.due_at, due_by_day = EXCLUDED.due_by_day""",
+                    (offerings[slug4], assignment4, offering4, deadline(days),
+                     json.dumps({"M": iso(deadline(days))}), n))
+        cur.execute("""INSERT INTO app.assignment_due_dates (assignment_offering_id, section_id, due_at)
+                       VALUES (%s, %s, %s)
+                       ON CONFLICT (assignment_offering_id, section_id) DO UPDATE SET due_at = EXCLUDED.due_at""",
+                    (offerings[slug4], section4, deadline(days)))
+        cur.execute("""INSERT INTO app.activities (id, assignment_id, modality, slug, title, content, position)
+                       VALUES (%s, %s, 'written', %s, %s, %s, 0) ON CONFLICT (id) DO NOTHING""",
+                    (activities[slug4], assignment4, f"{slug4}-written", title4,
+                     json.dumps({"questions": questions(), "reading_link": None, "reference_pdf": None,
+                                 "reference_pages": None, "access": "open"})))
+        cur.execute("""INSERT INTO app.offering_activities
+                         (assignment_offering_id, activity_id, grading_role, available_after, is_visible, position)
+                       VALUES (%s, %s, 'graded', 'always', true, 0) ON CONFLICT DO NOTHING""",
+                    (offerings[slug4], activities[slug4]))
 
 
 def counts(cur):

@@ -8,6 +8,11 @@
 // They are not access control. A browser tab opened before the deploy has none of this until it
 // reloads, and a direct API call ignores it. The database rules are what hold regardless of page.
 //
+// As of 2026-11-09 the Assignments page (items.html) opens and edits every item, including those the older page made, and
+// faculty/lessons.html only forwards to it. So these guards no longer protect an editor from an item it cannot read: what
+// is left is the other pages that still look at the flag (the Grade picker, Report, Health, the questions page), and the
+// lesson data layer's own refusals. The flag is kept as it is; nothing here flips it.
+//
 // This module is temporary. When every page handles every item, the lesson editor reads the
 // path instead of the flag, the picker, report and health exclusions come out, and the column is
 // dropped.

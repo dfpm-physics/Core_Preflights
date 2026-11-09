@@ -71,8 +71,9 @@ section('the policy hash matches the final script');
 section('a new assignment opens short, and the new fields sit behind More options');
 {
   const modal = markup.slice(markup.indexOf('id="item-modal"'), markup.indexOf('id="dest-modal"'));
-  const more = modal.slice(modal.indexOf('<details'), modal.indexOf('</details>'));
-  const before = modal.slice(0, modal.indexOf('<details'));
+  const moreAt = modal.indexOf('<details class="more-options" id="i-more"');  // More options; the tutor boxes sit in an earlier disclosure of their own
+  const more = modal.slice(moreAt, modal.indexOf('</details>', moreAt));
+  const before = modal.slice(0, modal.indexOf('<details class="more-options" id="i-more"'));
   for (const id of ['i-title', 'i-kind', 'i-points', 'i-alldate']) check(`#${id} is in the short form`, before.includes(`id="${id}"`));
   for (const id of ['i-num', 'i-release', 'i-opens', 'i-openst'])
     check(`#${id} is under More options`, more.includes(`id="${id}"`) && !before.includes(`id="${id}"`));
@@ -82,7 +83,7 @@ section('a new assignment opens short, and the new fields sit behind More option
     check(`#${id} is in the setup section, in view and not under More options`, setup.includes(`id="${id}"`) && !more.includes(`id="${id}"`));
   check('the "Also offer an interactive tutor" checkbox is gone', !/i-withtutor|Also offer an interactive tutor/.test(html));
   check('More options starts closed', /<details[^>]*id="i-more"(?![^>]*\bopen\b)/.test(modal));
-  check('the setup section starts hidden and sits above More options', /id="i-setup" style="display:none/.test(modal) && modal.indexOf('id="i-setup"') < modal.indexOf('<details'));
+  check('the setup section starts hidden and sits above More options', /id="i-setup" style="display:none/.test(modal) && modal.indexOf('id="i-setup"') < modal.indexOf('<details class="more-options" id="i-more"'));
   check('the tutor controls start hidden', /id="i-twopath"[^>]*display:none/.test(setup) && /id="i-interactive"[^>]*display:none/.test(setup));
   check('the release boxes start hidden', /id="i-opens-wrap" style="display:none/.test(more) && /id="i-openst-wrap" style="display:none/.test(more));
 }
@@ -94,10 +95,10 @@ section('the rules the page keeps');
   check('the page never writes a literal publish true', !/is_published:\s*true/.test(script));
   {
     const modal = markup.slice(markup.indexOf('id="item-modal"'), markup.indexOf('id="dest-modal"'));
-    const before = modal.slice(0, modal.indexOf('<details'));
-    const after = modal.slice(modal.indexOf('</details>'));
+    const before = modal.slice(0, modal.indexOf('<details class="more-options" id="i-more"'));
+    const after = modal.slice(modal.indexOf('</details>', modal.indexOf('<details class="more-options" id="i-more"')));
     check('the publish control is a checkbox outside More options, so it is always in view',
-      /<input type="checkbox" id="i-publish">/.test(modal) && !modal.slice(modal.indexOf('<details'), modal.indexOf('</details>')).includes('id="i-publish"')
+      /<input type="checkbox" id="i-publish">/.test(modal) && !modal.slice(modal.indexOf('<details class="more-options" id="i-more"'), modal.indexOf('</details>', modal.indexOf('<details class="more-options" id="i-more"'))).includes('id="i-publish"')
       && (before.includes('id="i-publish"') || after.includes('id="i-publish"')));
     check('it sits before the Save button', modal.indexOf('id="i-publish"') < modal.indexOf('id="im-save"'));
     check('the old line saying saving keeps it unpublished is gone', !/Saving keeps the assignment unpublished/.test(markup));
@@ -117,7 +118,7 @@ section('the rules the page keeps');
     .every(id => markup.includes(`id="${id}"`)) && markup.includes('data-dest="new"') && markup.includes('data-dest="existing"'));
   check('the chooser asks the course and term before the assignment list', markup.indexOf('id="dest-offering"') < markup.indexOf('id="dest-lessons"'));
   check('a prefill link is read once and cleared from the address', /history\.replaceState\(null, '', location\.pathname\)/.test(script));
-  check('an assignment from the older page is not selectable as a destination', /if \(!it \|\| !it\.isNew\) return;/.test(script));
+  check('an assignment from the older page is selectable as a destination, like any other', !/if \(!it \|\| !it\.isNew\) return;/.test(script) && /isNew: true, isPublished/.test(script));
   check('the confirmations stack into one acknowledgement', /needsTutorConfirm/.test(script) && /needsPointsConfirm/.test(script) && /ack\.points = true/.test(script));
 }
 
@@ -141,7 +142,7 @@ section('the page\'s own link handler: a link for another course moves the page 
     const ctx = { courses: COURSES, instructorRow: { is_global_admin: false }, currentOffering: current,
       setCurrentOffering: async (id) => { log.push('setCurrentOffering:' + id); ctx.currentOffering = id; } };
     const viewOf = (offering) => ({ items: [], sections: [{ id: 'sec-of-' + offering }], kinds: [] });
-    const run = new AsyncFunction('LK', 'ctx', 'location', 'history', 'initialVm', 'loadVm', 'chooserStub', 'renderNav', 'openFromQuery', '$', 'esc', 'onCourseChange',
+    const run = new AsyncFunction('LK', 'ctx', 'location', 'history', 'initialVm', 'loadVm', 'chooserStub', 'renderNav', 'openFromQuery', '$', 'esc', 'onCourseChange', 'isDirector',
       `let vm = initialVm;
        async function load() { vm = null; vm = await loadVm(); }
        async function openDestChooser(prefill) { return chooserStub(prefill, vm); }
@@ -156,7 +157,7 @@ section('the page\'s own link handler: a link for another course moves the page 
     const chooser = async (prefill, vm) => { log.push(`chooser:${prefill.offeringId}:page=${ctx.currentOffering}:sections=${vm?.sections?.[0]?.id}`); };
     await run(LK, ctx, { search, pathname: '/site/faculty/items.html' }, { replaceState: () => log.push('address cleared') },
       directorHere ? viewOf(current) : null, loadVm, chooser, () => log.push('nav'), () => log.push('openFromQuery'),
-      () => ({ insertAdjacentHTML: (_w, h) => page.notes.push(h) }), (x) => String(x), () => {});
+      () => ({ insertAdjacentHTML: (_w, h) => page.notes.push(h) }), (x) => String(x), () => {}, () => true);
     return { log, page };
   }
   const link = '?new=1&id=lesson-04-x&course=phys-110&title=T&url=https%3A%2F%2Fclaude.ai%2Fpublic%2Fartifacts%2Fabc';
@@ -183,14 +184,14 @@ section('the page\'s own link handler: a link for another course moves the page 
   }
   {
     const r = await drive('?a=abc');
-    eq('an ?a= link goes to the older-page path', r.log, ['openFromQuery']);
+    eq('an ?a= link opens the assignment', r.log, ['openFromQuery']);
   }
   check('the address is still cleared with the same call the contract test looks for', /history\.replaceState\(null, '', location\.pathname\)/.test(script));
 }
 
 section('the chooser: same-id flag, and assignments that cannot take a tutor (review 3, M2, M4)');
 {
-  const chooser = script.slice(script.indexOf('async function openDestChooser'), script.indexOf('/* A link from the older Assignments page'));
+  const chooser = script.slice(script.indexOf('async function openDestChooser'), script.indexOf('/* A link to one assignment'));
   check('the chooser looks for an assignment that already uses the link\'s id and says so', /LK\.sameIdItem\(vm\.items, prefill\)/.test(chooser) && /already uses the id/.test(chooser));
   check('a card for an assignment that cannot take a tutor gives the reason and is not selectable', /carriesTutor: I\.canCarryTutor\(it\)/.test(chooser) && /tutorRefusal: I\.tutorRefusal\(it\)/.test(chooser));
   check('clicking such a card says why instead of doing nothing', /I\.canCarryTutor\(it\)/.test(chooser.slice(chooser.indexOf("addEventListener('click'"))));

@@ -12,13 +12,15 @@ earlier step which failed is reported as blocked, never as a pass.
 
 | Group | Walks |
 |---|---|
-| A | Director, Assignments: new assignment opens for setup; Questions, tutor and Both cards saved and re-read from the database; a question; publish; the Report link |
+| A | Director, Assignments: new assignment opens for setup; Instructor-graded questions, tutor and Both cards saved and re-read from the database; a question; publish; the Report link |
 | B | Cadets: the chooser, the Questions path to a submit, the tutor card (the new window is recorded and refused), the dashboard's question count |
 | C | Grade assignments: list, typed scores, WebAssign / Teams / Gradescope file drops, a wrong file, publish the column, My grades, gradebook |
 | D | AI drafts: a draft inserted through the data role (no AI call), shown as waiting, reviewed, finalized; a dropped cadet's draft is not counted |
 | E | Reports: the bar entry, the picker, one report, an instructor's scope, the course switch |
 | F | Meeting days: a course on W and F, one on the default, Add section, a section holding another day, the roster preview line |
 | G | Roles: an instructor gets no Assignments writes; the other course's director reaches nothing here |
+| J | The 2026-11-09 review pass: the older address kept, the dashboard Backlog and Recent reports, the gradebook heading, the info control, an instructor read-only Assignments, and a cadet in two courses on All classes |
+| K | The chooser by kind (2026-11-09): four cards for a preflight, three for the others with Auto-graded questions grayed unless homework, each card saving its pair, an older saved setting kept as it was, and a tutor setup file dropped on the tutor card |
 | I | Expression answers: the insert buttons, the typeset reading (a rendered KaTeX element) for the cadet and in the question editor, a question whose own variable is `e`, and one marking through the deployed `check-answer` (I5 needs the new function) |
 
 ## Safety

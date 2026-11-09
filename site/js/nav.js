@@ -26,6 +26,8 @@ import { mountFeedback } from './feedback.js';
 // so it does not collide with the nav entry below, which is the assignment LIST (lessons.html).
 // interactions.html was deleted 2026-07-20.
 const STUDENT_LINKS = [
+  // First, and the landing page: work due across every class the student is in. The per-course dashboard follows.
+  { key: 'summary',   label: 'All classes', href: 'summary.html',   icon: 'class',       emoji: '🎓' },
   { key: 'dashboard', label: 'Dashboard', href: 'dashboard.html', icon: 'dashboard',   emoji: '🏠' },
   { key: 'lessons',   label: 'Assignments', href: 'lessons.html', icon: 'assignments', emoji: '📚' },
   { key: 'schedule',  label: 'Schedule',    href: 'schedule.html', icon: 'due-soon',   emoji: '🗓️' },
@@ -73,23 +75,20 @@ export const FACULTY_LINKS = [
   // (roadmap P1.9) and are now the **Students** tab of Course Admin — one page, one nav entry, and
   // the tab sits beside Staff and Export because "who is in this offering" and "who runs it" are
   // the same visit. Two nav entries for one job was the cost that made the split not worth it.
-  // Label, not path. The page is the term's list of assignment offerings, which is what the
-  // schema calls them; the FILE stays `lessons.html` because `site/faculty/lessons.html` is a
-  // frozen contract URL (CORE.md §6) that AI-generated prefill links target — renaming it would
-  // break every deployed artifact. Same for the student list.
-  { key: 'lessons',      label: 'Older assignments', href: 'lessons.html',           icon: 'assignments',   emoji: '📚' },
-  // Items: the newer entry page for every kind of work (v2). Directors only, because it writes.
-  // An instructor who types the URL gets a plain "directors only" state, and the database refuses
-  // the writes regardless.
-  { key: 'items',        label: 'Assignments',       href: 'items.html',             icon: 'grades',        emoji: '🧾', directorOnly: true },
-  // Grade assignments (was "Enter scores" until 2026-11-06) and Backlog: staff pages for work waiting on a person.
-  // Ungated; the database decides who may write. The file stays entry.html.
-  { key: 'entry',        label: 'Grade assignments', href: 'entry.html',        icon: 'grades',        emoji: '✏️' },
-  { key: 'backlog',      label: 'Backlog',      href: 'backlog.html',           icon: 'progress',      emoji: '📋' },
-  // Reports: the readiness rollup of an assignment. Ungated, the same as the page itself: who may see a report is
-  // decided by the database, so the entry adds no access. Before 2026-11-06 the rollup had no entry at all and was
-  // reached only by a dashboard link, so a director looking for it on the bar found nothing.
-  { key: 'report',       label: 'Reports',      href: 'report.html',            icon: 'analytics',     emoji: '📈' },
+  // ONE entry for all assignments, as of 2026-11-09 (the course director's call). It is the newer page,
+  // items.html, labelled "Assignments"; the older page lessons.html is no longer on the bar. It is not
+  // gone: `site/faculty/lessons.html` is a frozen contract URL (CORE.md §6) that AI-generated prefill links
+  // target, so the file stays and forwards, query string and hash unchanged, to items.html.
+  // Ungated: an instructor opens it read-only (every control that writes is hidden there, and the database
+  // refuses the write regardless).
+  { key: 'items',        label: 'Assignments',       href: 'items.html',             icon: 'assignments',   emoji: '📚' },
+  // Four entries came off the bar on 2026-11-09 to shorten it; each page still exists at its own URL.
+  //   Grade assignments (entry.html) - a button on the Assignments page, visible to every staff role.
+  //   Backlog (backlog.html)         - a section on the faculty dashboard, with a link to the full page.
+  //   Reports (report.html)          - a "Recent reports" section on the faculty dashboard and a Report
+  //                                    link on each Assignments row. Who may see a report is unchanged.
+  //   Older assignments (lessons.html) - folded into Assignments, as above.
+  // The pages keep their `active:` keys, which simply highlight nothing now.
   // NO Extensions entry. It was its own destination from 2026-07-22 until 2026-07-30, on the
   // argument that a recurring review should not be buried inside an administrative page. The
   // director's call reverses that: it is the **Extensions tab of Course Admin** now, beside
@@ -272,12 +271,12 @@ export function courseOptionsHTML(ctx) {
 function brandCourseHTML(ctx, courseTitle) {
   if (!courseTitle) return '';
   const opts = courseOptionsHTML(ctx);
-  if (!opts) return `<span class="brand-sub">${esc(courseTitle)}</span>`;
+  if (!opts) return `<span class="brand-sub" title="${esc(courseTitle)}">${esc(courseTitle)}</span>`;
   return `
     <span class="course-menu">
       <button class="brand-sub course-btn" data-course-toggle aria-haspopup="true"
               aria-expanded="false" aria-controls="course-menu-pop"
-              title="Switch course">
+              title="Switch course (now ${esc(courseTitle)})">
         <span class="cb-name">${esc(courseTitle)}</span><span class="cb-caret" aria-hidden="true">▾</span>
       </button>
       <div class="menu-pop course-pop" id="course-menu-pop" role="menu">
@@ -325,11 +324,13 @@ export function renderNav(ctx, opts = {}) {
       <span>${esc(l.label)}</span>
     </a>`).join('');
 
-  mount.className = 'topnav';
+  // A long link row collapses into the menu button at a wider screen than a short one: eight links do not
+  // fit beside the brand and the account controls below about 1500px, and the controls are what slid off.
+  mount.className = 'topnav' + (links.length >= 8 ? ' nav-many' : links.length >= 6 ? ' nav-some' : '');
   mount.innerHTML = `
     <div class="topnav-inner">
       <div class="nav-left">
-        <a class="brand" href="dashboard.html"
+        <a class="brand" href="${ctx?.role === 'student' ? 'summary.html' : 'dashboard.html'}"
            title="PREP — Pre-lesson Readiness Engagement Platform · iPREP — interactive PREP, the lesson interactions">
           <span class="brand-mark">${iconHTML('atom', '⚛️', 'ic')}</span>
           <span>PREP<span class="brand-alt"><span class="brand-slash">/</span>iPREP</span><span

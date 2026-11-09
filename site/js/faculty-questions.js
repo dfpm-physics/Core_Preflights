@@ -632,8 +632,9 @@ export async function loadItem(db, offeringId) {
   const isNew = d[NEW_PAGE_COLUMN] === true;
   const path = paths.length === 1 ? paths[0] : null;
   let reason = null;
-  if (!isNew) reason = 'This assignment was entered on the older page, so its questions are not edited here.';
-  else if (d.is_published) reason = 'This assignment is published, so its questions cannot be changed here.';
+  // Which page first entered the item is not a reason to refuse: questions and answer keys live in their own tables, which
+  // the older page never wrote, and no database rule looks at the marker any more. `isNew` is still reported.
+  if (d.is_published) reason = 'This assignment is published, so its questions cannot be changed here.';
   else if (!path) reason = 'Questions are entered on an assignment with exactly one path, delivered as questions on the site.';
   else if (path.delivery !== 'online_questions') reason = 'This assignment is not delivered as questions on the site, so it has no questions to enter.';
   return {

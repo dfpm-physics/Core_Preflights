@@ -42,7 +42,11 @@ export async function runC(W) {
     L.assert(/Scores typed in by staff/.test(row[2]), 'how graded: ' + row[2]);
     L.assert(/no score entered yet/.test(row[3]) && /Not published/.test(row[3]), 'what is waiting: ' + row[3]);
     L.assert(/Open the score table/.test(row[4]), 'no open button: ' + row[4]);
-    L.assert((await d.text('nav, #topnav')).includes('Grade assignments'), 'the nav does not say Grade assignments');
+    // 2026-11-09: Grade assignments is no longer on the bar. It is a button on the Assignments page, and that is the way in.
+    L.assert(!(await d.text('#nav-links')).includes('Grade assignments'), 'the bar still offers Grade assignments');
+    await d.go('faculty/items.html'); await d.untilSel('#grade-assignments-btn');
+    await d.click('#grade-assignments-btn');
+    await d.untilSel('#grade-list');
   }, { needs: ['C1'] });
 
   await L.check('C3', 'type scores and save; reload and read them back; the database holds them as drafts', async () => {

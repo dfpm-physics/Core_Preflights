@@ -141,9 +141,9 @@ const savedQuestions = () => CALLS.find(c => c.table === 'activities' && c.verb 
 }
 
 /* ── 4. the page uses it ───────────────────────────────────────────────────── */
-section('lessons.html — wired to the key read, with an honest failure message');
+section('the older editor (frozen copy in fixtures) — wired to the key read, with an honest failure message');
 {
-  const src = readFileSync(resolve(REPO, 'site/faculty/lessons.html'), 'utf8');
+  const src = readFileSync(resolve(REPO, 'tests/app-schema/fixtures/older-lessons-page.html'), 'utf8');
   check('the editor reads the keys when it opens a lesson', /L\.loadQuestionKeys\(/.test(src) && /L\.showKeys\(/.test(src));
   check('a failed read is announced', /id="lm-keys-notice"/.test(src));
   check('the frozen prefill parameters are still read', /prefill/.test(src) && /new=1|'new'|\bnew\b/.test(src));

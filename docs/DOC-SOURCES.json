@@ -17,10 +17,24 @@
   ],
   "docs": [
     {
+      "doc": "site/help/student-all-classes.md",
+      "kind": "help",
+      "tier": "student",
+      "reviewed": "2026-11-09",
+      "sources": [
+        "site/js/student-summary.js",
+        "site/student/summary.html",
+        "site/js/student-lessons.js",
+        "site/js/student-data.js",
+        "site/js/schema.js"
+      ],
+      "note": "The page a student lands on. It merges the course loader's rows, so the release window and the states are the ones documented in student-getting-started.md; a change to LOOKAHEAD_DAYS or to the state words there must be read against this page too."
+    },
+    {
       "doc": "site/help/student-getting-started.md",
       "kind": "help",
       "tier": "student",
-      "reviewed": "2026-11-07",
+      "reviewed": "2026-11-09",
       "sources": [
         "site/js/student-view.js",
         "site/student/schedule.html",
@@ -62,7 +76,7 @@
       "doc": "site/help/instructor-grading.md",
       "kind": "help",
       "tier": "instructor",
-      "reviewed": "2026-11-07",
+      "reviewed": "2026-11-09",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/instructions/PROJECT.md",
@@ -125,7 +139,7 @@
       "doc": "docs/operations/SYSTEM_GUIDE.md",
       "kind": "operations",
       "tier": null,
-      "reviewed": "2026-11-07",
+      "reviewed": "2026-11-09",
       "sources": [
         ".ai/instructions/PROJECT.md",
         ".ai/instructions/CORE.md",
@@ -199,10 +213,11 @@
       "doc": "site/help/director-assignment-setup.md",
       "kind": "help",
       "tier": "director",
-      "reviewed": "2026-11-07",
+      "reviewed": "2026-11-09",
       "sources": [
         "site/faculty/items.html",
         "site/js/faculty-items.js",
+        "site/js/tutor-setup-file.js",
         "site/faculty/questions.html",
         "site/js/faculty-questions.js",
         "site/js/problem-file.js",

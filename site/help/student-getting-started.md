@@ -11,6 +11,8 @@ corner and choose **Account**.
 
 ## If you forget your password
 
+The sign-in page has a **Need help signing in?** note that says the same thing as this section.
+
 **Ask an instructor who teaches your section**, in person. PREP cannot email you a reset link — it
 has no mail server — so there is no "forgot password" link to click and no code to wait for.
 
@@ -30,7 +32,9 @@ interactive lesson, and some offer a choice between the two — the card tells y
 tagged **iPREP** is the interactive lesson, with the written preflight available underneath it
 as a fallback you may take yourself; see *When the interactive lesson is the assignment* below.
 
-**Dashboard** is the short version of the same thing: what is due next, and what is past due.
+**All classes** is the page you land on after you sign in. It lists the work due in every class you are in, soonest deadline first, and a card for each class. See [All classes](help.html?doc=all-classes).
+
+**Dashboard** is the short version of the same thing, for one class. It opens with your next assignment, its deadline and one button to open it, then a quiet row of counts, then what else is open, what is past due and what was recently graded.
 
 **Schedule** lists every assignment of the term with its date, including the ones that have not
 opened yet. An assignment that has not opened shows when its questions open, and has no link until

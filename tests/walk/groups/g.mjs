@@ -11,12 +11,12 @@ export async function runG(W) {
 
   // ---- Instructor ----
   const ins = await L.Session.start(W.browser, W.base, L.staffLogin(W.seed, 'instructor'));
-  await L.check('G1', 'instructor: no Assignments link on the bar, and the page says directors only', async () => {
+  await L.check('G1', 'instructor: Assignments is on the bar, read-only, and the page says only directors change assignments', async () => {
     await ins.go('faculty/dashboard.html');
     const labels = await ins.page.$$eval('#nav-links a', as => as.map(a => a.innerText.trim()));
-    L.assert(!labels.includes('Assignments'), 'the bar offers Assignments: ' + labels.join(' | '));
+    L.assert(labels.includes('Assignments'), 'the bar lacks Assignments: ' + labels.join(' | '));
     await ins.go('faculty/items.html');
-    await ins.until(/Directors only/);
+    await ins.until(/Only directors change assignments/);
     L.assert(!(await ins.exists('#new-btn')) && !(await ins.exists('[data-edit]')), 'a write control is on the page');
   });
   await L.check('G2', 'instructor: the database refuses an insert and an update on assignments (nothing changes)', async () => {

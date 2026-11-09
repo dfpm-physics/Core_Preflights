@@ -1057,11 +1057,12 @@ export async function countLessonWork(lesson) {
   return { submissions: (subs || []).length, grades: gradeCount || 0, reports };
 }
 
-/** Count the reports attached to ONE interactive activity — the swap/replace warning. */
+/** Count the reports attached to ONE interactive activity — the swap/replace warning. A failed count is `null`, never 0. */
 export async function countActivityReports(activityId) {
   if (!activityId) return 0;
-  const { count } = await db.from('submission_activities')
+  const { count, error } = await db.from('submission_activities')
     .select('*', { count: 'exact', head: true }).eq('activity_id', activityId);
+  if (error) return null;
   return count || 0;
 }
 

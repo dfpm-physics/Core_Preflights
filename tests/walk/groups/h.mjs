@@ -1,4 +1,4 @@
-// Group H: the six card changes on a saved assignment. Each must do what the card says, and a tutor that stays must keep its row,
+// Group H: the six card changes (Instructor-graded questions, Interactive tutor, Both; 2026-11-09 chooser) on a saved assignment. Each must do what the card says, and a tutor that stays must keep its row,
 // id and link. Nothing is dropped silently.
 import * as L from '../lib.mjs';
 
@@ -24,21 +24,23 @@ export async function runH(W) {
     if (err) throw new Error('the form refused: ' + err.slice(0, 200));
   };
   const fillTutor = async () => {
+    await s.page.$eval('#i-hand', e => { e.open = true; });     // the tutor boxes sit under "Enter the details by hand"
     if (await s.page.$eval('#i-islug', e => !e.value)) await s.set('#i-islug', slug);
     if (await s.page.$eval('#i-iurl', e => !e.value)) await s.set('#i-iurl', url);
   };
-  const move = async (mode) => { await openRow(); await s.click(`#i-cards [data-mode="${mode}"]`); if (mode !== 'questions') await fillTutor(); await save(); };
+  const move = async (mode) => { await openRow(); await s.click(`#i-cards [data-mode="${mode}"]`); if (mode !== 'human') await fillTutor(); await save(); };
   const tutor = () => paths().find(p => p.delivery === 'interactive_tutor');
   let tutorRow = null;
 
-  await L.check('H0', 'a new assignment starts on the Questions card', async () => {
+  await L.check('H0', 'a new assignment starts on the Instructor-graded questions card', async () => {
     await s.go('faculty/items.html'); await s.click('#new-btn'); await s.untilSel('#item-modal.open');
     await s.set('#i-title', title); await s.set('#i-points', '2'); await s.set('#i-alldate', L.fmtDate(L.inDays(6)));
     await s.click('#im-save'); await s.until(/Next: choose how cadets do this work/, { sel: '#im-note' });
-    await s.click('#i-cards [data-mode="questions"]'); await save();
+    L.eq(await s.page.$eval('#i-cards .selected', e => e.dataset.mode), 'human', 'the card a new preflight starts on');
+    await s.click('#i-cards [data-mode="human"]'); await save();
     L.eq(kinds(), ['typed_response'], 'paths');
   });
-  await L.check('H1', 'Questions to Tutor: the tutor is added and the typed path goes', async () => {
+  await L.check('H1', 'Instructor-graded questions to Tutor: the tutor is added and the typed path goes', async () => {
     await move('tutor'); L.eq(kinds(), ['interactive_tutor'], 'paths'); tutorRow = tutor();
     L.eq([tutorRow.slug, tutorRow.url], [slug, url], 'tutor id and link');
   }, { needs: ['H0'] });
@@ -51,17 +53,17 @@ export async function runH(W) {
     await move('tutor'); L.eq(kinds(), ['interactive_tutor'], 'paths');
     L.eq([tutor().activity_id, tutor().slug, tutor().url], [tutorRow.activity_id, slug, url], 'the tutor');
   }, { needs: ['H2'] });
-  await L.check('H4', 'Tutor to Questions: the tutor goes and a typed path is added', async () => {
-    await move('questions'); L.eq(kinds(), ['typed_response'], 'paths');
+  await L.check('H4', 'Tutor to Instructor-graded questions: the tutor goes and a typed path is added', async () => {
+    await move('human'); L.eq(kinds(), ['typed_response'], 'paths');
   }, { needs: ['H3'] });
-  await L.check('H5', 'Questions to Both: a tutor is added beside the typed path, which stays', async () => {
+  await L.check('H5', 'Instructor-graded questions to Both: a tutor is added beside the typed path, which stays', async () => {
     const typedId = paths()[0].activity_id;
     await move('both'); L.eq(kinds(), ['interactive_tutor', 'typed_response'], 'paths');
     L.eq(paths().find(p => p.delivery === 'typed_response').activity_id, typedId, 'the typed path is the same row');
   }, { needs: ['H4'] });
-  await L.check('H6', 'Both to Questions: the tutor goes and the typed path stays', async () => {
+  await L.check('H6', 'Both to Instructor-graded questions: the tutor goes and the typed path stays', async () => {
     const typedId = paths().find(p => p.delivery === 'typed_response').activity_id;
-    await move('questions'); L.eq(kinds(), ['typed_response'], 'paths');
+    await move('human'); L.eq(kinds(), ['typed_response'], 'paths');
     L.eq(paths()[0].activity_id, typedId, 'the typed path is the same row');
   }, { needs: ['H5'] });
   await s.close();

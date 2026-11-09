@@ -81,7 +81,9 @@ are post-promotion; role pages sit one level deep under `student/` and `faculty/
 | `site/faculty/admin.html` | Course Admin — Students, Staff, Sections, Course, Export |
 | `site/faculty/report.html` | Lesson rollup: readiness summary, recommendation, showcase quotes |
 | `site/student/interaction-submit.html` | Receives a Claude artifact's compressed report and saves it per student. **Frozen contract URL** — was a forwarding stub until the promotion put the real page here, at the same URL |
-| `site/faculty/lessons.html` | Director lesson authoring; accepts AI-generated prefill links. **Frozen contract URL**, same history |
+| `site/faculty/lessons.html` | A forwarder to `site/faculty/items.html` since 2026-11-09, with the whole query string and hash kept. It is the address AI-generated prefill links target. **Frozen contract URL**, same history. The editor it used to be is now the Assignments page, `items.html`, which edits every assignment whichever page made it |
+| `site/faculty/items.html` | Assignments: the one list of all work for every staff role (read-only for an instructor), with Grade assignments, Report and Launch per row. Its form asks "How cadets do this work" with one of two sets of cards, chosen from the kind's own `default_delivery` and never its id: typed work (AI-graded questions, Instructor-graded questions, Interactive tutor, Both) for a kind whose default is a typed response or the tutor, and In class, Auto-graded questions (grayed unless the kind's default is questions on the site) and Done elsewhere for every other kind. A tutor can be set up by dropping a tutor setup file (`docs/contracts/TUTOR-SETUP-FILE.md`), which fills the tutor boxes and writes nothing until Save |
+| `site/student/summary.html` | All classes: a student's landing page, the work due across every active class from one course loader called once per enrollment |
 | `site/js/config.js` | Supabase URL + publishable key (safe to commit); binds the one client to schema `app` |
 | `site/css/styles.css` | Shared styles |
 | `site/help/` | In-app help content (Markdown + `MANIFEST.json`) |
@@ -267,7 +269,7 @@ artifact sends a compressed Markdown **report** back to the site to be saved per
 An AI skill will later summarize trends by section.
 
 **Flow:**
-1. A director adds a lesson in `site/faculty/lessons.html` — gives it a slug
+1. A director adds a lesson in `site/faculty/items.html` (the old `lessons.html` address forwards there) — gives it a slug
    (`lesson-02-charge`), title, course, and `artifact_url`, then publishes it. (Claude can hand
    the director a prefilled one-click link — see `docs/contracts/INTERACTION-PREFILL-LINK.md`.)
 2. A student opens `site/student/lessons.html`, clicks **Launch**, and the artifact opens on

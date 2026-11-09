@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8=' 'sha256-WucxIf0DzOnwoxOmaXzSTuCRZTdcb72GWAh7yzm76Gc='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8=' 'sha256-TwkUKPMeyf40gyCrcukkgfJuoE/FVVQgWD6PhD58EDA='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Backlog and export · PREP</title>
   <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
@@ -20,7 +20,7 @@
     import { renderNav } from '../js/nav.js';
     import { initTheme } from '../js/theme.js';
     import { db } from '../js/supabase.js';
-    import { esc, runPage, lastFirst, triggerDownload } from '../js/util.js';
+    import { esc, runPage, lastFirst, triggerDownload, infoHTML } from '../js/util.js';
     import { percentShown } from '../js/percent-shown.js';
     import * as X from '../js/faculty-export.js';
     import * as BB from '../js/blackboard-fill.js';
@@ -35,8 +35,8 @@
       return load();
     }
 
-    const head = () => `<div class="page-head"><h1>Backlog and export</h1>
-      <div class="sub">What is waiting on you in ${esc(ctx.courseTitleOf(ctx.currentOffering) || 'this course')}, and who sits just under a letter line. Staff only: students never see either.</div></div>`;
+    const head = () => `<div class="page-head"><h1>Backlog and export${infoHTML('What is waiting on you in this course, and who sits just under a letter line. Staff only: students never see either.', 'About this page')}</h1>
+      <div class="sub">${esc(ctx.courseTitleOf(ctx.currentOffering) || 'this course')}</div></div>`;
 
     async function load() {
       const root = document.getElementById('main');
@@ -56,26 +56,24 @@
         const rows = groups[p.key];
         if (!rows.length) return '';
         const sum = rows.reduce((n, r) => n + r.count, 0);
-        return `<section style="margin-bottom:18px"><h2>${esc(p.title)} <span class="muted">· ${sum}</span></h2><div class="field-hint">${esc(p.hint)}</div>
+        return `<section style="margin-bottom:18px"><h2>${esc(p.title)} <span class="muted">· ${sum}</span>${infoHTML(p.hint, 'About ' + p.title)}</h2>
           <div class="table-wrap"><table><thead><tr><th>Assignment</th><th>Cadets</th><th>Late</th><th>Sections</th></tr></thead><tbody>
           ${rows.map(r => `<tr><td>${esc(d.titles[r.itemId] || r.itemId)}</td><td>${r.count}</td><td>${r.late || ''}</td><td>${r.sections.size}</td></tr>`).join('')}
           </tbody></table></div></section>`;
       }).join('');
       const near = B.nearLineRows(d.totals);
       root.innerHTML = head() + (total ? piles : `<div class="alert alert-success">Nothing is waiting. Every cell the database can judge is graded or not yet due.</div>`)
-        + `<section><h2>Near a line <span class="muted">· ${near.length}</span></h2>
-          <div class="field-hint">Within the course's chosen width below the next letter. This is a staff list; use the letter scale page to see who would change before a line moves.</div>
+        + `<section><h2>Near a line <span class="muted">· ${near.length}</span>${infoHTML("Within the course's chosen width below the next letter. This is a staff list; use the letter scale page to see who would change before a line moves.", 'About near a line')}</h2>
           ${near.length ? `<div class="table-wrap"><table><thead><tr><th>Cadet</th><th>Percent</th><th>Letter</th><th>Near</th></tr></thead><tbody>
             ${near.map(t => `<tr><td>${esc(lastFirst(d.names[t.enrollment_id] || ''))}</td><td>${esc(percentShown(t.percent_text))}%</td><td>${esc(t.letter ?? '')}</td><td>${esc(t.near_line_letter)}</td></tr>`).join('')}
           </tbody></table></div>` : '<div class="muted">Nobody in your sections is near a line.</div>'}</section>`
-        + `<section style="margin-top:22px"><h2>Export</h2>
-          <div class="field-hint">Every number comes from the same database total the students and the reports use.</div>
+        + `<section style="margin-top:22px"><h2>Export${infoHTML('Every number comes from the same database total the students and the reports use.', 'About export')}</h2>
           <div class="row wrap" style="gap:10px;margin:8px 0">
             <button class="btn btn-ghost" data-gb="final">Gradebook (CSV)</button>
             <button class="btn btn-ghost" data-gb="prog">Gradebook, Prog assignments only (CSV)</button>
           </div><div id="export-msg"></div>
-          ${ctx.isDirectorForCurrent() ? `<h3 style="margin-top:18px">Fill a Blackboard file</h3>
-            <div class="field-hint">Download the gradebook from Blackboard and drop it here, one file per Blackboard course. Scores are written into the columns that already exist and the file comes back in the same shape. Cadets are matched by cadet ID only. An assignment is matched by its exact title (a preflight by PF and the lesson number). The Prog and Final columns are matched by the names saved in the course settings, and a column with the same name plus <em>letter</em> takes the letter. Nothing is added, renamed or reordered, a column nothing was written to is left out of the file, and a blank stays a blank, never a zero. Totals are the same ones students and reports read.</div>
+          ${ctx.isDirectorForCurrent() ? `<h3 style="margin-top:18px">Fill a Blackboard file${infoHTML('Scores are written into the columns that already exist and the file comes back in the same shape. Cadets are matched by cadet ID only. An assignment is matched by its exact title (a preflight by PF and the lesson number). The Prog and Final columns are matched by the names saved in the course settings, and a column with the same name plus "letter" takes the letter. Nothing is added, renamed or reordered, a column nothing was written to is left out of the file, and a blank stays a blank, never a zero. Totals are the same ones students and reports read.', 'About filling a Blackboard file')}</h3>
+            <div class="field-hint">Download the gradebook from Blackboard and drop it here, one file per Blackboard course.</div>
             <div class="dropzone" id="bb-dz" style="min-height:80px;margin-top:10px"><div><strong>Choose files</strong> or drag and drop them here</div></div>
             <input type="file" id="bb-file" accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values" multiple style="display:none">
             <div id="bb-preview" style="margin-top:12px"></div>` : ''}</section>`;

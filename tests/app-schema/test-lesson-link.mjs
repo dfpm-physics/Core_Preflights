@@ -1,4 +1,6 @@
 // test-lesson-link.mjs — the prefill link and the destination chooser mean the same on the Assignments page as on the
+// NOTE (2026-11-09): faculty/lessons.html is now a forwarder. The older editor this test compares against is kept, unchanged, at
+// tests/app-schema/fixtures/older-lessons-page.html, so the parity checks below still have something to compare to.
 // older lesson editor.
 //
 // WHAT THIS DEFENDS
@@ -29,7 +31,7 @@ globalThis.window.db = { from: () => { throw new Error('no database in this test
 const LK = await import('../../site/js/lesson-link.js');
 const L = await import('../../site/js/faculty-lessons.js');
 
-const OLD = readFileSync(resolve(REPO, 'site/faculty/lessons.html'), 'utf8').split(String.fromCharCode(13) + String.fromCharCode(10)).join(String.fromCharCode(10));
+const OLD = readFileSync(resolve(REPO, 'tests/app-schema/fixtures/older-lessons-page.html'), 'utf8').split(String.fromCharCode(13) + String.fromCharCode(10)).join(String.fromCharCode(10));
 const between = (from, to) => {
   const a = OLD.indexOf(from);
   const b = OLD.indexOf(to, a + from.length);

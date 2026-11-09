@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.4.17/purify.min.js https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.0/marked.min.js 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8=' 'sha256-ZWA1i58dRcmOEzB5oLfpnf0ljnQLvpDOSl5KdS15Owg='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.4.17/purify.min.js https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.0/marked.min.js 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8=' 'sha256-rFgiUaiyfNVcrTKMB+0hisaaiLTh0khs/JT7T6NIN7s='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Report · PREP</title>
   <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
@@ -102,7 +102,7 @@
     import { bootstrap } from '../js/auth.js';
     import { renderNav } from '../js/nav.js';
     import { initTheme } from '../js/theme.js';
-    import { esc, lastFirst, runPage, wireModalDismiss } from '../js/util.js';
+    import { esc, lastFirst, runPage, wireModalDismiss, infoHTML } from '../js/util.js';
     import * as I from '../js/faculty-rollup.js';
     // Extensions are granted from the "Did not submit" list. Reusing the Grade tab's writer rather
     // than composing a second upsert here: one (enrollment, offering) UNIQUE key, one code path, so
@@ -211,7 +211,7 @@
       const body = document.getElementById('report-body'), box = document.getElementById('report-picker');
       body.style.display = 'none'; box.hidden = false;
       document.getElementById('report-back').style.display = 'none';
-      const head = `<div class="page-head"><h1>Reports</h1><div class="sub">Pick an assignment to see how the class did on it.</div></div>`;
+      const head = `<div class="page-head"><h1>Reports${infoHTML('Pick an assignment to see how the class did on it.', 'About this page')}</h1></div>`;
       if (!ctx.currentOffering) { box.innerHTML = head + `<div class="alert alert-warn">No course access found.</div>`; return; }
       box.innerHTML = head + `<div class="center-load"><span class="spinner"></span><span>Loading…</span></div>`;
       try {

@@ -46,6 +46,7 @@ OFFLINE = [
     "test-course-days.mjs",
     "test-student-view.mjs",
     "test-student-loader.mjs",
+    "test-review-pass.mjs",
 
     "test-faculty-entry-parse.mjs",
     "test-faculty-entry.mjs",
@@ -72,6 +73,8 @@ OFFLINE = [
     "test-items-page.mjs",
     "test-items-paths.mjs",
     "test-items-setup.mjs",
+    "test-tutor-setup-file.mjs",
+    "test-hold-button.mjs",
 ]
 # Python tests that make no network call and need no database (each stubs or never opens a connection).
 PY_OFFLINE = [
@@ -79,6 +82,7 @@ PY_OFFLINE = [
     "scripts/v2/test_backfill_paths.py",
     "scripts/checks/csp_pages_test.py",
     "scripts/checks/worklist_eligibility_test.py",
+    "scripts/artifacts/make_tutor_files_test.py",
 ]
 # NOT listed anywhere, on purpose (they sign in to, or read, a live database):
 #   test-rest.mjs test-student.mjs test-isolation.mjs test-prefs.mjs test-paging.mjs

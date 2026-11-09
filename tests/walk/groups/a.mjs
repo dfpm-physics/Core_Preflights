@@ -36,7 +36,10 @@ export async function runA(W) {
     await s.set('#i-title', title);
     await s.set('#i-points', '2');
     await s.set('#i-alldate', dueDate);
-    L.assert(!(await s.visible('#i-setup')), 'the setup section is shown before the first save');
+    // 2026-11-09: the chooser is on the new form too, and a preflight gets the four typed-work cards, starting on Instructor-graded questions.
+    L.assert(await s.visible('#i-setup'), 'the setup section is not shown on a new form');
+    L.eq(await s.page.$$eval('#i-cards [data-mode]', els => els.map(e => e.dataset.mode)), ['ai', 'human', 'tutor', 'both'], 'the cards on a new preflight');
+    L.eq(await selected(), 'human', 'the card a new preflight starts on');
     await s.click('#im-save');
     await s.until(/Next: choose how cadets do this work/, { sel: '#im-note' });
     L.eq(await s.text('#im-title'), 'Edit assignment', 'form title after the first save');
@@ -47,19 +50,21 @@ export async function runA(W) {
   });
 
   const dbPaths = () => (item()?.paths || []);
-  await L.check('A2', 'Questions card: saved, reopened, and the database holds one typed path with no tutor', async () => {
-    await s.click('#i-cards [data-mode="questions"]');
-    L.eq(await selected(), 'questions', 'selected card');
+  await L.check('A2', 'Instructor-graded questions card: saved, reopened, and the database holds one typed path with no tutor', async () => {
+    await s.click('#i-cards [data-mode="human"]');
+    L.eq(await selected(), 'human', 'selected card');
     await saveForm();
     const p = dbPaths();
     L.eq(p.length, 1, 'path count'); L.eq(p[0].delivery, 'typed_response', 'delivery'); L.eq(p[0].modality, 'written', 'modality');
     await openRow();
-    L.eq(await selected(), 'questions', 'card after reopening');
+    L.eq(await selected(), 'human', 'card after reopening');
   }, { needs: ['A1'] });
 
   await L.check('A3', 'Interactive tutor card: saved, reopened, and the database holds a single tutor path', async () => {
     await s.click('#i-cards [data-mode="tutor"]');
     L.eq(await selected(), 'tutor', 'selected card');
+    L.assert(await s.visible('#i-drop'), 'the tutor file drop is not shown');
+    await s.page.$eval('#i-hand', e => { e.open = true; });     // the boxes sit under "Enter the details by hand"
     L.assert(await s.visible('#i-islug'), 'tutor id field not shown');
     await s.set('#i-islug', tutorSlug);
     await s.set('#i-iurl', 'https://example.org/zz-walk-tutor');
@@ -98,10 +103,11 @@ export async function runA(W) {
   await L.check('A4b', 'Both card, reached from the questions path: the database holds a typed path and a tutor path with a choice rule', async () => {
     await s.go('faculty/items.html'); await s.untilSel('#items-table');
     await openRow();
-    if ((await selected()) !== 'questions') { await s.click('#i-cards [data-mode="questions"]'); await saveForm(); await openRow(); }
-    L.eq(await selected(), 'questions', 'card before choosing Both');
+    if ((await selected()) !== 'human') { await s.click('#i-cards [data-mode="human"]'); await saveForm(); await openRow(); }
+    L.eq(await selected(), 'human', 'card before choosing Both');
     await s.click('#i-cards [data-mode="both"]');
     L.assert(await s.visible('#i-twopath'), 'the credit rule is not shown for Both');
+    await s.page.$eval('#i-hand', e => { e.open = true; });
     await s.set('#i-islug', tutorSlug);
     await s.set('#i-iurl', 'https://example.org/zz-walk-tutor');
     await saveForm();
@@ -134,7 +140,7 @@ export async function runA(W) {
   await L.check('A7', 'the Report link on the row opens that assignment\'s report', async () => {
     await s.go('faculty/items.html');
     await s.untilSel('#items-table');
-    const href = await s.page.evaluate((t) => { const tr = [...document.querySelectorAll('#items-table tbody tr')].find(r => r.innerText.includes(t)); const a = [...tr.querySelectorAll('a')].find(x => x.innerText.trim() === 'Report'); return a ? a.getAttribute('href') : null; }, title);
+    const href = await s.page.evaluate((t) => { const tr = [...document.querySelectorAll('#items-table tbody tr')].find(r => r.innerText.includes(t)); const a = [...tr.querySelectorAll('a')].find(x => /^Report/.test(x.getAttribute('aria-label') || x.innerText.trim())); return a ? a.getAttribute('href') : null; }, title);
     L.assert(href, 'no Report link on the published row');
     L.assert(href.includes(encodeURIComponent(item().id)), 'the link names a different assignment: ' + href);
     await s.go('faculty/' + href);

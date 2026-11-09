@@ -242,4 +242,38 @@ const nasty = T.renderTasks([
 ], { esc });
 check('task text is escaped', !nasty.includes('<img src=x'));
 
+/* ── 4. a failed load is not an all-clear ─────────────────────────────────── */
+
+section('faculty-tasks.js — failure is shown as failure');
+
+const errHtml = T.renderTasksError({ esc });
+check('the error state says the list could not be loaded', /Couldn't load your task list/.test(errHtml));
+check('…offers a Retry', /data-retry-tasks/.test(errHtml));
+check('…and never carries the all-clear wording', !/Nothing outstanding/.test(errHtml));
+
+// Every source dying used to look exactly like "nothing outstanding".
+await withSources([
+  { id: 'dead-a', severity: 'warn', icon: '·', load: async () => { throw new Error('boom'); } },
+  { id: 'dead-b', severity: 'warn', icon: '·', load: async () => { throw new Error('boom'); } },
+], async () => {
+  const tasks = await T.loadTasks(ctx);
+  eq('all sources failing still returns no boxes', tasks.length, 0);
+  eq('…but names the sources that failed', T.failedSources(tasks), ['dead-a', 'dead-b']);
+  const view = T.renderTasks(tasks, { esc });
+  check('…and renders the error, not the all-clear', /Couldn't load your task list/.test(view) && !/Nothing outstanding/.test(view));
+});
+
+// One source dying beside one that answered keeps the answer and says the list may be incomplete.
+await withSources([
+  { id: 'dead', severity: 'warn', icon: '·', load: async () => { throw new Error('boom'); } },
+  { id: 'live', severity: 'warn', icon: '·', load: async () => ({ count: 2, action: 'Review', text: 'two', link: 'grade.html' }) },
+], async () => {
+  const tasks = await T.loadTasks(ctx);
+  const view = T.renderTasks(tasks, { esc });
+  check('a partial failure keeps the box that loaded', /data-task="live"/.test(view));
+  check('…and says the list may be incomplete', /may be incomplete/.test(view));
+});
+
+eq('a clean empty load is still the all-clear', /Nothing outstanding/.test(T.renderTasks([], { esc })), true);
+
 process.exitCode = summary() ? 0 : 1;

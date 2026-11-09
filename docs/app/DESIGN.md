@@ -461,11 +461,15 @@ degrade to "coming soon" skeletons when no row exists for the scope.
 - **Subtabs (`.subtab`)** — a pill-group segmented control (roster ↔ sections) with an active
   raised pill.
 - **Login card (`.id-card`)** — `{spacing}` centered, 16px radius, `shadow-lg`, with the atom
-  `.crest`, wordmark, and a muted physics-icon strip (atom · bolt · wave · magnet).
+  `.crest`, wordmark, a "Need help signing in?" disclosure, and a muted physics-icon strip
+  (atom · bolt · wave · magnet).
 - **Icons** — `<img class="ic">` (16/20/28px) via `iconHTML(name, emoji, class)` in
   [`js/util.js`](js/util.js). Source: Freepik on Flaticon (attributed site-wide in the
   footer). Fallback chain: `ic-<name>.png` → `ic-dashboard.png` → emoji. See
   [`media/icons/ICONS.md`](media/icons/ICONS.md) for the inventory.
+- **Filled controls** — take their colours from `--action*` and `--on-action`, never from `--blue`,
+  `--green` or `--red` (those are text and status colours). Each filled pairing is at least 4.5:1 with
+  white text in both themes.
 
 ## Responsive Behavior
 

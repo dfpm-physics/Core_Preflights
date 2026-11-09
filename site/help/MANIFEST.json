@@ -11,6 +11,13 @@
       "file": "student-getting-started.md"
     },
     {
+      "id": "all-classes",
+      "tier": "student",
+      "title": "All classes",
+      "summary": "The page you land on: work due in every class you are in, soonest first.",
+      "file": "student-all-classes.md"
+    },
+    {
       "id": "ai-and-your-work",
       "tier": "student",
       "title": "How AI is used on your work",

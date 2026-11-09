@@ -66,7 +66,7 @@ const read = (rel) => readFileSync(resolve(REPO, rel), 'utf8');
 /* ───────────────────────────────────────────────────────────────────────────────────────── */
 section('the standard wording equals the older page\'s own text');
 {
-  const page = read('site/faculty/lessons.html');
+  const page = read('tests/app-schema/fixtures/older-lessons-page.html');
   const unwrap = (s) => s.replace(/\\'/g, "'");
   for (const [name, value] of [['READING_REFLECTION_TEXT', F.READING_REFLECTION_TEXT], ['READING_TIME_TEXT', F.READING_TIME_TEXT]]) {
     const m = new RegExp(`const ${name} = '((?:[^'\\\\]|\\\\.)*)'`).exec(page);

@@ -58,3 +58,17 @@ export async function loadBacklog(db, courseOfferingId, scope = 'final') {
     names: Object.fromEntries((enrR.data || []).map(e => [e.id, e.students?.name || ''])),
   };
 }
+
+/**
+ * What the faculty dashboard shows of the backlog: one line per non-empty pile, reshaped from groupBacklog() and
+ * nothing else. `cadets` is the sum the Backlog page prints beside a pile's title, and `assignments` is how many
+ * assignments that pile holds; `waiting` is the number of pile rows, which is the page's own `total` (zero means
+ * the page says "Nothing is waiting"). No count is computed here that groupBacklog did not already decide.
+ */
+export function backlogSummary(groups) {
+  const piles = PILES.map(p => {
+    const rows = groups[p.key] || [];
+    return { key: p.key, title: p.title, hint: p.hint, assignments: rows.length, cadets: rows.reduce((n, r) => n + r.count, 0) };
+  }).filter(p => p.assignments > 0);
+  return { piles, waiting: piles.reduce((n, p) => n + p.assignments, 0) };
+}

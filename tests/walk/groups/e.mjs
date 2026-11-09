@@ -8,14 +8,16 @@ export async function runE(W) {
   const need = title && L.itemByTitle(title)?.is_published;
   const esc = (t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const pickerRow = (s, t) => s.page.evaluate((x) => { const tr = [...document.querySelectorAll('#report-list tbody tr')].find(r => r.innerText.includes(x)); return tr ? { text: tr.innerText.replace(/\s+/g, ' '), href: tr.querySelector('a')?.getAttribute('href') || null } : null; }, t);
-  const navLabels = (s) => s.page.$$eval('#nav-links a', as => as.map(a => a.innerText.trim()));
+  // Wait for the bar to be drawn first: read too early, it is empty, and "no Reports link" passes for the wrong reason.
+  const navLabels = async (s) => { await s.untilSel('#nav-links a'); return s.page.$$eval('#nav-links a', as => as.map(a => a.innerText.trim())); };
 
   // ---- Director ----
   const d = await L.Session.start(W.browser, W.base, L.staffLogin(W.seed, 'director'));
-  await L.check('E1', 'director: Reports is on the bar, and opens a picker listing the term\'s assignments', async () => {
+  await L.check('E1', 'director: Reports is reached from the dashboard (All reports), and opens a picker listing the term\'s assignments', async () => {
     await d.go('faculty/dashboard.html');
-    const labels = await navLabels(d); L.assert(labels.includes('Reports'), 'nav labels: ' + labels.join(' | '));
-    await d.page.evaluate(() => [...document.querySelectorAll('#nav-links a')].find(a => a.innerText.trim() === 'Reports').click());
+    const labels = await navLabels(d); L.assert(!labels.includes('Reports'), 'nav labels: ' + labels.join(' | '));
+    await d.untilSel('#dashReports a[href="report.html"]');
+    await d.page.evaluate(() => document.querySelector('#dashReports a[href="report.html"]').click());
     await d.untilSel('#report-list');
     L.assert(!/dashboard\.html/.test(d.page.url()), 'sent to the dashboard');
     const total = await d.page.$$eval('#report-list tbody tr', r => r.length);
@@ -33,11 +35,12 @@ export async function runE(W) {
 
   // ---- Instructor ----
   const ins = await L.Session.start(W.browser, W.base, L.staffLogin(W.seed, 'instructor'));
-  await L.check('E3', 'instructor: Reports is on the bar and the picker lists the assignment', async () => {
+  await L.check('E3', 'instructor: Reports is reached from the dashboard and the picker lists the assignment', async () => {
     await ins.go('faculty/dashboard.html');
-    const labels = await navLabels(ins); L.assert(labels.includes('Reports'), 'nav labels: ' + labels.join(' | '));
-    L.assert(!labels.includes('Assignments'), 'the instructor sees the Assignments link');
-    await ins.page.evaluate(() => [...document.querySelectorAll('#nav-links a')].find(a => a.innerText.trim() === 'Reports').click());
+    const labels = await navLabels(ins); L.assert(!labels.includes('Reports'), 'nav labels: ' + labels.join(' | '));
+    L.assert(labels.includes('Assignments'), 'the instructor does not see the Assignments link (read-only since 2026-11-09)');
+    await ins.untilSel('#dashReports a[href="report.html"]');
+    await ins.page.evaluate(() => document.querySelector('#dashReports a[href="report.html"]').click());
     await ins.untilSel('#report-list');
     if (need) L.assert(await pickerRow(ins, title), 'the assignment is not in the instructor\'s picker');
   });

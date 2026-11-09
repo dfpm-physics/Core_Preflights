@@ -1,14 +1,41 @@
 ## Choose how cadets do the work
 
-On **Assignments** in the top navigation, open an assignment that is already saved. A new assignment starts with a short form. Save it once. The form stays open and shows **How cadets do this work**.
+On **Assignments** in the top navigation, select **+ New assignment** or open one that is already saved. Under the title, kind and points the form shows **How cadets do this work**. The choices depend on the kind of assignment. The ⓘ beside the heading explains each one.
+
+### Preflights and case studies
+
+Pick one of four cards:
+
+- **AI-graded questions.** Cadets answer in writing. The AI drafts the marks overnight and you review them. You write the questions in the box on the same form.
+- **Instructor-graded questions.** The same typed answers, marked by an instructor.
+- **Interactive tutor.** Cadets work through the material in a guided conversation with an AI tutor, and are graded on effort.
+- **Both (cadets choose).** The assignment has AI-graded questions and the tutor. Each cadet picks one. **What earns credit** says whether both count or only one. When both count, **Once a cadet commits** says whether the cadet may change their mind.
+
+### Every other kind of assignment
 
 Pick one of three cards:
 
-- **Questions.** Cadets answer questions you write. If the assignment is answered on the site, select **Open the questions page** to add them. If cadets type a response, you write the questions in the box on the same form.
-- **Interactive tutor.** Cadets work through the material in a guided conversation with an AI tutor. Enter the **Tutor id** (lowercase letters, numbers and hyphens) and, when you have it, the **Tutor link**. The id cannot be changed once a link is saved. To use a different tutor, select **Replace this tutor…**.
-- **Both (cadets choose).** The assignment has a typed response and the tutor. Each cadet picks one. **What earns credit** says whether both count or only one. When both count, **Once a cadet commits** says whether the cadet may change their mind.
+- **In class.** Done in person. Staff type in the scores.
+- **Auto-graded questions.** Cadets answer on the site and it is marked for them. Only homework offers this. On any other kind the card is grayed out, and hovering over it says why. Select **Open the questions page** to add the questions.
+- **Done elsewhere.** Done in another system, such as WebAssign or Gradescope. You import the scores.
 
-An assignment that is done in person or somewhere else shows no cards. Its **How the work is done** box is under **More options**.
+A new assignment starts on the card that suits its kind. Changing the kind of a new assignment picks that kind's cards again.
+
+### An assignment you saved earlier
+
+It opens showing the setting it has. If that setting is not one of the cards for its kind, a card called **Current setting** is shown and a line says it is an older setting. Opening it changes nothing. Only selecting a card changes it. Any other combination is under **How the work is done** and **How it is graded** in **More options**.
+
+A saved assignment cannot switch to or from **Auto-graded questions**. On such an assignment the cards that would do that are grayed out, and hovering over one says: "A saved assignment cannot switch to or from auto-graded questions. Make a new assignment instead." Make a new assignment with the setting you want, and remove the old one if you no longer need it.
+
+### A link from a tutor builder
+
+A link that carries a tutor opens a new assignment already on a card. A link that asks for the tutor alone opens on **Interactive tutor**. Any other link with a tutor opens on **Both**, which is AI-graded questions plus the tutor. If the card is AI-graded, a note under the cards tells you when a question worth points has no description of a good answer yet: add one to each, because the AI draft is checked against it. A link never changes an assignment you already saved this way.
+
+### Set up a tutor from a file
+
+When the card is **Interactive tutor** or **Both**, a box says **Drop the tutor setup file here**. Drop the file your AI tutor builder gave you, or select **Choose file**. The page fills in the tutor id, link, title and description, lists what it read, and keeps the tutor's objectives for the next save. Nothing is saved until you select **Save assignment**. If the file is wrong, the page says what is wrong and changes nothing: for example a file for a different course, or one that is not a tutor setup file.
+
+To type the details yourself, open **Enter the details by hand**. Enter the **Tutor id** (lowercase letters, numbers and hyphens) and, when you have it, the **Tutor link**. The id cannot be changed once a link is saved. To use a different tutor, select **Replace this tutor…**.
 
 Add the questions before you publish. The page does not let you publish an assignment that has none.
 
@@ -86,3 +113,9 @@ Each row names the course, the assignment, the question and what is wrong with t
 The link opens the assignment, not the question, so look for the question named on the row.
 
 If the line says the list could not be read, nothing has been checked. Reload the page. If the message stays, tell whoever manages the database.
+
+## What an instructor sees on Assignments
+
+An instructor can open **Assignments** and read it: the list, each row's dates and state, and the **Grade**, **Report** and **Launch tutor** buttons. They see only published assignments. They get no **New assignment**, **Edit** or **Remove**, and the page says that only directors change assignments. The database refuses an instructor's changes whatever the page shows.
+
+Every assignment is edited here, including the ones entered on the older page. The older address, `lessons.html`, now forwards to this page, so an old bookmark or a link from an AI tutor build still lands in the right place. An assignment with cadet work can be removed from this page too: it asks you to hold a button for five seconds, after telling you how many submissions, grades and tutor reports go with it.

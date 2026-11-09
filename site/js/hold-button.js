@@ -35,13 +35,14 @@
  *   idleText    label text when not holding
  *   holdText    (n) => label text at n whole seconds remaining
  *   onComplete  called once, when the hold completes
- * @returns {{cancel: () => void}} so a caller can stand it down when its dialog closes
+ * @returns {{cancel: () => void, dispose: () => void}} `cancel` ends a hold in progress; `dispose` also removes every listener
+ *   (button and document) and makes the control inert, so a caller can stand it down when its dialog closes
  */
 export function wireHoldButton({
   button, label = button, ms = 5000, idleText = label?.textContent || '',
   holdText = (n) => `Keep holding… ${n}`, onComplete,
 }) {
-  if (!button) return { cancel() {} };
+  if (!button) return { cancel() {}, dispose() {} };
   let raf = null, pointerId = null;
 
   const cancel = () => {
@@ -55,6 +56,7 @@ export function wireHoldButton({
   };
 
   const begin = (e) => {
+    if (disposed) return;
     // Right-click is not a hold. Touch and pen have no meaningful `button`, so only gate the mouse.
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     e.preventDefault();
@@ -67,6 +69,7 @@ export function wireHoldButton({
     const started = performance.now();
     const tick = () => {
       const left = ms - (performance.now() - started);
+      if (disposed) return;
       if (left <= 0) { raf = null; cancel(); onComplete?.(); return; }
       if (label) label.textContent = holdText(Math.ceil(left / 1000));
       raf = requestAnimationFrame(tick);
@@ -74,12 +77,28 @@ export function wireHoldButton({
     tick();
   };
 
+  const onKey = (e) => { if (e.key === 'Escape') cancel(); };
+  let disposed = false;
+
   button.addEventListener('pointerdown', begin);
   button.addEventListener('pointerup', cancel);
   button.addEventListener('pointercancel', cancel);
   // NOTE the absence of pointerleave/pointerout. That absence IS the fix — with the pointer
   // captured, leaving the button is not a cancellation and must not be treated as one.
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') cancel(); });
+  document.addEventListener('keydown', onKey);
 
-  return { cancel };
+  /* Stand the control down for good: stop any hold in progress and remove every listener this call added, on the button
+   * and on the document. A button that is wired again for a new target (a dialog opened for a different item) must be
+   * disposed first, or the old listeners stay and one hold completes once for each of them. */
+  const dispose = () => {
+    if (disposed) return;
+    disposed = true;
+    cancel();
+    button.removeEventListener('pointerdown', begin);
+    button.removeEventListener('pointerup', cancel);
+    button.removeEventListener('pointercancel', cancel);
+    document.removeEventListener('keydown', onKey);
+  };
+
+  return { cancel, dispose };
 }

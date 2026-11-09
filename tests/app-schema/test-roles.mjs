@@ -70,7 +70,7 @@ section('directs one course, teaches another, same term');
 
   await ctx.setCurrentOffering('o-b-now');
   check('switching to the course they teach: not a director', ctx.isDirectorForCurrent() === false);
-  check('switching to the course they teach: director pages leave the bar', !navKeys(ctx).includes('items') && !navKeys(ctx).includes('admin') && !navKeys(ctx).includes('terms'));
+  check('switching to the course they teach: director pages leave the bar', !navKeys(ctx).includes('admin') && !navKeys(ctx).includes('terms') && navKeys(ctx).includes('items'));  // Assignments is read-only for an instructor, so it stays on the bar
   eq('switching to the course they teach: the role word', navRoleLabel(ctx), 'Instructor');
 
   await ctx.setCurrentOffering('o-a-now');
@@ -83,7 +83,7 @@ section('directed a past term, now only teaches');
   const ctx = await signIn([row(OFF.a_past, 'director'), row(OFF.a_now, 'instructor', 'sec-1')]);
   await ctx.setCurrentOffering('o-a-now');
   check('in the current term of the same course: not a director', ctx.isDirectorForCurrent() === false);
-  check('no director pages on the bar for the current term', !navKeys(ctx).includes('items') && !navKeys(ctx).includes('admin'));
+  check('no director pages on the bar for the current term', !navKeys(ctx).includes('admin'));
   eq('the role word is Instructor', navRoleLabel(ctx), 'Instructor');
   await ctx.setCurrentOffering('o-a-past');
   check('choosing the past term: a director of that term only', ctx.isDirectorForCurrent() === true);

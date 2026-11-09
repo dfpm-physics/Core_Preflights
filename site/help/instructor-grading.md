@@ -11,7 +11,7 @@ you browse to, so the routes to it are the places that already know you have som
 - **Grade** on any assignment card on the **Assignments** page, which opens that assignment already
   loaded. This is the route to use when you want a specific lesson rather than whatever is waiting —
   the boxes above only show you assignments that currently need something;
-- **Grade assignments** in the top navigation, which lists every assignment that still has work waiting
+- **Grade assignments**, the button at the top of the **Assignments** page, which lists every assignment that still has work waiting
   (drafted scores to approve, AI-suggested drafts to review, cadets with no score yet). **Review answers** on a row
   opens this page on that assignment, with a link back to the list. Assignments whose scores are typed in or
   imported open a table on the Grade assignments page instead, where a grade file can be dropped in;
@@ -40,7 +40,7 @@ subset of this one and sent you to the same page.)*
 
 ## Grade assignments: the list and the score table
 
-**Grade assignments** in the top navigation lists the assignments in the current course. Assignments with work waiting come first, oldest due date first. Assignments with nothing waiting are hidden. Tick **Also show assignments with nothing waiting** to see them.
+The **Grade assignments** button at the top of the **Assignments** page opens a list of the assignments in the current course. Assignments with work waiting come first, oldest due date first. Assignments with nothing waiting are hidden. Tick **Also show assignments with nothing waiting** to see them.
 
 Each row shows the due date, how the assignment is graded, what is waiting, and one button. **What is waiting** can name any of these counts:
 

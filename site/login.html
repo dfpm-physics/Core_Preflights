@@ -18,8 +18,8 @@
     <div class="id-card">
       <div class="crest">⚛️</div>
       <h1>PREP</h1>
-      <p style="font-size:0.8em;color:var(--muted);margin:-4px 0 4px;letter-spacing:0.01em">Pre-lesson Readiness Engagement Platform</p>
-      <p>USAFA Physics — sign in to continue</p>
+      <p class="crest-sub">USAFA Physics</p>
+      <p>Sign in with your academy email and password.</p>
 
       <div id="error" class="alert alert-error" style="display:none"></div>
 
@@ -28,7 +28,6 @@
           <label for="identifier">Email address</label>
           <input id="identifier" type="email" inputmode="email" autocomplete="username"
                  placeholder="first.last@afacademy.af.edu" required>
-          <div class="field-hint">Use the email address your account was created with.</div>
         </div>
         <div class="field">
           <label for="password">Password</label>
@@ -37,8 +36,13 @@
         <button id="submit" class="btn btn-primary btn-block" type="submit">Sign in</button>
       </form>
 
-      <div class="login-foot">Forgot your password? Cadets: ask your instructor to reset it.
-        Instructors: ask a system admin.</div>
+      <details class="login-help">
+        <summary>Need help signing in?</summary>
+        <p>Use the email address your account was created with.</p>
+        <p>Forgot your password? Cadets: ask your instructor to reset it.
+          Instructors: ask a system admin.</p>
+      </details>
+      <p class="login-foot">PREP is the Pre-lesson Readiness Engagement Platform.</p>
     </div>
     <div class="physics-strip" aria-hidden="true">
       <img src="media/icons/ic-atom.png"   alt="">
