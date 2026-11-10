@@ -20,7 +20,9 @@ MODES   dry run by default; --commit writes. Idempotent: a second --commit write
         dry run after a commit reports 0 rows. The write is one transaction.
 
 WHICH DATABASE   The script never picks one. --url-env NAME names the environment variable that
-        holds the connection string (default STAGING_DB_URL, the staging project). The project is
+        holds the connection string (default STAGING_DB_URL, the staging project). --dotenv PATH
+        (alias --env-file) names a file of KEY=VALUE lines instead and uses its PREP_APP_DML_* role;
+        give one or the other. The project is
         read from that string by the shared parser (db_target.py), and --expect-ref must name the
         same project, or the run is refused. The staging project is accepted as it is. The live
         project is refused unless --allow-production-write is also given; that flag is for the
@@ -37,6 +39,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "staging"))
 import db_target  # noqa: E402
+# step1_conn (imported inside connect_dotenv) reads the env file; it lives beside db_target.
 
 SCOPE_SQL = """
 SELECT c.code, t.code, a.modality, oa.grading_role, count(*),
@@ -64,43 +67,65 @@ UPDATE app.offering_activities oa
 """
 
 
+def check_ref(ref, expect_ref, allow_production):
+    """Exit unless this run may write the project `ref`."""
+    if expect_ref != ref:
+        sys.exit(f"REFUSED  --expect-ref does not match the project the connection string names ({ref}).")
+    if ref == db_target.STAGING_REF:
+        return
+    if ref == db_target.PRODUCTION_REF:
+        if not allow_production:
+            sys.exit("REFUSED  that connection names the live project. Pass --allow-production-write "
+                     "only for the course director's own run.")
+        return
+    sys.exit(f"REFUSED  the connection names project {ref}, which this script does not write.")
+
+
 def check_target(url, expect_ref, allow_production):
     """The Target for a URL this run is allowed to write, or exit with the refusal."""
     try:
         target = db_target.parse(url)
     except db_target.DbTargetError as exc:
         sys.exit(str(exc))
-    if expect_ref != target.ref:
-        sys.exit(f"REFUSED  --expect-ref does not match the project the connection string names ({target.ref}).")
-    if target.ref == db_target.STAGING_REF:
-        return target
-    if target.ref == db_target.PRODUCTION_REF:
-        if not allow_production:
-            sys.exit("REFUSED  that connection names the live project. Pass --allow-production-write "
-                     "only for the course director's own run.")
-        return target
-    sys.exit(f"REFUSED  the connection names project {target.ref}, which this script does not write.")
+    check_ref(target.ref, expect_ref, allow_production)
+    return target
+
+
+def connect_dotenv(path, expect_ref, allow_production):
+    """(connection, ref) from a file of KEY=VALUE lines, over the data-writing tier (PREP_APP_DML_*)."""
+    import step1_conn
+    spec = step1_conn.from_env_dict(step1_conn.read_env_file(path), "dml", "STAGING_DB_URL")
+    check_ref(spec.ref, expect_ref, allow_production)
+    return spec.connect(), spec.ref
 
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--url-env", default="STAGING_DB_URL")
+    ap.add_argument("--url-env", default=None, help="name of the environment variable holding the URL (default STAGING_DB_URL)")
+    ap.add_argument("--dotenv", "--env-file", dest="dotenv", metavar="PATH",
+                    help="a file of KEY=VALUE lines; uses the data-writing tier (PREP_APP_DML_*). Not with --url-env")
     ap.add_argument("--expect-ref", required=True)
     ap.add_argument("--allow-production-write", action="store_true")
     ap.add_argument("--commit", action="store_true")
     ap.add_argument("--xid-file", help="append this transaction's id to PATH after a commit")
     args = ap.parse_args(argv)
 
-    url = os.environ.get(args.url_env, "").strip()
-    if not url:
-        sys.exit(f"REFUSED  environment variable {args.url_env} is not set.")
-    target = check_target(url, args.expect_ref, args.allow_production_write)
+    if args.dotenv and args.url_env:
+        sys.exit("REFUSED  give --dotenv or --url-env, not both.")
+    if args.dotenv:
+        conn, ref = connect_dotenv(args.dotenv, args.expect_ref, args.allow_production_write)
+    else:
+        url_env = args.url_env or "STAGING_DB_URL"
+        url = os.environ.get(url_env, "").strip()
+        if not url:
+            sys.exit(f"REFUSED  environment variable {url_env} is not set.")
+        ref = check_target(url, args.expect_ref, args.allow_production_write).ref
 
-    import psycopg2
+        import psycopg2
 
-    conn = psycopg2.connect(url, connect_timeout=15)
+        conn = psycopg2.connect(url, connect_timeout=15)
     cur = conn.cursor()
-    print(f"target   project {target.ref}")
+    print(f"target   project {ref}")
     print(f"mode     {'COMMIT' if args.commit else 'dry run (nothing is written)'}")
     try:
         cur.execute("SET LOCAL lock_timeout = '5s'")

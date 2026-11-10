@@ -95,8 +95,11 @@ def has_touch(cur, table):
     return cur.fetchone()[0] > 0
 
 
-def snapshot(conn):
-    """Read every table once, in one repeatable-read read-only transaction."""
+def snapshot(conn, extra=None):
+    """Read every table once, in one repeatable-read read-only transaction.
+
+    `extra`, when given, is called with the cursor before the transaction ends, so what it reads shares the snapshot;
+    its result is stored under snap["extra"] (step1_compare.py uses this for deadlines and score columns)."""
     conn.set_session(isolation_level="REPEATABLE READ", readonly=True, autocommit=False)
     cur = conn.cursor()
     cur.execute("SET TIME ZONE 'UTC'")
@@ -116,6 +119,8 @@ def snapshot(conn):
                     (ADDED.get(table, []),))
         rows = {k: [h, x, u] for k, h, x, u in cur.fetchall()}
         snap["tables"][table] = {"cols": cols, "touch": has_touch(cur, table), "rows": rows}
+    if extra is not None:
+        snap["extra"] = extra(cur)
     conn.rollback()
     return snap
 

@@ -19,7 +19,9 @@ pages were deleted (`admin.html`, `interactions-admin.html`, `interactions.html`
 The eight internal design notes at `site/app/*.md` went to `docs/app/` rather than into the
 published tree. The two frozen contract paths — `site/student/interaction-submit.html` and
 `site/faculty/lessons.html` — stopped being forwarding stubs and became the real pages **at
-byte-identical URLs**, verified by hash before and after.
+byte-identical URLs**, verified by hash before and after. *(Since 2026-11-09 `site/faculty/lessons.html` is a
+short page that forwards to the one assignment editor, `site/faculty/items.html`, keeping the query string and hash;
+the address itself is unchanged.)*
 
 **Still stale below, and worth knowing before you follow Phases 1–3:** the chain in step 2 now runs
 past `003` to `019` (`019_effort_partial_credit_flat.sql` is the highest-numbered file, and CORE.md
@@ -118,9 +120,11 @@ each role connects and holds exactly the privileges it should, and no more.
    set. If any shipped artifact targets a dropped slug, **do not commit**; revisit the migration
    (this is a frozen-contract question, per the schema decision §7).
 9. **Commit the migration** — re-run with `--commit`. The whole run is one transaction and is
-   idempotent; re-running after a commit changes nothing. Once the course has a different active
-   offering, a rerun stops cleanly on the one-active-offering unique index with nothing written, so
-   do not rerun it against a live schema.
+   idempotent; re-running after a commit changes nothing. *(Since migration 026-039 the database
+   allows one active offering per course, and the script sets its offering active, so a re-run
+   against a schema that already has a different active offering for the course stops on that
+   unique index with nothing written. This procedure has already run; do not repeat it against a
+   live schema.)*
 10. **Close the read window** as `postgres`, immediately:
 
     ```

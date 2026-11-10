@@ -13,7 +13,7 @@ project around them.
 |---|---|---|
 | Storage bucket files (`lesson-figures`, `artifact-sources`) | The `storage.objects` rows may exist, but the files do not. Artifact sources would be gone. | The `sync_artifacts.py pull` cache, and the Storage dashboard |
 | Auth settings (providers, password rules, redirect URLs, JWT secret, email templates) | Sign-in behaves differently or fails | Re-enter in the dashboard |
-| Edge functions and their secrets | Password resets, provisioning and online-answer checking stop working | `scripts/staging/deploy_functions.py` deploys the allow-listed functions (it refuses the two AI proxy functions by name, so those are redeployed by hand), then dashboard secrets |
+| Edge functions and their secrets | Password resets, provisioning and online-answer checking stop working | `scripts/staging/deploy_functions.py`, then dashboard secrets. That tool deploys to staging only and deploys the allow-listed functions; it refuses the two gated AI proxy functions (`genai-mil-proxy`, `asksage-proxy`) by name, so those are redeployed by hand and never brought back by it |
 | Database roles (`prep_app_owner`, `prep_app_dml`, `prep_app_read`) and their passwords | Roles are cluster-wide, so a per-database dump leaves them out; `--no-acl` drops the grants | `supabase/admin/app_schema_bootstrap.sql` on the new project, then re-apply grants |
 | Ownership (`--no-owner`) | Objects belong to whoever ran the restore | Re-run the bootstrap ownership step |
 | Extensions, `pg_cron` jobs, realtime publications, webhooks | Missing until recreated | Migrations and the dashboard |
@@ -137,11 +137,13 @@ it, is the one recorded above.
 
 Record these on the production project's backup page. Do not paste any key or password here.
 
+*Read by the course director on 2026-11-05. Open items are still blank.*
+
 - [ ] Plan tier: ______
-- [ ] Daily backups on? Retention in days: ______
-- [ ] Point-in-time recovery enabled? Window: ______
-- [ ] Date and time of the newest backup: ______
+- [x] Daily backups on? Yes. Eight physical backups listed, 29 Oct to 5 Nov 2026. Retention in days: not stated.
+- [x] Point-in-time recovery enabled? No. It is an add-on.
+- [x] Date and time of the newest backup: 5 Nov 2026, 09:14:28 UTC.
 - [ ] Who holds owner or admin access to the organization and project (names): ______
 - [ ] Is there a second person who can start a restore? ______
-- [ ] Does a backup include Storage files? (Expected: no.) ______
+- [x] Does a backup include Storage files? (Expected: no.) No.
 - [ ] Is billing current, so the project will not be paused? ______

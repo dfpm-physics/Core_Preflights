@@ -409,11 +409,11 @@ The report summarizes how an assignment went — how ready the class is, which m
 one recommended thing to cover, and a few student responses worth reading aloud. It is
 intended as a five-minute read before you teach the lesson.
 
-**Reach it with Reports** in the top navigation. That page lists the assignments you can see, with the due date and
+**Reach it from your dashboard.** Its **Recent reports** list shows the latest assignments that have a report, and **All reports** opens the full list of the assignments you can see, with the due date and
 how many cadets have done each one. Select **Open report** on a row. An assignment that is not published shows
 **Not published** instead, because nobody can have done it yet. An assignment appears once it has questions or an
 interactive tutor. You can also use **Rollup** on any assignment card on the Assignments page, or your dashboard's
-carousel. The button is disabled on a draft assignment: nobody can have submitted to one, so there
+carousel, or select a class's column heading in the gradebook. The button is disabled on a draft assignment: nobody can have submitted to one, so there
 is nothing to summarize.
 
 **It opens on "My sections"** — your own sections combined. "Course rollup" covers the whole course

@@ -6,7 +6,20 @@ can understand the history without re-deriving it from code or git.
 
 Newest entries first. Dates are `YYYY-MM-DD`.
 
----
+## 2026-11-10 — Matthew Recker via Claude (branch `v2-review-pass` joined with `v2`; Stage E item 9 closed; not committed)
+
+- **One branch again.** `v2-review-pass` now holds the pushed `v2` commit (Stage C gate, step 1 tools, doc review) and the
+  name-scan hash mode that was waiting uncommitted. Conflicts were joins, not choices: both suite lists, both CHANGELOG
+  sides whole, the later review date in `docs/DOC-SOURCES.json`. Offline suites: 79 of 79 clean.
+- **The step 1 API check follows the site it checks.** The v2 student pages read grades through the `my_grades` view; an older
+  site reads the `grades` table. `scripts/staging/step1_cadet_api_check.py` now reads which one from `student-data.js` in the
+  `--site` folder, so it gives the right answer for the commit being shipped. Its offline test covers both forms.
+- **Stage E item 9 (function logs) is done, on staging.** The old Management API logs route is gone (HTTP 410).
+  `scripts/staging/prove_stage_e_open_items.py` now reads `analytics/endpoints/logs` with a `source =` query, waits for the
+  logs to arrive, and fails on an empty read. Run on 2026-11-10: 41 passed, 0 failed; 27 function log rows read, none holding a
+  token, key text, tolerance or expected answer. The functions themselves log nothing of their own.
+- Not done: item 4's expired-token case (run with `--skip-expiry`); nothing touched production.
+- **Docs reviewed against the branch.** All indexed documents flagged as stale were read against their changed sources and re-dated, except the kit's frozen copy of the prefill-link contract, left flagged because it is hash-locked and re-syncing it is the director's call. Changed in substance: the Report tab section of `instructor-grading.md` (Reports left the top bar; it is reached from the dashboard and the gradebook column heading), the Lessons-editor wording in `director-course-structure.md` and `director-schema-reference.md` (now the Assignments editor), `admin-system-operations.md` (backups), `STEP1-TOOLS.md` (API check), `MACHINE-SETUP.md` (name-scan hash mode) and a note in `PREP-V2-CUTOVER.md` (`lessons.html` forwards). Documents whose sources are the uncommitted contract files stay flagged until those are committed.
 
 ## 2026-11-09 — Matthew Recker via Claude (Assignments: locked cards explained, prefill link lands on Both; branch `v2-review-pass`, not committed)
 
@@ -899,6 +912,23 @@ Made the staff pages usable by a person doing this for the first time. No databa
 - **Not done**: not pushed and not merged to `v2`; `check_doc_sources.py` flags several help pages for other reasons, which were not reviewed here. Staging now holds invented `ux-` test data (one course, one term, five enrollments, one assignment).
 
 ---
+## 2026-11-05 — Matthew Recker via Claude (backup dashboard reading recorded, `v2` branch)
+
+The course director read the production backup page. CORE.md section 1, PROJECT.md and the checklist in
+`docs/operations/RESTORE-DRILL.md` now state what was read: daily backups on, point-in-time recovery off, Storage files
+not included. Deliberately not done: no change to any backup setting, and no restore was run. Plan tier, who holds
+access, a second person who can restore, and billing are still open on the checklist.
+
+## 2026-11-05 — Matthew Recker via Claude (name scan hash mode, `v2` branch)
+
+`scripts/checks/name_scan.py` gains `--write-hashes PATH` (reads the roster as before and writes a local file: format version, random salt, date, counts, and per cadet the ID plus salted SHA-256 hashes of the surname and given-name tokens; no plain name) and `--hash-file [PATH]` (scans tracked and staged files against that file with no database or credential). Matching reuses the live code, so tokens, `ALLOW`, the proximity window and exit codes are the same; the only visible difference is that a hit shows file, line and cadet ID without a masked name. The run says it used the file, its date and name count; it warns past 120 days and exits 2 on a missing or damaged file. The write is refused for a tracked or un-ignored path. Default path `scripts/checks/name_scan_hashes.local.json`, added to `.gitignore`. Limits: the salt sits beside the hashes, so the file stays local and uncommitted; a cadet added after the file is written is not caught. New offline test `scripts/checks/name_scan_hash_test.py` (invented names), added to the offline Python list. CORE.md sections 3 and 5 updated. Deliberately not done: the live scan was not run, no roster was read, nothing committed.
+
+## 2026-11-05 — Matthew Recker via Claude (v2 Stage C gate and doc review, `v2` branch)
+
+The course director entered a mock course by hand on staging and passed the Stage C gate. His comments on the staff pages
+are being worked on separately and are not in this commit. A review of the operations documents corrected four and
+re-dated the rest (`docs/DOC-SOURCES.json`, `site/help/DOC-STATUS.json`). During the day a test run also wrote test-cadet
+rows on staging; nothing reached production. Deliberately not done: no production change, no migration, no merge to `main`.
 
 ## 2026-11-05 — Matthew Recker via Claude (v2 Stage C left-over review items, `v2-stage-c-fixes` branch)
 
@@ -909,6 +939,24 @@ cadets the same sign-in address (the short form is kept when free, the whole id 
 with a stand-in cursor, the live script was not run. Nothing applied to any database, no migration, no deploy, staging
 untouched. Deliberately not done: any change to key-row editing rights, the other open items (judged not worth a change
 before step 1, or needing a decision).
+
+## 2026-11-05 — Matthew Recker via Claude (v2 step 1 day tools, branch `v2-step1-tools`)
+
+- **Six tools for the day step 1 is applied**, listed in `docs/operations/STEP1-TOOLS.md`: a runner for the 19
+  prechecks that prints each beside its expected result for a named stage; a snapshot of 15 tables to a git-ignored
+  folder with a count check; a before-and-after comparison of deadlines, extensions and grade score columns that works
+  with no transaction numbers and says what it cannot detect; a psycopg2 replacement for the `psql` loops that records
+  transaction numbers; an anonymous API check of the queries the student pages send; and a rehearsal that runs them all
+  on a throwaway database.
+- **`backfill_paths.py` gained `--dotenv`** (data-writing tier). `grades_fingerprint.snapshot` gained an optional
+  `extra` reader; its output is unchanged.
+- **Checked:** 62 offline tests pass. The rehearsal ran 23 steps on a throwaway database on the staging server (build
+  through 022, 024 to 043, ledger rows, backfill with `--dotenv`, compare, rollback and re-apply of 043) with no
+  unexpected exit, and the database was dropped. The precheck runner, the comparison and the API check were run
+  read-only against staging. The ported deadline rule agreed with the database function on all 139 item-section pairs there.
+- **Not done:** nothing was run against the live project; no migration was applied to staging; the runbook was not
+  edited. Two items remain by hand: the sign-in view of a real cadet, and the restore drill. `psql` and `pg_dump` are
+  not installed on this machine.
 
 ## 2026-11-05 — Matthew Recker via Claude (v2 Stage C staff pages, on staging, `v2` branch)
 

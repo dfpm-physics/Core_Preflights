@@ -141,9 +141,11 @@ bookmarks, and Blackboard imports.
 
 - **Repo / Pages:** `github.com/dfpm-physics/Core_Preflights` → `https://dfpm-physics.github.io/Core_Preflights/site/`
 - **Supabase:** production project `shzvpmlnqfmzfmuxkowi` is on a **paid tier** (decided
-  2026-11-04), so the free-tier idle pause does not apply to it. What the paid tier actually gives
-  for backups and retention has **not been verified**: do not claim either until the dashboard has
-  been checked. The staging project (`wkibeptktbnaddfynrwr`) has no recorded tier; if it is on the
+  2026-11-04), so the free-tier idle pause does not apply to it. Read from the dashboard on 2026-11-05:
+  daily physical backups are on (eight listed, 29 Oct to 5 Nov, newest 5 Nov 09:14 UTC), point-in-time
+  recovery is off, and a backup does not include Storage files, so neither bucket in section 3 is
+  covered. Up to about a day of work can be lost in a restore. Retention in days was not stated, and
+  no restore of a production backup has been run: do not claim either. The staging project (`wkibeptktbnaddfynrwr`) has no recorded tier; if it is on the
   free tier it can pause after about a week idle, and the fix is to unpause it in the dashboard.
 - **Local path:** the repo currently sits inside OneDrive (synced + versioned; edits sync on save).
 
@@ -413,7 +415,10 @@ Notes:
   pass done by eye. Still barred outright: **free-text student writing paired with an identity** —
   Q3 answers, showcase quotes, reflections — which the determination does not cover.
   The machine behind this rule is `python scripts/checks/name_scan.py` (read-only, non-zero exit on
-  a hit, reads the roster live and never prints a name).
+  a hit, reads the roster live and never prints a name). It also has a local hash mode (`--write-hashes` by a
+  holder of roster access, then `--hash-file` by anyone, no credential): it matches the same way against a git-ignored file of salted
+  hashes, but the file is a snapshot, so a cadet added since it was written is not caught, and the salt sits beside the hashes, so
+  the file must stay local and uncommitted.
 
 **Two Storage buckets, and they are gated differently on purpose:**
 
@@ -490,8 +495,9 @@ agents cannot drift.
   `v2-step2` and `main`. On `main` every job is **report-only**: a red check never blocks a push,
   and no branch protection is configured. It holds **no credential and contacts no database
   project**, and it never runs the live path of `tests/app-schema/`. **CI skips the name scan**
-  (it needs the live roster) and reports it as SKIPPED, which is not a pass: run
-  `python scripts/checks/name_scan.py` locally before a push.
+  (it needs the live roster or a local hash file, and CI holds neither) and reports it as SKIPPED, which is not a pass: run
+  `python scripts/checks/name_scan.py` locally before a push, or `--hash-file` where no roster access exists (it cannot see a
+  cadet added after the file was written).
 - **Always update `CHANGELOG.md`** for any shipped feature, fix, schema/data change, or doc edit.
   Newest first. Attribute to the requesting human **and the agent**:
   `## YYYY-MM-DD — <Human> via <Agent>` (e.g. `via Claude`, `via Codex`). State **what** and **why**.

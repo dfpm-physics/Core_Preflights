@@ -40,6 +40,8 @@ class FakeCursor:
         s = " ".join(sql.split())
         if s.startswith("SET LOCAL"):
             self._rows = []
+        elif "information_schema.columns" in s:
+            self._rows = [(1,)]          # auth.users has an email column, as on the real project
         elif s.startswith("SELECT 1 FROM students"):
             email, sid, _e2, uid = params
             hit = any(e.lower() == email.lower() and k != sid for k, e in self.students.items()) or \

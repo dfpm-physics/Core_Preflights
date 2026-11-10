@@ -302,6 +302,11 @@ The cost is a blocked night whenever someone pushes. That was accepted knowingly
 
 - **`pull` rejects a bare slug.** `--lesson preflight-02` fails — both phys-110 and phys-215 have
   one live this term. Use `--lesson phys-110-preflight-02-written`.
+- **`worklist` lists only published items that have a graded path submitted online** (typed response
+  or interactive tutor). An unpublished item, or one whose graded path is in person or elsewhere, is
+  not listed even when its deadline has passed. If any path row of an active offering of the course
+  has no delivery recorded, `worklist` prints nothing, exits non-zero and says how many rows it found.
+  Fill the delivery column and re-run; an empty list in that state is a refusal, not "nothing due".
 - **`worklist` skips items a person marks, and `pull` refuses a mixed item.** A newer typed response
   graded by a person is never listed. A lesson with a tutor path and a person-marked typed path makes
   `pull` stop with a message unless `--tutor-only` is passed, so an unattended run does not write a

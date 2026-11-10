@@ -7,7 +7,8 @@
 not pause for inactivity. If the site looks broken, still look at the project in the Supabase
 dashboard before anything else: a stopped or paused database looks exactly like a broken site. The
 staging project is not on a recorded tier, and a free-tier project pauses after roughly a week
-idle; unpause it from the dashboard.
+idle; unpause it from the dashboard. The production project keeps daily backups, which do not include
+files in Storage, so the lesson figures and the stored artifact sources are not covered by them.
 
 Then, in order: **roster import** and **section→instructor assignment**. **Student account
 provisioning runs by itself** as of 2026-07-27 — the import creates a login for every new cadet and

@@ -282,7 +282,7 @@ output of each verification above.
   the repo tree, never in the CHANGELOG. **Cadet IDs and scores are permitted** and are the right
   way to identify a record: see
   [`docs/decisions/STUDENT-DATA-CLASSIFICATION.md`](../decisions/STUDENT-DATA-CLASSIFICATION.md)
-  and CORE.md §3. `python scripts/checks/name_scan.py` is the check.
+  and CORE.md §3. `python scripts/checks/name_scan.py` is the check; on a machine with no roster access it can run with `--hash-file` against a local file of salted hashes (a snapshot, so a cadet added since is not caught; keep the file uncommitted).
 - **`CHANGELOG.md`** gets an entry for any shipped feature, fix, schema/data change, or doc edit —
   `## YYYY-MM-DD — <Human> via <Agent>`. Routine grade-and-aggregate runs are the exception: they
   record themselves in `app.analysis_runs` instead.

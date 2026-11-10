@@ -46,10 +46,35 @@ EXIT CODES
     1  at least one real cadet's name is in a tracked file -- redact before committing
     2  could not run (no credentials, no network, not a git tree)
 
+HASH MODE — SCANNING WITHOUT A DATABASE CREDENTIAL
+    Whoever holds roster access runs, once a term:
+        python scripts/checks/name_scan.py --write-hashes PATH     (reads the roster as above)
+    which writes a local JSON file: format version, a fresh random salt, creation date, counts, and
+    per cadet the cadet ID plus salted SHA-256 hashes of the surname and the given-name tokens the
+    scan matches on. No plain name is written. The cadet ID IS written (permitted by CORE.md
+    section 3): the ALLOW list is keyed on (path, cadet ID) and a hit reports the ID, so the hash
+    scan needs it to behave like the live one. The write is refused for a path git tracks or does
+    not ignore. Anyone can then run, with no database and no credential:
+        python scripts/checks/name_scan.py --hash-file [PATH]
+    PATH defaults to scripts/checks/name_scan_hashes.local.json (gitignored).
+
+    Matching is token-for-token the live matching (same tokens, same ALLOW, same proximity window,
+    same exit codes); only the comparison key differs. The one visible difference: a hash cannot
+    be masked, so a hit prints the file, line and cadet ID but no masked name.
+
+    HONEST LIMITS. The salt is stored beside the hashes, so anyone holding the file can test a
+    guessed name against it. The file therefore stays local and is never committed. It is a
+    snapshot: a cadet who joined the roster after it was written is NOT caught until it is
+    refreshed (a warning is printed past 120 days; the output always states the file date and
+    name count so a pass is never read as a live-roster pass). A missing or damaged file exits 2,
+    never 0.
+
 Usage:
   python scripts/checks/name_scan.py
   python scripts/checks/name_scan.py --json          # machine-readable, still no names
   python scripts/checks/name_scan.py --proximity 40  # tighten the two-token window
+  python scripts/checks/name_scan.py --write-hashes PATH   # needs roster access
+  python scripts/checks/name_scan.py --hash-file [PATH]    # needs nothing
 
 PRIVACY: output is file:line + cadet ID + a MASKED name (first letter, then asterisks). The masked
 form is there so an operator can tell two hits apart and find the string in the file; it is not
@@ -62,6 +87,8 @@ REST path, and with neither credential it exits 2 with instructions.
 """
 
 import argparse
+import datetime
+import hashlib
 import json
 import os
 import pathlib
@@ -83,6 +110,10 @@ ENV_FILE = REPO / "supabase" / "admin" / ".env"
 CONFIG_PATH = pathlib.Path(os.path.expanduser("~/.claude/skills/preflight-analyze/config.json"))
 
 EXIT_OK, EXIT_HIT, EXIT_UNUSABLE = 0, 1, 2
+
+DEFAULT_HASH_FILE = pathlib.Path(__file__).resolve().parent / "name_scan_hashes.local.json"
+HASH_FORMAT = 1
+STALE_DAYS = 120
 
 # Directories whose contents are not prose about cadets and would only add noise. textbook-pdfs is
 # gitignored and so never reaches `git ls-files`; it is listed for the reader, not for the filter.
@@ -248,8 +279,13 @@ def tracked_files():
         yield rel
 
 
-def scan(rel, roster, proximity):
-    """-> [(line_no, student_id, masked)] for one file. Binary files are skipped silently."""
+def scan(rel, roster, proximity, keyfn=None):
+    """-> [(line_no, student_id, masked)] for one file. Binary files are skipped silently.
+
+    keyfn maps a lowercase line token to the key the roster holds: identity for the live scan, a
+    salted hash for hash mode. Everything else is shared, so the two cannot drift."""
+    if keyfn is None:
+        keyfn = _identity
     path = REPO / rel
     try:
         raw = path.read_bytes()
@@ -269,7 +305,7 @@ def scan(rel, roster, proximity):
         # dictionary lookups. Without this, 900 students x 400 files is minutes, not seconds.
         offsets = {}
         for m in re.finditer(r"[a-z][a-z'\-]{2,}", low):
-            offsets.setdefault(m.group(0), []).append(m.start())
+            offsets.setdefault(keyfn(m.group(0)), []).append(m.start())
         if not offsets:
             continue
         for sid, surname, given, masked in roster:
@@ -291,6 +327,84 @@ def scan(rel, roster, proximity):
     return hits
 
 
+# ── Hash mode ─────────────────────────────────────────────────────────────────────────────────
+
+
+def _identity(token):
+    return token
+
+
+def hash_token(salt_hex, token):
+    """Salted SHA-256 of one lowercase token. The same function writes and reads the file."""
+    return hashlib.sha256(bytes.fromhex(salt_hex) + b"\0" + token.encode("utf-8")).hexdigest()
+
+
+def hashed_roster(roster, salt_hex):
+    """Roster entries keyed by hash instead of by name. The masked slot is empty on purpose."""
+    return [(sid, hash_token(salt_hex, sur), {hash_token(salt_hex, g) for g in given}, "")
+            for sid, sur, given, _masked in roster]
+
+
+def build_hash_payload(rows, roster, salt_hex=None, today=None):
+    salt_hex = salt_hex or os.urandom(16).hex()
+    today = today or datetime.date.today()
+    cadets = [{"id": sid, "s": s, "g": sorted(g)} for sid, s, g, _ in hashed_roster(roster, salt_hex)]
+    return {"format": HASH_FORMAT, "salt": salt_hex, "created": today.isoformat(),
+            "student_rows": len(rows), "count": len(cadets), "cadets": cadets}
+
+
+def path_refusal(target):
+    """-> None when it is safe to write a hash file at target, else a plain reason.
+
+    Safe means: outside the working tree (git cannot commit it), or inside it and git-ignored and
+    not tracked. If git cannot answer, refuse."""
+    target = pathlib.Path(target).resolve()
+    try:
+        rel = target.relative_to(REPO.resolve()).as_posix()
+    except ValueError:
+        return None
+    try:
+        tracked = subprocess.run(["git", "ls-files", "--error-unmatch", "--", rel], cwd=REPO,
+                                 capture_output=True)
+        if tracked.returncode == 0:
+            return "git tracks that path"
+        ignored = subprocess.run(["git", "check-ignore", "-q", "--", rel], cwd=REPO,
+                                 capture_output=True)
+    except OSError as exc:
+        return f"git could not be run to check the path ({exc})"
+    if ignored.returncode == 0:
+        return None
+    if ignored.returncode == 1:
+        return "git does not ignore that path (it could be committed)"
+    return "git could not decide whether that path is ignored"
+
+
+def load_hash_file(path):
+    """-> (roster, meta). Raises ValueError with a plain message for any missing or broken file."""
+    path = pathlib.Path(path)
+    if not path.is_file():
+        raise ValueError(f"hash file not found: {path}")
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if data["format"] != HASH_FORMAT:
+            raise ValueError(f"unsupported hash file format {data['format']!r}")
+        salt = data["salt"]
+        bytes.fromhex(salt)
+        created = datetime.date.fromisoformat(data["created"])
+        cadets = data["cadets"]
+        if not isinstance(cadets, list) or data["count"] != len(cadets):
+            raise ValueError("count does not match the cadet list")
+        roster = [(int(c["id"]), str(c["s"]), {str(g) for g in c["g"]}, "") for c in cadets]
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        raise ValueError(f"hash file is damaged or unreadable: {path} ({type(exc).__name__}: {exc})")
+    if not roster:
+        raise ValueError(f"hash file holds no cadets: {path}")
+    age = (datetime.date.today() - created).days
+    meta = {"path": str(path), "created": created.isoformat(), "age_days": age,
+            "count": len(roster), "student_rows": data.get("student_rows"), "stale": age > STALE_DAYS}
+    return roster, salt, meta
+
+
 def main():
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -300,17 +414,53 @@ def main():
                     help=f"characters allowed between the two matched tokens (default {PROXIMITY})")
     ap.add_argument("--env-file", default=None,
                     help="read the roster credential from this .env file; for a clone that holds none")
+    ap.add_argument("--write-hashes", metavar="PATH", default=None,
+                    help="read the roster, write a local salted-hash file at PATH, then stop")
+    ap.add_argument("--hash-file", nargs="?", const=str(DEFAULT_HASH_FILE), default=None,
+                    metavar="PATH",
+                    help="scan against a hash file instead of the live roster (no credential); "
+                         "default path scripts/checks/name_scan_hashes.local.json")
     args = ap.parse_args()
+
+    if args.write_hashes and args.hash_file:
+        print("Use --write-hashes or --hash-file, not both.", file=sys.stderr)
+        return EXIT_UNUSABLE
 
     if args.env_file:
         global ENV_FILE
         ENV_FILE = pathlib.Path(args.env_file)
 
-    rows = roster_via_db()
-    source = "prep_app_read (session pooler)"
-    if rows is None:
-        rows = roster_via_rest()
-        source = "service role (PostgREST)"
+    keyfn, hash_meta, rows, roster = _identity, None, None, None
+    if args.hash_file:
+        try:
+            roster, salt, hash_meta = load_hash_file(args.hash_file)
+        except ValueError as exc:
+            print(f"Cannot scan from a hash file, so this check cannot run -- and a check that\n"
+                  f"cannot run must not report clean.\n  {exc}\n"
+                  "Write one with --write-hashes PATH (needs roster access).", file=sys.stderr)
+            return EXIT_UNUSABLE
+        memo = {}
+
+        def keyfn(token, _salt=salt, _memo=memo):
+            h = _memo.get(token)
+            if h is None:
+                h = _memo[token] = hash_token(_salt, token)
+            return h
+
+        rows = [None] * (hash_meta["student_rows"] or 0)
+        source = f"HASH FILE {hash_meta['path']} (written {hash_meta['created']}, " \
+                 f"{hash_meta['count']} names) -- NOT the live roster"
+        if hash_meta["stale"]:
+            print(f"[warn] the hash file is {hash_meta['age_days']} days old (limit {STALE_DAYS}); "
+                  "a cadet added since is not covered. Refresh it with --write-hashes.",
+                  file=sys.stderr)
+
+    if roster is None:
+        rows = roster_via_db()
+        source = "prep_app_read (session pooler)"
+        if rows is None:
+            rows = roster_via_rest()
+            source = "service role (PostgREST)"
     if rows is None:
         print(
             "Cannot read the roster, so this check cannot run -- and a check that cannot run must\n"
@@ -324,7 +474,22 @@ def main():
             file=sys.stderr)
         return EXIT_UNUSABLE
 
-    roster = enrolled_names(rows)
+    if roster is None:
+        roster = enrolled_names(rows)
+    if args.write_hashes and roster:
+        reason = path_refusal(args.write_hashes)
+        if reason:
+            print(f"Refusing to write the hash file: {reason}. Choose a git-ignored path or one "
+                  "outside the repository.", file=sys.stderr)
+            return EXIT_UNUSABLE
+        payload = build_hash_payload(rows, roster)
+        out_path = pathlib.Path(args.write_hashes)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(json.dumps(payload, indent=1) + "\n", encoding="utf-8", newline="\n")
+        print(f"Wrote hash file: {out_path}\n{len(rows)} student rows · {payload['count']} "
+              f"real enrolled cadets hashed (format {HASH_FORMAT}, {payload['created']}). "
+              "Keep it local; never commit it.")
+        return EXIT_OK
     if not roster:
         print(f"Read {len(rows)} student rows and none is an enrolled, provisioned cadet with a\n"
               "registrar email. That is not a clean tree, it is an empty roster -- refusing to\n"
@@ -334,11 +499,13 @@ def main():
     findings, files_scanned = [], 0
     for rel in tracked_files():
         files_scanned += 1
-        for lineno, sid, masked in scan(rel, roster, args.proximity):
+        for lineno, sid, masked in scan(rel, roster, args.proximity, keyfn):
             findings.append({"file": rel, "line": lineno, "student_id": sid, "masked": masked})
 
     if args.json:
         print(json.dumps({
+            "mode": "hash-file" if hash_meta else "live",
+            "hash_file": hash_meta,
             "roster_rows": len(rows),
             "cadets_checked": len(roster),
             "files_scanned": files_scanned,
@@ -354,7 +521,11 @@ def main():
           f"{files_scanned} tracked files\n")
 
     if not findings:
-        print("PASS — no enrolled cadet's name appears in a tracked file.")
+        if hash_meta:
+            print(f"PASS (hash file of {hash_meta['created']}, {hash_meta['count']} names) -- no "
+                  "cadet in that file is named in a tracked file. A cadet added since is not covered.")
+        else:
+            print("PASS — no enrolled cadet's name appears in a tracked file.")
         return EXIT_OK
 
     by_file = {}

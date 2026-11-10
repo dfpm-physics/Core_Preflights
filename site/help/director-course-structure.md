@@ -174,7 +174,7 @@ That is how one student can be given more time without moving anyone else's dead
 M-day and T-day sections get different due dates.
 
 **Levels 3 and 4 are where a whole term can go quietly wrong.** The per-meeting-day schedule is
-written when you save an assignment in **Lessons**, and only then. An assignment that has never
+written when you save an assignment on the **Assignments** page, and only then. An assignment that has never
 been saved there has no schedule, which does not mean "not set yet" — it means everyone falls to
 level 4 and every T-day section is due on the **M-day** date, one to four days early. You cannot
 see it by looking: the default *is* the M-day date, so every M-day deadline reads correctly while
@@ -189,7 +189,7 @@ cadets answer it having already sat the class.
 So: before the semester starts, check **every** lesson's dates against your syllabus, not one.
 A single spot check would have passed on either course — on Physics 110 because the M-day date it
 showed was correct, and on Physics 215 because there was an 86% chance of landing on a good one.
-Saving an assignment in Lessons rewrites its schedule and every current section's row.
+Saving an assignment on the Assignments page rewrites its schedule and every current section's row.
 
 Ask your system administrator if you would rather have it checked all at once; there is a script
 that compares a whole term against a syllabus schedule and reports every disagreement without

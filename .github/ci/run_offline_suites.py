@@ -83,6 +83,9 @@ PY_OFFLINE = [
     "scripts/checks/csp_pages_test.py",
     "scripts/checks/worklist_eligibility_test.py",
     "scripts/artifacts/make_tutor_files_test.py",
+    "scripts/staging/test_step1_tools.py",
+    "tests/app-schema/test_v2_gate_lib_offline.py",
+    "scripts/checks/name_scan_hash_test.py",
 ]
 # NOT listed anywhere, on purpose (they sign in to, or read, a live database):
 #   test-rest.mjs test-student.mjs test-isolation.mjs test-prefs.mjs test-paging.mjs
@@ -134,7 +137,11 @@ def run_python(rel):
         problems.append(f"exit {rc}")
     if re.search(r"\[FAIL\]|\b[1-9]\d* failed\b", out):
         problems.append("failed checks")
-    passed = len(re.findall(r"\[pass\]", out))
+    # Three output shapes: `[pass] x`, `ok   x`, and unittest's closing `Ran 62 tests`.
+    passed = len(re.findall(r"\[pass\]", out)) + len(re.findall(r"^ok\b", out, re.M))
+    unittest_ran = re.search(r"^Ran (\d+) tests? in ", out, re.M)
+    if unittest_ran:
+        passed += int(unittest_ran.group(1))
     if not passed:
         problems.append("ran zero checks")
     return problems, passed, out

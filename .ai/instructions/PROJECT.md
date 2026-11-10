@@ -61,8 +61,9 @@ lesson interactions at USAFA. Replaces GradeScope for two courses: Physics 110 a
   - phys-215 student URL: add `?course=phys-215`; phys-110: `?course=phys-110`
 - **GitHub repo**: `https://github.com/dfpm-physics/Core_Preflights.git` (org: `dfpm-physics`, branch: `main`)
 - **Supabase**: project `shzvpmlnqfmzfmuxkowi` — URL `https://shzvpmlnqfmzfmuxkowi.supabase.co`
-  - Production is on a **paid tier** (decided 2026-11-04), so the free-tier idle pause does not apply to it. Backup and
-    retention terms are unverified until the dashboard is checked; do not claim them. The staging project
+  - Production is on a **paid tier** (decided 2026-11-04), so the free-tier idle pause does not apply to it. Daily backups
+    are on, point-in-time recovery is off, and Storage files are not in a backup (dashboard, 2026-11-05; CORE.md
+    section 1 has the detail). The staging project
     (`wkibeptktbnaddfynrwr`) has no recorded tier; if it is on the free tier it pauses after about a week idle and is
     unpaused in the dashboard
 

@@ -198,7 +198,7 @@ due on the M-day deadline. An explicit per-section row still wins, which is what
 `assignment_due_dates` meaningful: it is a deliberate override, not the normal path.
 
 **An empty `due_by_day` is a real answer, not a blank.** `{}` means "`due_at` applies to
-everyone", so an offering that was never saved in the Lessons editor puts every section on the
+everyone", so an offering that was never saved in the Assignments editor puts every section on the
 M-day date and looks correct on every M-day section. See
 [Course structure](help.html?doc=course-structure) for how to check a term.
 
@@ -278,7 +278,7 @@ and costs the student nothing — so the legitimate case wins.
 | `grading_mode` | Vestigial since 2026-07-23 — see below. Always `points`; the assignment editor stopped offering a choice on 2026-07-27 |
 | `switch_policy` | Whether a student may change activity after committing |
 | `due_at` | Default deadline, overridden per section. Set to the **earliest** per-day date, so on a two-track course it is the M-day one — it is not "the assignment's deadline" and nothing should show it as such |
-| `due_by_day` | The per-meeting-day schedule — one deadline per day letter, `{"M": …, "T": …}`, matched against each section's meeting days. **Written only by the Lessons editor.** Empty means `due_at` applies to everyone |
+| `due_by_day` | The per-meeting-day schedule — one deadline per day letter, `{"M": …, "T": …}`, matched against each section's meeting days. **Written only by the Assignments editor.** Empty means `due_at` applies to everyone |
 | `opens_at` | When students may see it. **Empty is the normal case** and does not mean "always" — it selects the standard rolling window, 7 days before each student's own deadline. A value overrides that with one fixed instant for every section, earlier or later, and does not follow a due date changed afterwards |
 | `is_published` | Whether the assignment is **ready**. Not the same as whether students can see it — see `opens_at` above; both must be satisfied |
 | `content_snapshot` | What this class was given, captured at term close |

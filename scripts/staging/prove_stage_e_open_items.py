@@ -287,9 +287,11 @@ def try_logs(ref, started, ended):
         return None, None, "no access token for the staging project in this environment"
     stamp = "%Y-%m-%dT%H:%M:%SZ"
     tried = []
-    for endpoint in ("logs.all", "logs"):
+    # logs.all is gone (HTTP 410). One route; each log kind is a value of the `source` column; ClickHouse SQL; window <= 24 h.
+    all_rows, used = [], []
+    for endpoint in ("logs",):
         for table in ("function_logs", "function_edge_logs"):
-            sql = f"select timestamp, event_message from {table} order by timestamp desc limit 500"
+            sql = f"select timestamp, event_message from logs where source = '{table}' limit 1000"
             qs = urllib.parse.urlencode({"sql": sql, "iso_timestamp_start": started.strftime(stamp), "iso_timestamp_end": ended.strftime(stamp)})
             req = urllib.request.Request(f"https://api.supabase.com/v1/projects/{ref}/analytics/endpoints/{endpoint}?{qs}",
                                          headers={"Authorization": "Bearer " + token, "User-Agent": "prep-stage-e-proof"})
@@ -306,10 +308,14 @@ def try_logs(ref, started, ended):
                 tried.append(f"{endpoint}/{table}: {str(data['error'])[:60]}")
                 continue
             rows = data.get("result") or []
-            import re
-            hits = sum(1 for row in rows if re.search(r"eyJ[A-Za-z0-9_-]{20,}|sb_secret|service_role_key|tol_pct|correct_choice_ids", json.dumps(row)))
-            return len(rows), hits, f"{endpoint}/{table}"
-    return None, None, "; ".join(tried)
+            all_rows += rows
+            used.append(f"{table}={len(rows)}")
+    if not used:
+        return None, None, "; ".join(tried)
+    import re
+    leak = r"eyJ[A-Za-z0-9_-]{20,}|sb_secret|service_role|tol_pct|correct_choice_ids|expected_response"
+    hits = sum(1 for row in all_rows if re.search(leak, json.dumps(row)))
+    return len(all_rows), hits, "logs (" + ", ".join(used) + ")"
 
 
 # ---------------------------------------------------------------------------------------------------------------
@@ -515,11 +521,12 @@ def main(argv=None):
 
         # ---- 9. function logs ----------------------------------------------------------------------------------------
         print("\n== function logs (item 9)")
+        time.sleep(75)   # log ingestion lags about a minute behind the calls above
         n_rows, hits, why = try_logs(ref, started - timedelta(minutes=2), datetime.now(timezone.utc) + timedelta(minutes=2))
         if n_rows is None:
             note(f"function logs were not readable by any route this access token allows: {why}. Item 9 stays open.")
         else:
-            check("function logs hold no token, key text or tolerance", hits == 0, f"{n_rows} log rows read through {why}")
+            check("function logs were read and hold no token, key text or tolerance", n_rows > 0 and hits == 0, f"{n_rows} log rows read through {why}")
 
         # ---- 4 (last part). a token that has really expired ----------------------------------------------------------
         print("\n== an expired token (item 4)")

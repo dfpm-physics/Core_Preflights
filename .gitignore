@@ -92,3 +92,7 @@ artifact-url-rollback*.json
 # writing, which CORE.md §3 bars from the repo even without a name attached, and the images are
 # screenshots of live sessions. Read it, act on it, record the CONCLUSION in docs/ or CHANGELOG.md.
 _feedback/
+
+# Local salted-hash roster for scripts/checks/name_scan.py --hash-file. Holds cadet IDs and hashes of
+# names; the salt sits beside the hashes, so it stays on the machine that wrote it. Never committed.
+scripts/checks/name_scan_hashes.local.json
