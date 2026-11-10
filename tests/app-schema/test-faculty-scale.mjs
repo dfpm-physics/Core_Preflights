@@ -244,7 +244,7 @@ section('the page and its neighbours');
   check('the module never writes grades, totals or points', !/from\('(grades|submissions|assignment_offerings|enrollments)'\)/.test(mod));
   check('the module writes only letter_scales', [...mod.matchAll(/from\('([a-z_]+)'\)/g)].every(m => ['letter_scales', 'course_offerings'].includes(m[1])));
   check('the page sets no raw HTML from data without esc', (html.match(/\$\{esc\(/g) || []).length > 15);
-  check('the Assignments page links to it', /scale\.html/.test(read('site/faculty/items.html')));
+  check('the Admin page links to it (it is a director setting)', /id="scale-link" href="scale\.html"/.test(read('site/faculty/admin.html')));
   check('the save button waits on planSave, which waits on the preview for an active course', /planSave\(/.test(html) && /previewKey/.test(html));
   check('the save path re-checks the plan before it writes', (html.match(/S\.planSave\(/g) || []).length >= 2);
 }

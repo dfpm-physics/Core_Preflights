@@ -218,6 +218,16 @@ main { flex: 1 0 auto; }
 /* ============================================================= *
  *  Top navigation                                               *
  * ============================================================= */
+/* Between pages. The top bar is painted at once from the last page (nav-shell.js) and kept in place while the
+   page under it fades, instead of the whole window blinking. Browsers without cross-page transitions ignore this. */
+@media (prefers-reduced-motion: no-preference) {
+  @view-transition { navigation: auto; }
+}
+::view-transition-group(root) { animation-duration: 140ms; }
+#topnav { view-transition-name: topnav; }
+/* Before any bar is painted (the first page of a visit), hold its space so the page does not jump down. */
+#topnav:empty { display: block; height: 65px; background: var(--nav-bg); border-bottom: 1px solid var(--nav-border); }
+
 .topnav {
   position: sticky; top: 0; z-index: 40;
   background: var(--nav-bg);
@@ -1449,6 +1459,7 @@ tr:last-child td { border-bottom: none; }
 .subtabs { display: inline-flex; gap: 3px; background: var(--surface-sunken); border: 1px solid var(--border); border-radius: 10px; padding: 4px; margin-bottom: 22px; }
 .subtab { border: none; background: transparent; color: var(--muted); padding: 7px 16px; border-radius: 7px; font-size: 0.88em; font-weight: 600; cursor: pointer; transition: background 0.14s, color 0.14s; }
 .subtab:hover { color: var(--text); }
+a.subtab { text-decoration: none; display: inline-flex; align-items: center; }
 .subtab.active { background: var(--card); color: var(--text); box-shadow: var(--shadow-sm); }
 
 .dropzone { border: 2px dashed var(--border); border-radius: var(--radius); padding: 28px; text-align: center; color: var(--muted); cursor: pointer; transition: border-color 0.15s, background 0.15s; }
@@ -2668,3 +2679,33 @@ button.choice-card { font: inherit; color: inherit; text-align: left; cursor: po
 .mx-preview { margin-top: 6px; font-size: 0.95em; min-height: 1.6em; overflow-x: auto; }
 .mx-math { font-size: 1.1em; color: var(--text, inherit); }
 .mx-math .katex { font-size: 1.15em; }
+
+/* Tutorials -- the guide card and highlight (tutorials.js) and the Help page list. Everything sits above the modals
+   (which top out at z-index 80) and none of it takes a click away from the page: the highlight ignores the pointer. */
+#tut-root { position: static; }
+.tut-hl { position: fixed; z-index: 1000; pointer-events: none; border-radius: 8px;
+  outline: 2px solid var(--action); outline-offset: 0; box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45); }
+.tut-hl[hidden] { display: none; }
+.tut-card { position: fixed; z-index: 1001; width: 320px; max-width: calc(100vw - 24px); box-sizing: border-box;
+  background: var(--card); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: var(--shadow-lg); padding: 14px 16px; font-size: 0.92em; line-height: 1.45; }
+.tut-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px;
+  font-size: 0.78em; color: var(--muted); }
+.tut-new { background: var(--action); color: var(--on-action); border-radius: 999px; padding: 1px 8px; font-weight: 700; }
+.tut-title { font-weight: 700; font-size: 1.05em; margin-bottom: 4px; }
+.tut-text { color: var(--text-soft); }
+.tut-note { margin-top: 6px; color: var(--muted); }
+.tut-hint { margin-top: 6px; font-size: 0.85em; color: var(--muted); font-style: italic; }
+.tut-goto { margin-top: 8px; }
+.tut-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 12px; }
+.tut-grow { flex: 1 1 auto; }
+.tut-off { margin-top: 8px; font-size: 0.82em; }
+.tut-linkbtn { background: none; border: none; padding: 0; color: var(--action); cursor: pointer; text-decoration: underline; font: inherit; }
+.tut-linkbtn:hover { color: var(--action-hover); }
+@media (max-width: 639px) {
+  .tut-card.tut-dock { left: 8px; right: 8px; top: auto; bottom: 8px; width: auto; max-width: none; }
+}
+.tut-group { margin-bottom: 14px; }
+.tut-group-title { margin: 0 0 2px; font-size: 1em; }
+.tut-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.tut-item-body { min-width: 0; }

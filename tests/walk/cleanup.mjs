@@ -23,6 +23,9 @@ export function cleanup() {
   attempt('walk courses', [
     [`delete from assignment_offerings where course_offering_id in (select co.id from course_offerings co join courses c on c.id=co.course_id where c.code like 'zz-walk-%')`, null],
     [`delete from courses where code like 'zz-walk-%'`, null]]);
+  // The walk switches tutorials off in its own browsers and group T sets them, so the synced preference can be left on a seeded login.
+  // Put those people back to having none, so a person trying the tours by hand on staging sees them.
+  attempt('tutorial preference', [[`update user_preferences set prefs = prefs - 'cp.tutorials' where prefs ? 'cp.tutorials'`, null]]);
   const after = {
     assignments: count(`select count(*) n from assignments where title like 'ZZ walk%'`),
     courses: count(`select count(*) n from courses where code like 'zz-walk-%'`),

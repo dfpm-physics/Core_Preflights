@@ -14,6 +14,7 @@ import { iconHTML, initials, esc } from './util.js';
 import { updateToggleButtons } from './theme.js';
 import { mountRunBanners } from './run-banner.js';
 import { mountFeedback } from './feedback.js';
+import { mountTutorials } from './tutorials.js';
 
 // All nav-rendering pages live one level deep (student/ , faculty/), so same-role links are
 // bare filenames. The nav no longer links out to the legacy site at all (see FACULTY_LINKS).
@@ -125,6 +126,9 @@ export const FACULTY_LINKS = [
 export const USER_MENU_LINKS = [
   { key: 'account', label: 'Account', href: 'account.html', icon: 'user', emoji: '👤' },
   { key: 'help',    label: 'Help',    href: 'help.html',    icon: 'info', emoji: '❔' },
+  // Every guide, by hand. The automatic ones start themselves; this is where a person finds the rest, and where the
+  // walk-throughs for real jobs live. The anchor is the Tutorials section at the top of the Help page.
+  { key: 'tutorials', label: 'Tutorials', href: 'help.html#tutorials', icon: 'info', emoji: '🎓' },
   /* Artifacts — the library of built interactive lessons and what went into each.
    *
    * IN THE MENU, NOT ON THE BAR, and that is this file's own argument rather than a new one: the
@@ -372,6 +376,16 @@ export function renderNav(ctx, opts = {}) {
   updateToggleButtons();
   renderFooter();
 
+  // Keep a copy of this bar for nav-shell.js, which paints it on the next page before the sign-in check is done, so
+  // the bar does not blink out between pages. This tab only; sign-out removes it. See nav-shell.js.
+  mount.removeAttribute('data-shell');
+  if (mount.id === 'topnav') {
+    try {
+      const parts = location.pathname.split('/');
+      sessionStorage.setItem('cp.navshell', JSON.stringify({ dir: parts[parts.length - 2], cls: mount.className, html: mount.innerHTML }));
+    } catch (_) { /* storage full or blocked: the next page only blinks, as before */ }
+  }
+
   // Status of the unattended analysis runs, for directors and admins. Deliberately NOT awaited:
   // renderNav is synchronous and every page depends on it, so a slow or failing query must not
   // hold up the chrome. The strip appears a beat later or not at all.
@@ -381,6 +395,10 @@ export function renderNav(ctx, opts = {}) {
   // reason as the banners: it must never hold up the chrome, and it appends its own fixed element
   // to <body> rather than living in the nav.
   mountFeedback(ctx);
+
+  // The tutorial guide: resumes one that is running, or starts the single automatic tour that applies to this page.
+  // Un-awaited and idempotent, for the same reasons as the two above; it appends its own fixed element to <body>.
+  mountTutorials(ctx);
 }
 
 /* ── Legacy Actions ────────────────────────────────────────────────────────────

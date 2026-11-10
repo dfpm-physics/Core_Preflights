@@ -63,6 +63,7 @@ export const SYNCED_KEYS = [
   'cp.theme',              // theme.js
   'cp.currentOffering',    // auth.js — "<courseCode>|<termCode>"
   'cp.rollup.understanding', // faculty-rollup.js — P1.5 histogram vs. rows
+  'cp.tutorials',          // tutorials.js — { auto, offAt, seen }, as JSON: the automatic-tutorials switch and what was shown
 ];
 
 const PUSH_DEBOUNCE_MS = 800;

@@ -119,7 +119,9 @@ export async function launch(chromePath) {
 export const productionAttempts = [];     // every request the filter stopped; the walk fails if any appear
 export class Session {
   constructor(browser, base, who) { this.browser = browser; this.base = base; this.who = who; this.problems = []; this.confirms = []; this.alerts = []; this.confirmAnswers = []; this.opened = []; }
-  static async start(browser, base, login) {
+  /** `opts.tours`: leave the tutorials alone (group T tests them). Otherwise they are switched off in this browser from the start,
+   *  far into the future, so a welcome tour never stands over a button another group is about to click. */
+  static async start(browser, base, login, opts = {}) {
     const s = new Session(browser, base, login);
     s.ctx = await browser.createBrowserContext();
     const page = s.page = await s.ctx.newPage();
@@ -138,6 +140,7 @@ export class Session {
     });
     // A tutor card opens claude.ai in a new window. The walk never leaves for it: window.open is recorded and refused.
     await page.evaluateOnNewDocument(() => { window.__opened = []; window.open = (u) => { window.__opened.push(String(u)); return null; }; });
+    if (!opts.tours) await page.evaluateOnNewDocument(() => { try { if (!localStorage.getItem('cp.tutorials')) localStorage.setItem('cp.tutorials', JSON.stringify({ auto: false, offAt: '9999-12-31', seen: [] })); } catch (e) { /* no storage */ } });
     if (login) await s.signIn(login);
     return s;
   }

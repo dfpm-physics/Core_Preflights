@@ -261,6 +261,7 @@ export function passwordStrength(pw) {
 import { esc } from './util.js';
 import { setTheme } from './theme.js';
 import { getPref, setPref, isSynced } from './prefs.js';
+import { loadPrefs as loadTutorialPrefs, savePrefs as saveTutorialPrefs, withAutoOn, withAutoOff, withSeenCleared } from './tutorials.js';
 
 export async function renderAccount(ctx, root) {
   const id = await loadIdentity(ctx);
@@ -272,6 +273,7 @@ export async function renderAccount(ctx, root) {
   // bare "change your password" — someone who just had a password read to them by an instructor
   // needs to know this is the expected next step and not a fault.
   const rotate = mustChangePassword(ctx.user);
+  const tutPrefs = loadTutorialPrefs();
 
   root.innerHTML = `
     <div class="page-head"><h1>Account</h1>
@@ -346,6 +348,15 @@ export async function renderAccount(ctx, root) {
         <div class="field-hint">How the assignment rollup draws each objective's 0–5 spread. The
           histogram matches the effort chart above it and shows the actual counts; the curve is
           an estimate that reads more smoothly for a large cohort.</div></div>` : ''}
+      <div class="field"><label for="pf-tutorials">Automatic tutorials</label>
+        <select id="pf-tutorials">
+          <option value="on"${tutPrefs.auto ? ' selected' : ''}>On: show me around the first time</option>
+          <option value="off"${tutPrefs.auto ? '' : ' selected'}>Off: do not start tutorials by themselves</option>
+        </select>
+        <div class="field-hint">Every tutorial stays available from Help, whatever this says. When a new feature
+          arrives with its own tutorial, it shows once even when this is off, and offers the off switch again.
+          <button type="button" class="btn btn-ghost btn-sm" id="pf-tutorials-reset">Show tours again</button>
+          <span id="pf-tutorials-note" class="ok-note"></span></div></div>
     </div>
 
     <div class="card">
@@ -423,6 +434,16 @@ function wireAccount(ctx, root) {
       hint.insertAdjacentHTML('beforeend',
         ' <span class="ok-note">Saved — applies next time you open an assignment rollup.</span>');
     }
+  });
+
+  // The two controls for automatic tutorials. Both write the one synced preference, so the choice follows the person.
+  $('pf-tutorials')?.addEventListener('change', (e) => {
+    saveTutorialPrefs(e.target.value === 'on' ? withAutoOn(loadTutorialPrefs()) : withAutoOff(loadTutorialPrefs()));
+    const note = $('pf-tutorials-note'); if (note) note.textContent = ' Saved.';
+  });
+  $('pf-tutorials-reset')?.addEventListener('click', () => {
+    saveTutorialPrefs(withSeenCleared(loadTutorialPrefs()));
+    const note = $('pf-tutorials-note'); if (note) note.textContent = ' Done: the tours will show again.';
   });
 
   $('pf-offering')?.addEventListener('change', async (e) => {

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8=' 'sha256-RthaPZUQzDJX2wfpu+ewT1iJB0MPoaKLsJJMIi+y6QQ='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8=' 'sha256-QMu5JulNop1KuwKt34MSPS8LM01k4hJUpWsQEvYvqEg='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Assignments · PREP</title>
   <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
@@ -11,7 +11,7 @@
   <script src="../js/config.js"></script>
 </head>
 <body>
-  <header id="topnav"></header>
+  <header id="topnav"></header><script src="../js/nav-shell.js"></script>
   <main class="page-wide" id="main">
     <div class="center-load"><span class="spinner"></span><span>Loading assignments…</span></div>
   </main>
@@ -276,8 +276,7 @@
       // assignment; the database refuses an instructor's write whatever this page shows.
       const gradeBtn = `<a class="btn btn-primary" id="grade-assignments-btn" href="entry.html">Grade assignments</a>`;
       const newBtn = isDirector()
-        ? `<span class="row" style="gap:8px"><a class="btn btn-ghost btn-sm" id="scale-link" href="scale.html">Letter scale</a>
-        ${gradeBtn}<button class="btn btn-primary" id="new-btn">+ New assignment</button></span>`
+        ? `<span class="row" style="gap:8px">${gradeBtn}<button class="btn btn-primary" id="new-btn">+ New assignment</button></span>`
         : `<span class="row" style="gap:8px">${gradeBtn}</span>`;
       const banner = isDirector()
         ? `<div class="alert alert-info" id="unpublished-note">Students cannot see an assignment until it is published.

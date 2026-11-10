@@ -6,6 +6,56 @@ can understand the history without re-deriving it from code or git.
 
 Newest entries first. Dates are `YYYY-MM-DD`.
 
+## 2026-11-10 — Matthew Recker via Claude (after a first try of the tutorials: three fixes; not committed)
+
+- **A tour step for something the page does not have no longer sits on "Waiting for the page to load".** On a course
+  with no published assignments the dashboard has no Backlog or Recent reports, and the gradebook has no columns, so
+  those optional steps waited 8 seconds and were then skipped, which read as a hang. An optional step that moves on with
+  Next is now shown after 1.5 seconds without a highlight, with one line saying why it is not there (`absent` in the
+  catalog, or a stock line). Steps a person must click are unchanged. `tutorials.js`, `tutorials-catalog.js`,
+  `docs/decisions/TUTORIALS.md`.
+- **The Letter scale button moved from Assignments to Course administration**, as a last tab-row entry that opens its
+  own page, because it is a director's setting. The scale page now marks Admin in the bar and goes back to Admin.
+  `admin.html`, `items.html`, `scale.html`, `styles.css`, and the two tests that looked for it
+  (`test-faculty-scale.mjs`, `tests/browser-harness/v2-scale.mjs`).
+- **The top bar no longer blinks out between pages.** It was built only after the sign-in check, so every link showed a
+  page with no bar and then pushed the page down. `renderNav` now keeps a copy of the bar it drew (sessionStorage, this
+  tab only) and a new classic script, `site/js/nav-shell.js`, placed right after `<header id="topnav">` on 29 pages,
+  paints that copy before the first paint. The copy loses every id and data- attribute, so no script or test can find
+  it as a working control, and it is painted only while a sign-in session is stored; sign-out removes it. The first
+  page of a visit holds the bar's space with an empty bar of the same height. Browsers that support cross-page view
+  transitions (Chrome and Edge) keep the bar still and fade the page under it; the fade is off for reduced motion.
+  `health.html` and `tutor-errors.html` gained a static header for this. Three pages' content policies were rebuilt with
+  `scripts/checks/csp_pages.py --write` because their inline scripts changed.
+- **Not done.** The floating Feedback button and the footer are still drawn by script after the sign-in check, so they
+  still appear a moment after the page. Checked: the offline suites, the walk on staging, and the three fixes by hand in
+  the browser. The fade itself was not checked by eye. Nothing touched production.
+
+## 2026-11-10 — Matthew Recker via Claude (tutorials: tours and do-it-with-me guides; not committed)
+
+- **What.** A guide drawn over the real page: a highlight on the control to use and a small card beside it. Two kinds. A
+  **tour** shows a person around and may start by itself (a welcome tour on the first sign-in, a page tour on the first
+  visit to Assignments, Gradebook, Admin or Grade). A **task** walks through a real job and starts only by hand, from
+  Help, Tutorials (also in the user menu): create a course, add students, add an assignment, add a staff member, grade
+  an assignment, open a report, and, for cadets, start an assignment. Each task ends with the real thing done, made by the
+  person's own clicks. **I've got it from here** closes a task guide and leaves the page exactly as it is.
+- **The off switch.** One synced preference, `cp.tutorials` (`auto`, `offAt`, `seen`). Turning automatic tutorials off keeps
+  tours from starting; a tour for a feature newer than that moment still shows once, says New feature and offers the
+  switch again. At most one automatic tour per page load, none while a task runs. Account, Preferences has the switch
+  and Show tours again.
+- **Files.** New: `site/js/tutorials.js` (engine), `site/js/tutorials-catalog.js` (the list), `docs/decisions/TUTORIALS.md`,
+  `site/help/using-tutorials.md` (indexed in `MANIFEST.json` and `docs/DOC-SOURCES.json`),
+  `tests/app-schema/test-tutorials.mjs` (offline, 90 checks, in `.github/ci/run_offline_suites.py`), walk group T
+  (`tests/walk/groups/t.mjs`). Changed: `nav.js` (mounts the guide; Tutorials in the user menu), `prefs.js` (the key is
+  synced), `help.js` (the Tutorials section, first), `account.js`, `styles.css`, the walk's `lib.mjs`, `cleanup.mjs`
+  and `walk.mjs`. No page HTML changed, so no content-policy hash moved.
+- **Walk.** The walk's other groups now switch tutorials off in their own browsers, so a welcome tour never stands over a
+  button they click; its cleanup removes the tutorial preference from the staging logins.
+- **Deliberately not done.** The guide never clicks, types or prevents a default, and no step is a delete, remove,
+  reset or publish: the grading task stops before Finalize, and the assignment task ends saved and unpublished.
+  Nothing was added to the database and no migration was needed. Only the walk was run, on staging; nothing touched
+  production. A "next suggestion" based on what a person has done is not built.
+
 ## 2026-11-10 — Matthew Recker via Claude (branch `v2-review-pass` joined with `v2`; Stage E item 9 closed; not committed)
 
 - **One branch again.** `v2-review-pass` now holds the pushed `v2` commit (Stage C gate, step 1 tools, doc review) and the

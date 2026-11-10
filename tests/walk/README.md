@@ -21,6 +21,7 @@ earlier step which failed is reported as blocked, never as a pass.
 | G | Roles: an instructor gets no Assignments writes; the other course's director reaches nothing here |
 | J | The 2026-11-09 review pass: the older address kept, the dashboard Backlog and Recent reports, the gradebook heading, the info control, an instructor read-only Assignments, and a cadet in two courses on All classes |
 | K | The chooser by kind (2026-11-09): four cards for a preflight, three for the others with Auto-graded questions grayed unless homework, each card saving its pair, an older saved setting kept as it was, and a tutor setup file dropped on the tutor card |
+| T | Tutorials (2026-11-10): the welcome tour starts once on a first sign-in and does not return; the off switch, and a newer tour showing once with New feature; the Account switch and reset; a cadet's own tour; Help lists them first; "Start an assignment" as a cadet; "Create a new course" as the site admin ends with a real course (zz-walk) and "I've got it from here" leaves the form as it was; "Add an assignment" as a director ends saved and unpublished; a director opening "Create a new course" is told who does it. Resets each login's tutorial preference before and after |
 | I | Expression answers: the insert buttons, the typeset reading (a rendered KaTeX element) for the cadet and in the question editor, a question whose own variable is `e`, and one marking through the deployed `check-answer` (I5 needs the new function) |
 
 ## Safety

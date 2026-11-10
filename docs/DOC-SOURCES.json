@@ -17,10 +17,24 @@
   ],
   "docs": [
     {
+      "doc": "site/help/using-tutorials.md",
+      "kind": "help",
+      "tier": "student",
+      "reviewed": "2026-11-10",
+      "sources": [
+        "site/js/tutorials.js",
+        "site/js/tutorials-catalog.js",
+        "site/js/account.js",
+        "site/js/help.js",
+        "site/js/prefs.js"
+      ],
+      "note": "How a person starts, leaves and switches off tutorials. The off-switch rule (auto, offAt, seen, and a tour newer than offAt showing once) is in tutorials.js and recorded in docs/decisions/TUTORIALS.md; a change to either must be read against this page."
+    },
+    {
       "doc": "site/help/student-all-classes.md",
       "kind": "help",
       "tier": "student",
-      "reviewed": "2026-11-09",
+      "reviewed": "2026-11-10",
       "sources": [
         "site/js/student-summary.js",
         "site/student/summary.html",
@@ -230,7 +244,7 @@
       "doc": "site/help/director-assignment-setup.md",
       "kind": "help",
       "tier": "director",
-      "reviewed": "2026-11-09",
+      "reviewed": "2026-11-10",
       "sources": [
         "site/faculty/items.html",
         "site/js/faculty-items.js",

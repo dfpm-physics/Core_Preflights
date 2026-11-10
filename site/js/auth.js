@@ -159,7 +159,11 @@ export async function bootstrap(opts = {}) {
     appRoot: APP_ROOT,
     // resetPrefs() before signOut so this user's pending push cannot land under the next
     // person to sign in on a shared lab machine.
-    signOut: async () => { resetPrefs(); await db.auth.signOut(); go(loginPath); },
+    signOut: async () => {
+      resetPrefs();
+      try { sessionStorage.removeItem('cp.navshell'); } catch (_) { /* nav-shell.js also checks for a session */ }
+      await db.auth.signOut(); go(loginPath);
+    },
   };
 
   // A flagged session may read nothing (see above), so it gets no offerings: the account page

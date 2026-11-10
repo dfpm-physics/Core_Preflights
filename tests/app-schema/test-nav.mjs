@@ -98,26 +98,26 @@ const ADMIN   = { role: 'faculty', instructorRow: { name: 'A', is_global_admin: 
                  isDirectorForCurrent: () => true };
 const STUDENT = { role: 'student', studentRow: { name: 'S' } };
 
-eq('the dropdown holds Account, Help, Artifacts, Tutor errors, Courses and terms, System, System health and Test views',
+eq('the dropdown holds Account, Help, Tutorials, Artifacts, Tutor errors, Courses and terms, System, System health and Test views',
    USER_MENU_LINKS.map(l => l.key),
-   ['account', 'help', 'artifacts', 'tutor-errors', 'terms', 'system', 'health', 'tests']);
+   ['account', 'help', 'tutorials', 'artifacts', 'tutor-errors', 'terms', 'system', 'health', 'tests']);
 check('System carries the global-admin gate', USER_MENU_LINKS.find(l => l.key === 'system').adminOnly === true);
 check('so does Test views', USER_MENU_LINKS.find(l => l.key === 'tests').adminOnly === true);
 eq('a global admin sees System, System health and Test views', menuKeys(ADMIN),
-   ['account', 'help', 'artifacts', 'tutor-errors', 'terms', 'system', 'health', 'tests']);
-const STAFF_ONLY = ['account', 'help', 'artifacts', 'tutor-errors'];  // facultyOnly entries
+   ['account', 'help', 'tutorials', 'artifacts', 'tutor-errors', 'terms', 'system', 'health', 'tests']);
+const STAFF_ONLY = ['account', 'help', 'tutorials', 'artifacts', 'tutor-errors'];  // facultyOnly entries
 eq('a plain instructor does NOT see System or Test views', menuKeys(FACULTY), STAFF_ONLY);
 // A director is the case the split exists for: full authority over one course, none over the
 // system tier. Switching course must never be a way to acquire it.
 eq('nor does a DIRECTOR of the current course',
    menuKeys({ ...FACULTY, isDirectorForCurrent: () => true }), [...STAFF_ONLY, 'terms', 'health']);
-eq('a student sees nothing faculty-only', menuKeys(STUDENT), ['account', 'help']);
+eq('a student sees nothing faculty-only', menuKeys(STUDENT), ['account', 'help', 'tutorials']);
 
 // Same href check as the bar's, split by where the target lives. Both halves matter: a bare
 // filename must exist beside the pages that render the nav, and the one relative path must
 // resolve from those pages to something real in the repo.
 eq('every in-app dropdown href points at a page that exists',
-   USER_MENU_LINKS.filter(l => !l.external && !PAGES.has(l.href)).map(l => l.href), []);
+   USER_MENU_LINKS.filter(l => !l.external && !PAGES.has(l.href.split('#')[0])).map(l => l.href), []);   // a link may carry an #anchor
 eq('…and the external one resolves from site/faculty/ to a real file',
    USER_MENU_LINKS.filter(l => l.external)
      .filter(l => !existsSync(new URL(`../../site/faculty/${l.href}`, import.meta.url)))

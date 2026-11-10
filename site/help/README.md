@@ -49,6 +49,9 @@ with a full path from the site root or an absolute URL.
 
 Order within the file is the display order inside each tier group.
 
+The Help index starts with a **Tutorials** section (`#tutorials`). It is not drawn from this manifest: it lists the
+tutorials in `site/js/tutorials-catalog.js` that the viewer's tier may start. See `docs/decisions/TUTORIALS.md`.
+
 ## 3. Register it in `docs/DOC-SOURCES.json`
 
 A help doc that disagrees with the system is a bug (`CORE.md` §5), so every topic here is indexed

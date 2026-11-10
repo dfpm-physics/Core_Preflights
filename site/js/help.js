@@ -9,6 +9,7 @@
 // course switch (a director in one course and an instructor in another sees a different set).
 
 import { esc } from './util.js';
+import { tutorialsForTier } from './tutorials-catalog.js';
 
 // Cumulative tiers, lowest first: a viewer sees their own tier and everything below it.
 // A doc's `tier` is the LOWEST role allowed to see it.
@@ -193,8 +194,41 @@ function renderIndex(ctx, root, visible, missingId) {
         ? 'They are still the best guide available — just check anything surprising with your instructor.'
         : 'The page content has not been verified against the parts of the system that changed.'}</div>` : '';
 
-  root.innerHTML = `${head()}${notFound}${banner}${html}`;
+  root.innerHTML = `${head()}${notFound}${banner}${tutorialsHTML(ctx)}${html}`;
   wireDocLinks(ctx, root);
+  wireTutorials(ctx, root);
+  // The user menu links here with #tutorials. The page is drawn after the browser's own jump, so scroll to it again.
+  if (location.hash === '#tutorials') root.querySelector('#tutorials')?.scrollIntoView();
+}
+
+/* The Tutorials section, first on the page. Tours show a person around; tasks walk through a real job. Each Start button
+ * hands off to the guide engine, loaded only when one is pressed so the help page does not carry it. */
+function tutorialsHTML(ctx) {
+  const list = tutorialsForTier(viewerTier(ctx));
+  if (!list.length) return '';
+  const group = (title, blurb, items) => items.length ? `<div class="tut-group"><h3 class="tut-group-title">${esc(title)}</h3>
+      <div class="muted" style="font-size:0.88em;margin-bottom:6px">${esc(blurb)}</div>
+      ${items.map(t => `<div class="card help-card tut-item">
+        <div class="tut-item-body"><div class="card-title">${esc(t.title)}</div>
+          <div class="muted" style="font-size:0.88em">${esc(t.summary)}</div></div>
+        <button type="button" class="btn btn-primary btn-sm" data-tutorial-start="${esc(t.id)}">Start</button></div>`).join('')}</div>` : '';
+  return `<section class="help-group" id="tutorials">
+    <h2 class="help-group-title">Tutorials</h2>
+    ${group('Show me around', 'A short tour of a page. You can end it at any time.', list.filter(t => t.kind === 'tour'))}
+    ${group('Do it with me', 'Each one walks you through a real job, and you finish with the real thing done. Choose I\'ve got it from here at any step to carry on by yourself.', list.filter(t => t.kind === 'task'))}
+  </section>`;
+}
+
+function wireTutorials(ctx, root) {
+  root.querySelectorAll('[data-tutorial-start]').forEach(b => b.addEventListener('click', async () => {
+    b.disabled = true;
+    try {
+      const { startTutorial } = await import('./tutorials.js');
+      startTutorial(b.dataset.tutorialStart, ctx);
+    } catch (err) {
+      b.insertAdjacentHTML('afterend', `<span class="muted" style="font-size:0.85em"> Could not start it (${esc(err.message)}).</span>`);
+    } finally { b.disabled = false; }
+  }));
 }
 
 function head() {

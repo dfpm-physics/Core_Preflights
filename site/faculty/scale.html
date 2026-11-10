@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-9ft1sKhecE6iUapW+bfvrHx9Nll90Ndh1cs3/2Kn7MM=' 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8=' 'sha256-hf5A0OCp4PSS1PR+pyZuW6kLLqb97EY+9miUmlQVloA='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Letter scale · PREP</title>
   <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
@@ -11,7 +11,7 @@
   <script src="../js/config.js"></script>
 </head>
 <body>
-  <header id="topnav"></header>
+  <header id="topnav"></header><script src="../js/nav-shell.js"></script>
   <main class="page-wide" id="main">
     <div class="center-load"><span class="spinner"></span><span>Loading the letter scale…</span></div>
   </main>
@@ -40,7 +40,7 @@
 
     function init() {
       initTheme();
-      renderNav(ctx, { active: 'items', onCourseChange: () => { location.reload(); } });
+      renderNav(ctx, { active: 'admin', onCourseChange: () => { location.reload(); } });
       return load();
     }
 
@@ -48,7 +48,7 @@
       return `<div class="page-head"><div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:10px">
         <div><h1>Letter scale</h1><div class="sub">${sub}</div></div>${extra}</div></div>`;
     }
-    const back = `<a class="btn btn-ghost btn-sm" href="items.html">Back to Assignments</a>`;
+    const back = `<a class="btn btn-ghost btn-sm" href="admin.html">Back to Admin</a>`;
 
     async function load() {
       const root = $('main');

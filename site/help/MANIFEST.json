@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated": "2026-11-07",
+  "updated": "2026-11-10",
   "tiers": ["student", "instructor", "director", "admin"],
   "docs": [
     {
@@ -16,6 +16,13 @@
       "title": "All classes",
       "summary": "The page you land on: work due in every class you are in, soonest first.",
       "file": "student-all-classes.md"
+    },
+    {
+      "id": "using-tutorials",
+      "tier": "student",
+      "title": "Using tutorials",
+      "summary": "Starting a tutorial, leaving one, and turning the automatic ones off.",
+      "file": "using-tutorials.md"
     },
     {
       "id": "ai-and-your-work",
