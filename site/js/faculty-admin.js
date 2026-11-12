@@ -149,9 +149,12 @@ export async function loadStaff(ctx) {
  * the dropdown value straight through with no check, so any course director could mint a system
  * admin. See create-instructor/index.ts.
  */
-export function addStaff(ctx, { name, email, role }) {
+export function addStaff(ctx, { name, email, role, offeringId }) {
+  // `offeringId` is optional: the Create staff page names the offering itself, and sends none for
+  // a system admin (who belongs to no offering). Without it the current offering is used.
+  const course_offering_id = offeringId === undefined ? ctx.currentOffering : offeringId;
   return db.functions.invoke('create-instructor', {
-    body: { name, email, role, course_offering_id: ctx.currentOffering },
+    body: { name, email, role, ...(course_offering_id ? { course_offering_id } : {}) },
   });
 }
 

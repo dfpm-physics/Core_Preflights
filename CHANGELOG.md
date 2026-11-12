@@ -6,6 +6,17 @@ can understand the history without re-deriving it from code or git.
 
 Newest entries first. Dates are `YYYY-MM-DD`.
 
+## 2026-11-12 — Matthew Recker via Claude
+
+**A "Create staff" page replaces the inline "Or create a new account" form.** `site/faculty/create-staff.html` (logic in `site/js/create-staff.js`) creates one staff account through the same `addStaff()` call and the same `create-instructor` edge function as before. The role is now an explicit choice with no default selected, and submitting without one is refused. The old form shared the Add staff dialog's role select, which defaults to Instructor, so a new director or system admin was easy to create with the wrong role.
+
+- Who may open it: a system admin, or a director of at least one offering; anyone else sees "Not allowed". A director may create Instructor or Director, only for an offering they direct. A system admin may also create System admin, which needs no offering.
+- Entry points: a "Create staff" item in the user menu under "Courses and terms" (system admins only), and a "Create a new staff account" button in the Add staff dialog on Admin -> Staff, which opens the page with `?offering=` and offers "Back to Staff" afterwards. The dialog's existing-people picker and role select are unchanged. The dead inline form code in `admin.html` was removed.
+- `addStaff()` takes an optional `offeringId`; without it the current offering is used as before.
+- Updated `site/help/instructor-accounts.md` and the Add a staff member tutorial text; registered the new page as a source of the help doc.
+
+Not done: no edge-function or database change (the server remains the gate for who may create which role); instructors still cannot create staff (director's decision, 2026-11-12); students still come only from the roster import.
+
 ## 2026-11-12 — Matthew Recker via Claude (test site: fixes from two reviews; branch v2-test-fixes-r1, not committed)
 
 Two reviews of the test site and feedback triage found five problems. Nothing here is committed, pushed, published or applied to a database.

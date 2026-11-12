@@ -161,6 +161,11 @@ export const USER_MENU_LINKS = [
    * site administrator can do, and the database holds the line. */
   { key: 'terms', label: 'Courses and terms', href: 'terms.html', icon: 'settings', emoji: '🗓️',
     facultyOnly: true, directorOnly: true },
+  /* Create staff -- make one new staff account. System admins only here; a director reaches the same
+   * page from the Add staff dialog on Admin -> Staff. The page and the edge function enforce who may
+   * create which role, so this gate is discoverability. */
+  { key: 'create-staff', label: 'Create staff', href: 'create-staff.html', icon: 'settings', emoji: '👤',
+    adminOnly: true, facultyOnly: true },
   // Separated by a rule above it: it is a different tier from "your own account", and running the
   // two together is how somebody lands on the raw table browser looking for their password.
   { key: 'system',  label: 'System',  href: 'system.html',  icon: 'settings', emoji: '🛠️',

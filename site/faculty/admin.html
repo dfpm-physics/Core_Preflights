@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-ImJZjOZcLvrdncIpcZeo0bB6Ag3eOQCgsCzusywtang=' 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8=' 'sha256-zCLtsbzhsZK1XSbkGCEDKG6ydmmbHOSCsss6seV+90Y='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Course administration · PREP</title>
   <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
@@ -1737,20 +1737,9 @@
              <div id="ax-results" class="pick-list pick-multi"></div></div>
            <div id="ax-picked" class="alert alert-info" style="display:none"></div>
            ${roleField}
-           <details style="margin-top:14px" id="ax-new">
-             <summary style="cursor:pointer;font-size:0.9em"><strong>Or create a new account</strong>
-               <span class="muted">— for somebody who has never used PREP</span></summary>
-             <div class="field" style="margin-top:10px"><label for="ax-name">Full name</label>
-               <input id="ax-name" placeholder="Jane Doe">
-               <div class="field-hint">Their first password is derived from it — last name + <code>1234</code>.</div></div>
-             <div class="field"><label for="ax-email">Email</label>
-               <input id="ax-email" type="email" placeholder="jane.doe@afacademy.af.edu">
-               <div class="field-hint">Becomes their sign-in address.</div></div>
-             <div class="alert alert-info" style="margin-bottom:0">They are put on the default
-               password and <strong>must change it</strong> before they can do anything in PREP.
-               Tell them in person — PREP has no mail server.</div>
-           </details>
-           <div class="alert alert-info">Either way this writes one <code>staff_assignments</code>
+           <div style="margin-top:14px">Somebody who has never used PREP?
+             <a class="btn" id="ax-create" href="create-staff.html?offering=${encodeURIComponent(ctx.currentOffering)}">Create a new staff account</a></div>
+           <div class="alert alert-info">This writes one <code>staff_assignments</code>
              row for <strong>this offering</strong>. It grants nothing in any other term.</div>`,
           'Add to offering',
           async () => {
@@ -1774,19 +1763,8 @@
               await renderStaff();
               return null;
             }
-            const name = document.getElementById('ax-name').value.trim();
-            const email = document.getElementById('ax-email').value.trim();
-            if (!name || !email) {
-              return free.length
-                ? 'Tick somebody in the list above, or open “create a new account” and fill in a name and email.'
-                : 'Enter a name and email under “create a new account”.';
-            }
-            const { data, error } = await A.addStaff(ctx, { name, email, role });
-            const msg = data?.error || error?.message;
-            if (msg) return msg;
-            status(`✓ ${name} added — their password is ${A.defaultStaffPassword(name)}`, 'var(--green)');
-            await renderStaff();
-            return null;
+            return free.length ? 'Tick somebody in the list above.'
+                               : 'Everybody with a login already staffs this offering.';
           });
 
         wireStaffPicker(free);
@@ -1837,9 +1815,6 @@
           staffPicked = staffPicked.filter(p => p.id !== b.dataset.unpick);
           paintChips(); paint(input.value);
         }));
-        // The "create a new account" half is unreachable for this save while anybody is ticked —
-        // close it rather than leave two live paths and a rule the operator has to know about.
-        document.getElementById('ax-new').open = false;
       };
 
       const paint = (q) => {
@@ -1852,7 +1827,7 @@
                ><span class="pick-tick" aria-hidden="true">${isPicked(p.id) ? '✓' : ''}</span>${esc(lastFirst(p.name))}</button>`).join('')
           : t
             ? `<div class="pick-empty">Nobody with a login matches “${esc(q)}”. If they have never
-                 used PREP, create the account below.</div>`
+                 used PREP, use Create a new staff account below.</div>`
             : `<div class="pick-empty">Everybody with a PREP login already staffs this offering.</div>`;
         box.querySelectorAll('[data-pick]').forEach(b => b.addEventListener('click', () => {
           const id = b.dataset.pick;

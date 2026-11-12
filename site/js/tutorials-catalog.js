@@ -252,7 +252,7 @@ export const TUTORIALS = [
       { page: 'faculty/admin.html', tab: 'staff', entry: true, target: '#add-btn', title: 'Add staff',
         text: 'Click Add staff.', advance: { click: '#add-btn' } },
       { page: 'faculty/admin.html', tab: 'staff', target: '#ax-search', title: 'Who',
-        text: 'Tick the people who already have a PREP login. For somebody new, open Or create a new account below it.', advance: 'next' },
+        text: 'Tick the people who already have a PREP login. For somebody new, use Create a new staff account below it.', advance: 'next' },
       { page: 'faculty/admin.html', tab: 'staff', target: '#ax-role', title: 'Their role',
         text: 'An instructor grades their own sections. A director runs the whole course.', advance: 'next' },
       { page: 'faculty/admin.html', tab: 'staff', target: '#mk-ok', title: 'Add them',

@@ -73,8 +73,11 @@ role you choose below the list. Typing filters the list.
 **Prefer this to creating an account** whenever the person already has one — usually because they
 teach your other course. Grades, extensions and unlocks are attributed to the person, so a second
 login for the same colleague splits their history across two identities with no way to rejoin it.
-Somebody who has genuinely never used PREP is created under *Or create a new account*, on the
-derived default password above.
+Somebody who has genuinely never used PREP is created on the **Create staff** page, reached from the
+**Create a new staff account** button in the same dialog (a system admin also finds it in the user
+menu, under *Courses and terms*). There you must choose the role explicitly (it has no default), and the
+account starts on the derived default password above. A director may create an Instructor or Director
+for an offering they direct; only a system admin may create a system admin. Instructors cannot create staff.
 
 Everyone added in one pass gets the **same role**. If one of them should be a director, add the
 group as instructors and change that one person's role in the Staff table afterwards — a role

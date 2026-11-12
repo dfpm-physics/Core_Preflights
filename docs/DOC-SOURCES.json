@@ -20,7 +20,7 @@
       "doc": "site/help/using-tutorials.md",
       "kind": "help",
       "tier": "student",
-      "reviewed": "2026-11-10",
+      "reviewed": "2026-11-12",
       "sources": [
         "site/js/tutorials.js",
         "site/js/tutorials-catalog.js",
@@ -296,7 +296,7 @@
       "doc": "site/help/instructor-accounts.md",
       "kind": "help",
       "tier": "instructor",
-      "reviewed": "2026-11-10",
+      "reviewed": "2026-11-12",
       "sources": [
         ".ai/instructions/PROJECT.md",
         "site/js/roster-import.js",
@@ -307,7 +307,9 @@
         "site/js/account.js",
         "supabase/functions/reset-staff-password/index.ts",
         "supabase/functions/create-instructor/index.ts",
-        "site/js/faculty-admin.js"
+        "site/js/faculty-admin.js",
+        "site/faculty/create-staff.html",
+        "site/js/create-staff.js"
       ],
       "note": "The only documentation of the in-person password-reset workflow, which replaced email recovery on 2026-07-21, and of the registrar roster-export format. If reset-student-password's authorization or the importer's required columns change, this page misdirects an instructor standing in front of a locked-out cadet. Both pages are sources since 2026-07-23 (P1.9): reset lives on Roster and is an instructor action, import and provisioning live on Enrollment and are a director's — the doc sends the reader to one or the other by name, so a move between them makes it wrong. The three staff-password sources were added 2026-07-27, when a derivable default (last name + 1234) made a delegated staff reset possible: this page is now the only place the rule is written down for a human, and the derivation itself has three code copies that must agree."
     },
