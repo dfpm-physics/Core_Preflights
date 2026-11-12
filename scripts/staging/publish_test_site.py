@@ -31,8 +31,12 @@ PUBLISHING (--repo <clone of dfpm-physics/iPREP-staging>)
   Dry run by default: builds to a temporary directory and counts what would be added, changed and
   removed in the clone. With --commit it replaces the clone's working files with the build (keeping
   .git), stages everything INSIDE THAT CLONE ONLY, commits, and pushes origin main. It never
-  force-pushes. It refuses a clone whose origin is not dfpm-physics/iPREP-staging, a clone that
-  is not on main, and (unless --allow-dirty) uncommitted changes under site/ here, because the copy
+  force-pushes. The clone is a generated, disposable copy of the test site: never edit it by hand.
+  A dry run runs only `git fetch origin` and read-only status checks; it never resets or checks out.
+  Under --commit it first aborts if the clone has uncommitted changes or commits not on origin/main,
+  then runs `git reset --hard origin/main` (an empty remote: an unborn main), so it is never behind. It
+  refuses a clone whose fetch or push URL is not dfpm-physics/iPREP-staging, a clone with fewer than
+  three path parts, a clone that is not on main, and (unless --allow-dirty) uncommitted changes under site/ here, because the copy
   would then not match any commit.
 
 CAN IT REACH PRODUCTION?  It reads no credential and opens no connection. The keys it handles are
@@ -128,12 +132,13 @@ def build_site(site_dir, out, prod, staging):
 
 def verify(out, prod):
     """Names of output files that still hold production. Never returns contents."""
-    ref = urlsplit(prod["url"]).hostname.split(".")[0].encode()
-    bad = [prod["anon"].encode(), LIVE_ADDRESS.encode(), ref]
+    ref = urlsplit(prod["url"]).hostname.split(".")[0]
+    pct = "".join(f"%{ord(c):02x}" for c in ref)          # the ref written as %xx escapes
+    bad = [x.lower().encode() for x in (prod["anon"], LIVE_ADDRESS, ref, pct)]
     hits = []
     for path in sorted(Path(out).rglob("*")):
         if path.is_file():
-            data = path.read_bytes()
+            data = path.read_bytes().lower()
             if any(b in data for b in bad):
                 hits.append(path.relative_to(out).as_posix())
     return hits
@@ -160,18 +165,50 @@ def git(cwd, *args, check=True):
     return r.stdout.strip()
 
 
-def check_clone(clone, repo=REPO):
+ORIGIN_RE = re.compile(
+    rf"^(?:https?://(?:[^@/]+@)?github\.com/|git@github\.com:|ssh://git@github\.com/){re.escape(TEST_REPO)}(?:\.git)?/?$", re.I)
+
+
+def sync_clone(clone, commit=False):
+    """Bring the clone to origin/main. A dry run (commit=False) only fetches and reads: it never resets, checks out
+    or switches HEAD. Under commit it first refuses a dirty clone or one with local commits not on origin/main,
+    then resets to origin/main. An empty remote leaves an unborn main."""
+    git(clone, "fetch", "origin")
+    has_remote_main = git(clone, "rev-parse", "--verify", "--quiet", "refs/remotes/origin/main", check=False) != ""
+    has_head = git(clone, "rev-parse", "--verify", "--quiet", "HEAD", check=False) != ""
+    if not commit:
+        if has_remote_main and has_head and git(clone, "rev-list", "HEAD..origin/main"):
+            print("NOTE     the clone is behind origin/main; the plan below is against its current files. "
+                  "--commit resets it first.")
+        return
+    if git(clone, "status", "--porcelain"):
+        refuse(f"{clone} has uncommitted changes; the clone is a generated copy, so clean or re-clone it.")
+    if has_remote_main and has_head and git(clone, "rev-list", "origin/main..HEAD"):
+        refuse(f"{clone} has local commits that are not on origin/main; push or discard them first.")
+    if not has_head:
+        git(clone, "symbolic-ref", "HEAD", "refs/heads/main")      # unborn HEAD: make it main before any reset
+    if has_remote_main:
+        git(clone, "reset", "--hard", "origin/main")
+
+
+def check_clone(clone, repo=REPO, sync=False, commit=False):
     clone = Path(clone)
+    if len(clone.resolve().parts) < 3:
+        refuse(f"{clone} is too close to the filesystem root to be a clone path.")
     if not (clone / ".git").exists():
         refuse(f"{clone} is not a git clone (no .git).")
     if inside(clone, repo) or inside(repo, clone):
         refuse("the clone must be a separate directory, not this repository or inside it.")
-    origin = git(clone, "remote", "get-url", "origin", check=False)
-    if not re.search(rf"(?:github\.com[:/]){re.escape(TEST_REPO)}(?:\.git)?/?$", origin, re.I):
-        refuse(f"the clone's origin is not {TEST_REPO}.")
+    for label, args in (("origin", ("get-url", "origin")), ("push URL", ("get-url", "--push", "origin"))):
+        url = git(clone, "remote", *args, check=False)
+        if not ORIGIN_RE.match(url):
+            refuse(f"the clone's {label} is not {TEST_REPO}.")
     branch = git(clone, "symbolic-ref", "--short", "HEAD", check=False)
-    if branch != "main":
+    unborn = git(clone, "rev-parse", "--verify", "--quiet", "HEAD", check=False) == ""
+    if branch != "main" and not (sync and unborn):
         refuse(f"the clone is on '{branch}', not main.")
+    if sync:
+        sync_clone(clone, commit=commit)
 
 
 def tree(root):
@@ -229,7 +266,7 @@ def main(argv=None):
         check_out_dir(args.out)
         return build(Path(args.out), prod, staging)[0]
 
-    check_clone(args.repo)
+    check_clone(args.repo, sync=True, commit=args.commit)
     dirty = git(REPO, "status", "--porcelain", "--", "site")
     if dirty:
         print(f"WARNING  uncommitted changes under site/ here ({len(dirty.splitlines())} path(s)); "
@@ -254,6 +291,9 @@ def main(argv=None):
             return 0
         replace_working_files(built, args.repo)
         git(args.repo, "add", "--all", "--", ".")
+        if not git(args.repo, "status", "--porcelain"):
+            print("nothing to commit.")
+            return 0
         git(args.repo, "commit", "-m", f"Publish test site from Core_Preflights {sha}")
         git(args.repo, "push", "origin", "main")
         print(f"pushed   origin main, from Core_Preflights {sha}")

@@ -52,6 +52,15 @@ class Publish(unittest.TestCase):
             rc, _, _ = pts.build(Path(td) / "out2", PROD, STG, site_dir=site)
             self.assertEqual(rc, 1)
 
+    def test_verify_case_and_encoding(self):
+        with tempfile.TemporaryDirectory() as td:
+            out = Path(td)
+            (out / "a.txt").write_bytes(b"x " + PROD["url"].upper().encode())              # upper case ref
+            (out / "b.txt").write_bytes("%" .encode() + b"%".join(
+                f"{ord(c):02X}".encode() for c in "fakeprodref00000000"))                  # %xx escapes
+            (out / "c.txt").write_bytes(b"clean")
+            self.assertEqual(pts.verify(out, PROD), ["a.txt", "b.txt"])
+
     def test_verify_clean(self):
         with tempfile.TemporaryDirectory() as td:
             site = fake_site(td)
@@ -101,6 +110,127 @@ class Publish(unittest.TestCase):
             self.assertTrue((c / ".git").exists())
             self.assertFalse((c / "old.txt").exists())
             self.assertEqual((c / "chg.txt").read_text(), "2")
+
+    def test_origin_must_be_anchored(self):
+        with tempfile.TemporaryDirectory() as td:
+            for url in ("https://evil.example/github.com/dfpm-physics/iPREP-staging.git",
+                        "https://github.com/dfpm-physics/iPREP-staging.git/extra",
+                        "https://github.com/other/dfpm-physics/iPREP-staging.git"):
+                c = self._clone(td, url)
+                with self.assertRaises(SystemExit, msg=url):
+                    pts.check_clone(c, repo=Path(td) / "elsewhere")
+                import shutil
+                shutil.rmtree(c, ignore_errors=True)
+
+    def test_push_url_checked(self):
+        with tempfile.TemporaryDirectory() as td:
+            c = self._clone(td, "https://github.com/dfpm-physics/iPREP-staging.git")
+            subprocess.run(["git", "-C", str(c), "remote", "set-url", "--push", "origin",
+                            "https://github.com/dfpm-physics/Core_Preflights.git"], check=True)
+            with self.assertRaises(SystemExit):
+                pts.check_clone(c, repo=Path(td) / "elsewhere")
+
+    def test_shallow_clone_path_refused(self):
+        with self.assertRaises(SystemExit):
+            pts.check_clone(Path(Path.cwd().anchor) / "x", repo=Path.cwd())
+
+    def test_sync_resets_to_origin_main(self):
+        run = lambda cwd, *a: subprocess.run(["git", "-C", str(cwd), *a], check=True, capture_output=True)  # noqa: E731
+        with tempfile.TemporaryDirectory() as td:
+            remote = Path(td) / "remote.git"
+            subprocess.run(["git", "init", "--bare", "-b", "main", str(remote)], check=True, capture_output=True)
+            seed = Path(td) / "seed"
+            subprocess.run(["git", "clone", str(remote), str(seed)], check=True, capture_output=True)
+            for k, v in (("user.name", "t"), ("user.email", "t@example.com")):
+                run(seed, "config", k, v)
+            run(seed, "checkout", "-B", "main")
+            (seed / "f.txt").write_text("1")
+            run(seed, "add", "."); run(seed, "commit", "-m", "one"); run(seed, "push", "origin", "main")
+            (seed / "f.txt").write_text("2")
+            run(seed, "commit", "-am", "two"); run(seed, "push", "origin", "main")
+            clone = Path(td) / "clone"
+            subprocess.run(["git", "clone", str(remote), str(clone)], check=True, capture_output=True)
+            run(clone, "reset", "--hard", "HEAD~1")                                       # behind origin
+            self.assertEqual((clone / "f.txt").read_text(), "1")
+            pts.sync_clone(clone, commit=True)
+            self.assertEqual((clone / "f.txt").read_text(), "2")
+
+    def test_sync_empty_remote_unborn_main(self):
+        with tempfile.TemporaryDirectory() as td:
+            remote = Path(td) / "remote.git"
+            subprocess.run(["git", "init", "--bare", str(remote)], check=True, capture_output=True)
+            clone = Path(td) / "clone"
+            subprocess.run(["git", "clone", str(remote), str(clone)], check=True, capture_output=True)
+            subprocess.run(["git", "-C", str(clone), "symbolic-ref", "HEAD", "refs/heads/trunk"], check=True)
+            pts.sync_clone(clone, commit=True)
+            out = subprocess.run(["git", "-C", str(clone), "symbolic-ref", "--short", "HEAD"],
+                                 capture_output=True, text=True).stdout.strip()
+            self.assertEqual(out, "main")
+
+    def _remote_clone(self, td):
+        run = lambda cwd, *a: subprocess.run(["git", "-C", str(cwd), *a], check=True, capture_output=True)  # noqa: E731
+        remote = Path(td) / "remote.git"
+        subprocess.run(["git", "init", "--bare", "-b", "main", str(remote)], check=True, capture_output=True)
+        seed = Path(td) / "seed"
+        subprocess.run(["git", "clone", str(remote), str(seed)], check=True, capture_output=True)
+        for k, v in (("user.name", "t"), ("user.email", "t@example.com")):
+            run(seed, "config", k, v)
+        run(seed, "checkout", "-B", "main")
+        (seed / "f.txt").write_text("1")
+        run(seed, "add", "."); run(seed, "commit", "-m", "one"); run(seed, "push", "origin", "main")
+        clone = Path(td) / "clone"
+        subprocess.run(["git", "clone", str(remote), str(clone)], check=True, capture_output=True)
+        return clone, run
+
+    def test_dry_run_leaves_dirty_clone_untouched(self):
+        with tempfile.TemporaryDirectory() as td:
+            clone, run = self._remote_clone(td)
+            (clone / "f.txt").write_text("edited")
+            (clone / "extra.txt").write_text("x")
+            pts.sync_clone(clone)                                   # dry run: fetch only
+            self.assertEqual((clone / "f.txt").read_text(), "edited")
+            self.assertTrue((clone / "extra.txt").exists())
+
+    def test_commit_aborts_on_dirty_clone(self):
+        with tempfile.TemporaryDirectory() as td:
+            clone, run = self._remote_clone(td)
+            (clone / "f.txt").write_text("edited")
+            with self.assertRaises(SystemExit):
+                pts.sync_clone(clone, commit=True)
+            self.assertEqual((clone / "f.txt").read_text(), "edited")      # nothing reset
+
+    def test_commit_aborts_on_local_commits(self):
+        with tempfile.TemporaryDirectory() as td:
+            clone, run = self._remote_clone(td)
+            for k, v in (("user.name", "t"), ("user.email", "t@example.com")):
+                run(clone, "config", k, v)
+            (clone / "g.txt").write_text("local")
+            run(clone, "add", "."); run(clone, "commit", "-m", "local")
+            with self.assertRaises(SystemExit):
+                pts.sync_clone(clone, commit=True)
+            self.assertTrue((clone / "g.txt").exists())
+
+    def test_unborn_head_on_master_becomes_main_before_reset(self):
+        run = lambda cwd, *a: subprocess.run(["git", "-C", str(cwd), *a], check=True, capture_output=True)  # noqa: E731
+        with tempfile.TemporaryDirectory() as td:
+            remote = Path(td) / "remote.git"
+            subprocess.run(["git", "init", "--bare", "-b", "main", str(remote)], check=True, capture_output=True)
+            seed = Path(td) / "seed"
+            subprocess.run(["git", "clone", str(remote), str(seed)], check=True, capture_output=True)
+            for k, v in (("user.name", "t"), ("user.email", "t@example.com")):
+                run(seed, "config", k, v)
+            run(seed, "checkout", "-B", "main")
+            (seed / "f.txt").write_text("1")
+            run(seed, "add", "."); run(seed, "commit", "-m", "one"); run(seed, "push", "origin", "main")
+            clone = Path(td) / "clone"
+            clone.mkdir()
+            run(clone, "init", "-b", "master")                      # unborn master, origin has main
+            run(clone, "remote", "add", "origin", str(remote))
+            pts.sync_clone(clone, commit=True)
+            branch = subprocess.run(["git", "-C", str(clone), "symbolic-ref", "--short", "HEAD"],
+                                    capture_output=True, text=True).stdout.strip()
+            self.assertEqual(branch, "main")
+            self.assertEqual((clone / "f.txt").read_text(), "1")
 
     def test_wrong_branch_refused(self):
         with tempfile.TemporaryDirectory() as td:

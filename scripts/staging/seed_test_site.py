@@ -11,8 +11,8 @@ WHAT IT MAKES
   Sections TR-M (meets M) and TR-T (meets T)
   Staff    trainingdirector@prep-staging.example    director of the offering
            traininginstructor@prep-staging.example  instructor of both sections
-  Cadets   3000000801 to 3000000806, three in each section. Sign-in address cadet<last four digits>@prep-staging.example
-           (cadet0801@ to cadet0806@).
+  Cadets   3000001101 to 3000001106, three in each section. Sign-in address cadet<last four digits>@prep-staging.example
+           (cadet1101@ to cadet1106@).
   Items    Four written preflights, with deadlines set around today:
              train-pf-1  past due (3 days ago)         published. Five cadets submitted; four graded and
                                                        finalized, one AI-suggested and waiting for review.
@@ -60,9 +60,9 @@ WRITTEN_PATH = {"modality": "written", "delivery": "typed_response", "grading": 
     ]}}
 SECTIONS = [("TR-M", ["M"], 1), ("TR-T", ["T"], 3)]
 CADETS = [  # id, name, section code
-    (3000000801, "Ada Sandboxcadet", "TR-M"), (3000000802, "Ben Sandboxcadet", "TR-M"),
-    (3000000803, "Cleo Sandboxcadet", "TR-M"), (3000000804, "Dev Sandboxcadet", "TR-T"),
-    (3000000805, "Eli Sandboxcadet", "TR-T"), (3000000806, "Fay Sandboxcadet", "TR-T"),
+    (3000001101, "Ada Sandboxcadet", "TR-M"), (3000001102, "Ben Sandboxcadet", "TR-M"),
+    (3000001103, "Cleo Sandboxcadet", "TR-M"), (3000001104, "Dev Sandboxcadet", "TR-T"),
+    (3000001105, "Eli Sandboxcadet", "TR-T"), (3000001106, "Fay Sandboxcadet", "TR-T"),
 ]
 
 
@@ -110,7 +110,7 @@ def seed(cur):
             b.publish(items[n])
 
     when = days(-4)
-    for i, cid in enumerate(range(3000000801, 3000000806)):
+    for i, cid in enumerate([c[0] for c in CADETS[:5]]):
         s = b.work(enr[cid], items[1], "committed", when)
         if i < 4:
             pts = 2 if i % 2 == 0 else 1

@@ -40,8 +40,8 @@ The names are in the header of each seed script.
 | Cadet | `cadet105@` | two classes: Physics 215 (T3A) and Physics 120 (S1). Shows the "All classes" page |
 | Cadet | `cadet201@` | Physics 110 only |
 | Cadet | `cadet321@` | Physics 310 only, a course with no day tracks |
-| Cadet | `cadet0801@` to `cadet0803@` | the PREP Training Course, section TR-M |
-| Cadet | `cadet0804@` to `cadet0806@` | the PREP Training Course, section TR-T |
+| Cadet | `cadet1101@` to `cadet1103@` | the PREP Training Course, section TR-M |
+| Cadet | `cadet1104@` to `cadet1106@` | the PREP Training Course, section TR-T |
 
 Testers who just want to play should use the **PREP Training Course** accounts. The Physics 215, 110,
 120 and 310 data exists for the test suites and is rewritten whenever `seed_staging.py` is re-run;
@@ -58,7 +58,7 @@ review), two open, and one draft. Deadlines are set around the day the seed was 
 1. Make sure what you want shown is committed on this repository, since the copy is stamped with the
    short commit id of `HEAD`. The tool warns about uncommitted changes under `site/` and refuses to
    publish them without `--allow-dirty`.
-2. Keep a local clone of `dfpm-physics/iPREP-staging` on branch `main`, outside this repository.
+2. Keep a local clone of `dfpm-physics/iPREP-staging` on branch `main`, outside this repository. The clone is a generated, disposable copy: `--commit` resets it to `origin/main`, and a dirty clone or one with local commits is refused.
 3. Look first. This builds, verifies, and prints how many files would be added, changed and removed:
 
    ```
@@ -85,18 +85,30 @@ the browser itself refuses production. It then checks that no output file holds 
 reference, the production key or `github.io/Core_Preflights`, and stops with a non-zero exit, naming
 files and never contents, if one does. `site/js/config.js` already chooses staging for this address.
 
+## Same browser origin as the live site
+
+The test site is served from `dfpm-physics.github.io`, which is also the live site's origin (the paths
+differ: `/iPREP-staging/` and `/Core_Preflights/`). Browser storage is shared by origin, so do not sign
+in to both in the same browser profile: use a separate profile for the test site until it moves to its
+own domain.
+
 ## Re-seeding
 
 Deadlines are set around the day a seed ran, so after a few days work becomes past due. Run both seeds
 again to move them. Each is a dry run unless `--commit` is given, and each is safe to re-run. From the
-repository root, through the hub launcher that supplies the staging connection string:
+repository root, with the staging variables set: set the staging environment variables (`STAGING_DB_URL` and the `STAGING_APP_*_PASSWORD` names) in the command's own environment from the operator's local secret store, and never print them:
 
 ```
-py -3.14 "C:/00 -- AI Hub/_shared/with_secrets.py" iprep-staging -- <python of the repo venv> scripts/staging/seed_test_site.py --expect-ref wkibeptktbnaddfynrwr
-py -3.14 "C:/00 -- AI Hub/_shared/with_secrets.py" iprep-staging -- <python of the repo venv> scripts/staging/seed_staging.py --expect-ref wkibeptktbnaddfynrwr
+<python of the repo venv> scripts/staging/seed_test_site.py --expect-ref wkibeptktbnaddfynrwr
+<python of the repo venv> scripts/staging/seed_staging.py --expect-ref wkibeptktbnaddfynrwr
 ```
 
-Read the plan, then add `--commit` to write. These are machine-specific paths; another machine needs
+Read the plan, then add `--commit` to write.
+
+The sandbox cadets are 3000001101 to 3000001106. An earlier version of the seed used 3000000801 to
+3000000806, a block the roster walkthrough owns and wipes. A staging database that ran that version
+still holds those six in the sandbox offering; `scripts/staging/clean_test_site_old_cadets.py` removes
+only them (dry run by default). Before `--commit` it writes a snapshot of every row the delete removes, found by walking the live foreign keys recursively (cascade children, plus rows that would block the delete or be set to null), re-reads the snapshot from disk and checks each file's count against a live `count(*)`, and refuses on any mismatch, any blocking row, a walk cut by its depth cap, or a plan that changed after the rows were locked. Not snapshotted: rows removed by triggers, Storage objects; `auth.users` files omit password and token columns. These are machine-specific paths; another machine needs
 its own way of supplying `STAGING_DB_URL`.
 
 ## What does not work on the test site

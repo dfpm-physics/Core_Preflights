@@ -8,18 +8,19 @@ import feedback_triage as ft  # noqa: E402
 
 
 class Transitions(unittest.TestCase):
-    def ok(self, cur, to, triage, note="n", ref=None):
-        ft.check_transition(cur, to, triage, note, ref)
+    def ok(self, cur, to, triage, note="n", ref=None, **row):
+        ft.check_transition(cur, to, triage, note, ref, **row)
 
-    def bad(self, cur, to, triage, note="n", ref=None):
+    def bad(self, cur, to, triage, note="n", ref=None, **row):
         with self.assertRaises(ft.Refusal):
-            ft.check_transition(cur, to, triage, note, ref)
+            ft.check_transition(cur, to, triage, note, ref, **row)
 
     def test_allowed(self):
         self.ok("new", "applied", "simple")
         self.ok("new", "proposed", "significant")
-        self.ok("accepted", "applied", "significant")
-        self.ok("accepted", "applied", "simple", ref="abc1234")
+        self.ok("accepted", "applied", "significant", stored_triage="significant", approved=True)
+        self.ok("accepted", "applied", "simple", ref="abc1234", stored_triage="simple", approved=True)
+        self.ok("accepted", "applied", None, stored_triage="significant", approved=True)
 
     def test_never_touch_declined_or_duplicate(self):
         for cur in ("declined", "duplicate"):
@@ -32,6 +33,13 @@ class Transitions(unittest.TestCase):
         self.bad("applied", "proposed", "significant")
         self.bad("accepted", "proposed", "significant")
         self.bad("new", "declined", "simple")
+
+    def test_accepted_to_applied_guards(self):
+        self.bad("accepted", "applied", None, stored_triage="simple")                       # approval not verified
+        self.bad("accepted", "applied", None, stored_triage="simple", approved=False)
+        self.bad("accepted", "applied", "simple", stored_triage="significant", approved=True)   # differing triage
+        self.bad("accepted", "applied", None, stored_triage="simple", roadmap_ref="P2.1", approved=True)
+        self.ok("accepted", "applied", None, stored_triage=None, approved=True)
 
     def test_triage_rules(self):
         self.bad("new", "applied", "significant")
@@ -55,6 +63,9 @@ class Arguments(unittest.TestCase):
             p.parse_args(["mark", "id1", "--to", "accepted", "--triage", "simple", "--note", "x"])
         a = p.parse_args(["mark", "id1", "--to", "applied", "--triage", "simple", "--note", "x"])
         self.assertFalse(a.commit)
+        self.assertIsNone(p.parse_args(["mark", "id1", "--to", "applied", "--note", "x"]).triage)
+        with self.assertRaises(ft.Refusal):
+            ft.check_transition("new", "applied", None, "n", None)
 
     def test_list_defaults(self):
         a = ft.build_parser().parse_args(["list"])
