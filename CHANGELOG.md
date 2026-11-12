@@ -6,6 +6,18 @@ can understand the history without re-deriving it from code or git.
 
 Newest entries first. Dates are `YYYY-MM-DD`.
 
+## 2026-11-12 — Matthew Recker via Claude (feedback triage: staging script and runbook; branch `v2-test-fixes`)
+
+- **What.** `scripts/staging/feedback_triage.py` lists and marks `app.feedback` on staging only (read role for `list`,
+  DML role for `mark`; dry run unless `--commit`). It allows only new→proposed, new→applied and accepted→applied, and
+  refuses declined and duplicate rows. `.ai/skills/feedback-triage/` is the runbook for a run every 6 hours, listed in
+  CORE.md §4 and registered in `docs/DOC-SOURCES.json`.
+- **Why.** The course director approved this on 2026-11-12: simple fixes from tester feedback are applied at once and
+  wait for his closeout; significant ones wait for him to approve, with instructions, or deny.
+- **Checked.** `test_feedback_triage.py` (7 tests) passes offline. On staging, `prep_app_read` and `prep_app_dml`
+  bypass RLS, so `mark` can write the admin-only table; checked on staging only.
+- **Not done.** The schedule is not registered yet. Nothing touched production.
+
 ## 2026-11-12 — Matthew Recker via Claude (feedback triage: migration 089 and Feedback page; branch `v2-test-fixes`)
 
 - **What.** Added migration `supabase/migrations/app/089_feedback_triage.sql` (rollback in `rollback/`). `app.feedback.status` now also

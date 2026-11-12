@@ -48,7 +48,7 @@
       "doc": "site/help/student-getting-started.md",
       "kind": "help",
       "tier": "student",
-      "reviewed": "2026-11-10",
+      "reviewed": "2026-11-12",
       "sources": [
         "site/js/student-view.js",
         "site/student/schedule.html",
@@ -76,7 +76,7 @@
       "doc": "site/help/ai-and-your-work.md",
       "kind": "help",
       "tier": "student",
-      "reviewed": "2026-11-10",
+      "reviewed": "2026-11-12",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/instructions/PROJECT.md",
@@ -90,7 +90,7 @@
       "doc": "site/help/instructor-grading.md",
       "kind": "help",
       "tier": "instructor",
-      "reviewed": "2026-11-10",
+      "reviewed": "2026-11-12",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/instructions/PROJECT.md",
@@ -115,7 +115,7 @@
       "doc": "site/help/director-ai-rules.md",
       "kind": "help",
       "tier": "director",
-      "reviewed": "2026-11-10",
+      "reviewed": "2026-11-12",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/instructions/PROJECT.md",
@@ -130,7 +130,7 @@
       "doc": "site/help/admin-system-operations.md",
       "kind": "help",
       "tier": "admin",
-      "reviewed": "2026-11-10",
+      "reviewed": "2026-11-12",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/instructions/PROJECT.md",
@@ -153,7 +153,7 @@
       "doc": "docs/operations/SYSTEM_GUIDE.md",
       "kind": "operations",
       "tier": null,
-      "reviewed": "2026-11-10",
+      "reviewed": "2026-11-12",
       "sources": [
         ".ai/instructions/PROJECT.md",
         ".ai/instructions/CORE.md",
@@ -170,7 +170,7 @@
       "doc": "docs/operations/PREP-V2-CUTOVER.md",
       "kind": "operations",
       "tier": null,
-      "reviewed": "2026-11-10",
+      "reviewed": "2026-11-12",
       "sources": [
         "supabase/admin/app_schema_bootstrap.sql",
         "scripts/app_migration/migrate_public_to_app.py",
@@ -184,7 +184,7 @@
       "doc": "docs/operations/RESTORE-DRILL.md",
       "kind": "operations",
       "tier": null,
-      "reviewed": "2026-11-10",
+      "reviewed": "2026-11-12",
       "sources": [
         "scripts/staging/restore_drill.py",
         "scripts/staging/deploy_functions.py",
@@ -214,7 +214,7 @@
       "doc": ".ai/skills/docs-author/SKILL.md",
       "kind": "skill",
       "tier": null,
-      "reviewed": "2026-11-10",
+      "reviewed": "2026-11-12",
       "sources": [
         "site/help/README.md",
         "site/js/help.js",
@@ -227,7 +227,7 @@
       "doc": "site/help/director-course-structure.md",
       "kind": "help",
       "tier": "director",
-      "reviewed": "2026-11-10",
+      "reviewed": "2026-11-12",
       "sources": [
         "supabase/migrations/app/001_core_model.sql",
         "supabase/migrations/app/003_term_calendar.sql",
@@ -315,7 +315,7 @@
       "doc": ".ai/patterns/README.md",
       "kind": "reference",
       "tier": null,
-      "reviewed": "2026-11-10",
+      "reviewed": "2026-11-12",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/README.md"
@@ -326,7 +326,7 @@
       "doc": ".ai/patterns/python.md",
       "kind": "reference",
       "tier": null,
-      "reviewed": "2026-11-10",
+      "reviewed": "2026-11-12",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/instructions/PROJECT.md",
@@ -338,7 +338,7 @@
       "doc": ".ai/skills/integration-package/SKILL.md",
       "kind": "skill",
       "tier": null,
-      "reviewed": "2026-11-10",
+      "reviewed": "2026-11-12",
       "sources": [
         ".ai/instructions/CORE.md"
       ],
@@ -348,7 +348,7 @@
       "doc": ".ai/skills/safe-change/SKILL.md",
       "kind": "skill",
       "tier": null,
-      "reviewed": "2026-11-10",
+      "reviewed": "2026-11-12",
       "sources": [
         ".ai/instructions/CORE.md"
       ],
@@ -358,7 +358,7 @@
       "doc": ".ai/skills/skill-author/SKILL.md",
       "kind": "skill",
       "tier": null,
-      "reviewed": "2026-11-10",
+      "reviewed": "2026-11-12",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/README.md"
@@ -422,7 +422,7 @@
       "doc": "docs/operations/ONBOARD-ARTIFACTS.md",
       "kind": "operations",
       "tier": "staff",
-      "reviewed": "2026-11-10",
+      "reviewed": "2026-11-12",
       "sources": [
         "scripts/artifacts/sync_artifacts.py",
         "scripts/artifacts/artifact_parse.py",
@@ -438,7 +438,7 @@
       "doc": "docs/operations/TUTOR-BEHAVIOR-PARITY.md",
       "kind": "operations",
       "tier": "staff",
-      "reviewed": "2026-11-10",
+      "reviewed": "2026-11-12",
       "sources": [
         "scripts/artifacts/to_gemini.py",
         "scripts/artifacts/patch_artifacts.py",
@@ -492,7 +492,7 @@
       "doc": "docs/operations/ONBOARD-AGGREGATION.md",
       "kind": "operations",
       "tier": null,
-      "reviewed": "2026-11-10",
+      "reviewed": "2026-11-12",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/skills/lesson-cycle/SKILL.md",
@@ -509,7 +509,7 @@
       "doc": "docs/operations/MACHINE-SETUP.md",
       "kind": "operations",
       "tier": null,
-      "reviewed": "2026-11-10",
+      "reviewed": "2026-11-12",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/instructions/PROJECT.md",
@@ -524,7 +524,7 @@
       "doc": "docs/operations/SCHEDULED-LESSON-CYCLE.md",
       "kind": "operations",
       "tier": null,
-      "reviewed": "2026-11-10",
+      "reviewed": "2026-11-12",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/skills/lesson-cycle/SKILL.md",
@@ -538,7 +538,7 @@
       "doc": ".ai/skills/gemini-port/SKILL.md",
       "kind": "skill",
       "tier": "internal",
-      "reviewed": "2026-11-10",
+      "reviewed": "2026-11-12",
       "sources": [
         ".ai/instructions/CORE.md",
         "scripts/artifacts/to_gemini.py",
@@ -552,7 +552,7 @@
       "doc": "docs/operations/ASKSAGE-TOKEN-TRIAL.md",
       "kind": "runbook",
       "tier": "admin",
-      "reviewed": "2026-11-10",
+      "reviewed": "2026-11-12",
       "sources": [
         "supabase/functions/asksage-proxy/index.ts",
         "scripts/asksage/extract_prompts.py",
@@ -575,6 +575,20 @@
         "site/js/config.js"
       ],
       "note": "The public test copy of the site. publish_test_site.py is the source for the flags, refusals and what the build rewrites and verifies; the two seeds for the logins, the course and the items; serve_local.py for the rewrite rule it reuses; config.js for which address reaches staging. The password rules are the site's own and are public, which is why the security note exists."
+    },
+    {
+      "doc": ".ai/skills/feedback-triage/SKILL.md",
+      "kind": "skill",
+      "tier": null,
+      "reviewed": "2026-11-12",
+      "sources": [
+        "scripts/staging/feedback_triage.py",
+        "supabase/migrations/app/089_feedback_triage.sql",
+        "scripts/staging/publish_test_site.py",
+        "docs/operations/TEST-SITE.md",
+        ".ai/instructions/CORE.md"
+      ],
+      "note": "Restates the 089 lifecycle, the SIMPLE rubric the director approved on 2026-11-12, and the test-site publish procedure. feedback_triage.py is the source for which transitions the agent may write."
     }
   ]
 }
