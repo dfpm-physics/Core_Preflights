@@ -6,6 +6,19 @@ can understand the history without re-deriving it from code or git.
 
 Newest entries first. Dates are `YYYY-MM-DD`.
 
+## 2026-11-12 — Matthew Recker via Claude (Field Station design kept on its own branch, set aside)
+
+- **What.** The "Field Station" design experiment (a new look laid over the real pages, staging only) existed
+  only as uncommitted files in one local worktree. It is now committed on branch `v2-field-station`
+  (`e7c2f79`) and pushed, so it cannot be lost. Its `node_modules` and browser profile stay out.
+- **Why.** The course director set it aside as a path considered and not taken for now, worth a look if
+  anyone tries a large redesign. `docs/decisions/FIELD-STATION.md` records that and where the work is.
+- **Checked before the push.** The screenshots show only made-up staging people. No key, password or
+  real name is in the text files; the only project id in them is the production id that the
+  screenshot tool refuses.
+- **Not done.** The branch is not merged into `v2` or `main` and must not be. No page, database or
+  migration changed.
+
 ## 2026-11-10 — Matthew Recker via Claude (after a first try of the tutorials: three fixes; not committed)
 
 - **A tour step for something the page does not have no longer sits on "Waiting for the page to load".** On a course
