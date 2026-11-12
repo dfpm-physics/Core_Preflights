@@ -6,6 +6,13 @@ can understand the history without re-deriving it from code or git.
 
 Newest entries first. Dates are `YYYY-MM-DD`.
 
+## 2026-11-12 — Matthew Recker via Claude (orchestrator state file)
+
+- **What.** Added `iprep orchestrator.md` at the repository root. It is the state file of a standing Claude session
+  that takes tasks for this project on the course director's machine: its role, the director's standing direction,
+  the current task, and open loose ends. It holds no secret and no session id.
+- **Not done.** No page, script, database or migration changed. Nobody else needs to read or update the file.
+
 ## 2026-11-12 — Matthew Recker via Claude (Field Station design kept on its own branch, set aside)
 
 - **What.** The "Field Station" design experiment (a new look laid over the real pages, staging only) existed
