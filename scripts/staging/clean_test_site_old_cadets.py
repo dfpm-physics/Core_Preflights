@@ -186,7 +186,7 @@ def main(argv=None):
             return 0
 
         # Lock the target rows so nothing changes between the snapshot and the delete (same transaction).
-        cur.execute("SELECT 1 FROM app.enrollments WHERE id = ANY(%s) FOR UPDATE", ([r["id"] for r in enr["rows"]],))
+        cur.execute("SELECT 1 FROM app.enrollments WHERE id = ANY(%s::uuid[]) FOR UPDATE", ([r["id"] for r in enr["rows"]],))
         if drop:
             cur.execute("SELECT 1 FROM app.students WHERE student_id = ANY(%s) FOR UPDATE", ([d[0] for d in drop],))
         # Recompute the whole plan now that the rows are locked; refuse if it is not the plan the operator saw.
@@ -212,7 +212,7 @@ def main(argv=None):
         print(f"snapshot {snap}  ({len(nodes)} file(s), re-read from disk and checked against live counts)")
 
         enr_ids = [r["id"] for r in enr["rows"]]
-        cur.execute("DELETE FROM app.enrollments WHERE id = ANY(%s)", (enr_ids,))
+        cur.execute("DELETE FROM app.enrollments WHERE id = ANY(%s::uuid[])", (enr_ids,))
         print(f"deleted  {cur.rowcount} enrollment(s) (their submissions, grades and activities cascade)")
         drop_ids = [d[0] for d in drop]
         auth_ids = [d[1] for d in drop if d[1]]
@@ -220,7 +220,7 @@ def main(argv=None):
             cur.execute("DELETE FROM app.students WHERE student_id = ANY(%s)", (drop_ids,))
             print(f"deleted  {cur.rowcount} students row(s)")
         if auth_ids:
-            cur.execute("DELETE FROM auth.users WHERE id = ANY(%s)", (auth_ids,))
+            cur.execute("DELETE FROM auth.users WHERE id = ANY(%s::uuid[])", (auth_ids,))
             print(f"deleted  {cur.rowcount} auth user(s)")
         conn.commit()
         print("committed.")

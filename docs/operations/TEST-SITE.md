@@ -64,6 +64,7 @@ review), two open, and one draft. Deadlines are set around the day the seed was 
    ```
    python scripts/staging/publish_test_site.py --repo <path to the clone>
    ```
+   The change count compares the build with `origin/main` (unpacked to a temporary folder; the clone is not touched) and prints how many commits the clone's HEAD is behind it.
 4. Publish. This replaces the clone's files, commits "Publish test site from Core_Preflights <sha>"
    and pushes `origin main`. It never force-pushes:
 

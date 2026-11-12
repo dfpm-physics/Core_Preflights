@@ -22,6 +22,13 @@ class Clean(unittest.TestCase):
         self.assertNotEqual(c.fname(a), c.fname(b))
         self.assertTrue(c.fname(a).endswith(".json"))
 
+    def test_uuid_array_parameters_carry_a_cast(self):
+        import re
+        src = Path(c.__file__).read_text(encoding="utf-8")
+        for m in re.finditer(r"(?:enrollments|auth\.users) WHERE id = ANY\(%s([^)]*)\)", src):
+            self.assertEqual(m.group(1), "::uuid[]", m.group(0))
+        self.assertEqual(len(re.findall(r"WHERE id = ANY\(%s::uuid\[\]\)", src)), 4)
+
 
 if __name__ == "__main__":
     unittest.main()

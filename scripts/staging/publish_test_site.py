@@ -50,10 +50,12 @@ USAGE
 
 import argparse
 import hashlib
+import io
 import re
 import shutil
 import subprocess
 import sys
+import tarfile
 import tempfile
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -229,6 +231,31 @@ def diff_trees(built, clone):
     return added, changed, removed
 
 
+def extract_origin_main(clone, dest):
+    """Read-only: unpack origin/main's tree into dest and return True, or False when there is no origin/main."""
+    if git(clone, "rev-parse", "--verify", "--quiet", "refs/remotes/origin/main", check=False) == "":
+        return False
+    r = subprocess.run(["git", "-C", str(clone), "archive", "--format=tar", "refs/remotes/origin/main"],
+                       capture_output=True)
+    if r.returncode != 0:
+        sys.exit(f"git archive failed in {clone}")
+    with tarfile.open(fileobj=io.BytesIO(r.stdout)) as tf:
+        if hasattr(tarfile, "data_filter"):
+            tf.extractall(dest, filter="data")
+        else:
+            root = Path(dest).resolve()
+            safe = []
+            for m in tf.getmembers():
+                target = (root / m.name).resolve()
+                if not (m.isfile() or m.isdir()):
+                    continue                                    # skip links and special files
+                if target != root and root not in target.parents:
+                    sys.exit(f"git archive member escapes the target folder: {m.name}")
+                safe.append(m)
+            tf.extractall(dest, members=safe)
+    return True
+
+
 def replace_working_files(built, clone):
     clone = Path(clone)
     for p in list(clone.iterdir()):
@@ -281,7 +308,18 @@ def main(argv=None):
         rc, _, _ = build(built, prod, staging)
         if rc:
             return rc
-        added, changed, removed = diff_trees(built, args.repo)
+        compare = args.repo
+        if not args.commit:
+            # A dry run only fetches, so the clone's files can lag origin/main; count against origin/main itself.
+            ref_dir = Path(td) / "origin-main"
+            ref_dir.mkdir()
+            if extract_origin_main(args.repo, ref_dir):
+                compare = ref_dir
+                behind = git(args.repo, "rev-list", "--count", "HEAD..origin/main", check=False) or "0"
+                print(f"compare  against origin/main (the clone's HEAD is {behind} commit(s) behind it)")
+            else:
+                print("compare  against the clone's current files (no origin/main yet)")
+        added, changed, removed = diff_trees(built, compare)
         print(f"clone    {len(added)} added, {len(changed)} changed, {len(removed)} removed")
         if not args.commit:
             print("dry run. Nothing written; add --commit to replace, commit and push.")

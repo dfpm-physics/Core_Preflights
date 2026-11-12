@@ -155,6 +155,33 @@ class Publish(unittest.TestCase):
             pts.sync_clone(clone, commit=True)
             self.assertEqual((clone / "f.txt").read_text(), "2")
 
+    def test_extract_origin_main_is_read_only_and_ignores_a_lagging_head(self):
+        run = lambda cwd, *a: subprocess.run(["git", "-C", str(cwd), *a], check=True, capture_output=True)  # noqa: E731
+        with tempfile.TemporaryDirectory() as td:
+            remote = Path(td) / "remote.git"
+            subprocess.run(["git", "init", "--bare", "-b", "main", str(remote)], check=True, capture_output=True)
+            seed = Path(td) / "seed"
+            subprocess.run(["git", "clone", str(remote), str(seed)], check=True, capture_output=True)
+            for k, v in (("user.name", "t"), ("user.email", "t@example.com")):
+                run(seed, "config", k, v)
+            run(seed, "checkout", "-B", "main")
+            (seed / "f.txt").write_text("1")
+            run(seed, "add", "."); run(seed, "commit", "-m", "one"); run(seed, "push", "origin", "main")
+            (seed / "f.txt").write_text("2")
+            run(seed, "commit", "-am", "two"); run(seed, "push", "origin", "main")
+            clone = Path(td) / "clone"
+            subprocess.run(["git", "clone", str(remote), str(clone)], check=True, capture_output=True)
+            run(clone, "reset", "--hard", "HEAD~1")                                       # HEAD behind origin/main
+            dest = Path(td) / "ref"
+            dest.mkdir()
+            self.assertTrue(pts.extract_origin_main(clone, dest))
+            self.assertEqual((dest / "f.txt").read_text(), "2")                           # origin/main, not HEAD
+            self.assertEqual((clone / "f.txt").read_text(), "1")                          # clone untouched
+            b = Path(td) / "built"
+            b.mkdir()
+            (b / "f.txt").write_text("2")
+            self.assertEqual(pts.diff_trees(b, dest), ([], [], []))                       # no false "changed"
+
     def test_sync_empty_remote_unborn_main(self):
         with tempfile.TemporaryDirectory() as td:
             remote = Path(td) / "remote.git"
