@@ -1,0 +1,19 @@
+{
+  "_about": "Which sketch may sit beside which work. A sketch is shown only when the assignment TITLE matches one of its patterns (case-insensitive regular expressions); the description is never read. Every pattern here names electric charge, field or force, so a magnetic or gravitational title cannot match. Work that matches nothing gets the plain treatment. Add a sketch by adding an entry and a drawing; remove a wrong match by deleting its pattern. Files are relative to this folder.",
+  "sketches": [
+    {
+      "id": "dipole",
+      "what": "Field lines of two equal and opposite point charges",
+      "match": [
+        "\\belectric (field|charge|force|dipole)s?\\b",
+        "\\bcoulomb",
+        "\\belectrostatic",
+        "\\b(electric|charge[sd]?)\\b.*\\bfield lines?\\b",
+        "\\bfield lines?\\b.*\\b(electric|charge[sd]?)\\b",
+        "\\b(point|test) charges?\\b"
+      ],
+      "light": "sketches/dipole-light.svg",
+      "dark": "sketches/dipole-dark.svg"
+    }
+  ]
+}

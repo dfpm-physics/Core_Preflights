@@ -1,0 +1,442 @@
+/* Field Station: a theme laid over site/css/styles.css. Nothing here edits that file.
+   It works by (1) replacing the colour, radius and shadow tokens the site already uses,
+   (2) turning the top bar into a left rail from 1000px up, and (3) a few type and control rules.
+   Delete the _field-station folder and none of it exists. */
+
+/* ── Type ───────────────────────────────────────────────────────────────────
+   System stacks only; nothing is downloaded. Serif for the wordmark, page titles and lesson names.
+   Sans for reading, controls and tables. Mono (or letter-spaced sans) for small context labels only. */
+html.fs {
+  --fs-serif: 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, 'Times New Roman', serif;
+  --fs-sans:  'Segoe UI', system-ui, -apple-system, Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --fs-mono:  ui-monospace, 'Cascadia Mono', Consolas, 'SFMono-Regular', Menlo, monospace;
+  --font-display: var(--fs-serif);
+  font-size: 16px;
+}
+html.fs body { font-family: var(--fs-sans); font-size: 1rem; line-height: 1.5; }
+
+/* ── Tokens: light (ivory canvas, warm stone rail, sage selection, brass marker, oxblood action) ── */
+html.fs {
+  --bg: #F4F0E7;
+  --card: #FBF8F1;
+  --surface-sunken: #EEE8DA;
+  --surface-hover: #E8E1D0;
+  --input-bg: #FFFDF8;
+  --border: #D8D0BE;
+  --text: #2A2019;
+  --text-soft: #4B4036;
+  --muted: #655B4D;
+
+  --fs-action: #732D3C;          /* fill of the primary action; white label on it */
+  --fs-action-hover: #5F2230;
+  --fs-link: #7A2F40;            /* link text; a different job from the fill */
+  --fs-focus: #1F5F7A;
+  --fs-rail-bg: #E9E3D3;
+  --fs-rail-edge: #D6CDB8;
+  --fs-sage: #D3DBC2;
+  --fs-brass: #8F6A1C;
+  --fs-rule: #C9BFA8;
+
+  --blue: var(--fs-action);
+  --blue-lt: var(--fs-link);
+  --gold: #8A6420;
+  --red: #A32A3A;
+  --green: #3A6A33;
+  --header-bg: var(--fs-action);
+  --th-bg: transparent;
+
+  --nav-bg: var(--fs-rail-bg);
+  --nav-border: var(--fs-rail-edge);
+  --nav-link: #4B4036;
+  --nav-hover-bg: rgba(60, 45, 25, 0.07);
+  --nav-control-bg: rgba(60, 45, 25, 0.05);
+  --nav-control-hover: rgba(60, 45, 25, 0.1);
+
+  --answered-bg: #E3EAD3; --answered-bd: #7C9B63;
+  --mc-hover-bg: #EDE7D8; --mc-sel-bg: #EDE7D8;
+  --alert-error-bg: #F5E1DE; --alert-error-fg: #8B2230; --alert-error-bd: #E2B7B2;
+  --alert-ok-bg:    #E3EAD3; --alert-ok-fg:    #2F5A2A; --alert-ok-bd:    #A9BD93;
+  --alert-info-bg:  #E2E8EC; --alert-info-fg:  #25485F; --alert-info-bd:  #B2C3CF;
+  --alert-warn-bg:  #F3E8C6; --alert-warn-fg:  #5E410B; --alert-warn-bd:  #D8C58B;
+  --feedback-bg: #F3E8C6; --feedback-fg: #5E410B;
+  --lamp-off-bg: #E8E1D0; --lamp-off-bd: #D8D0BE;
+  --track: #E4DDCB; --track-edge: #D2C9B5;
+
+  --shadow-sm: 0 1px 2px rgba(60, 45, 25, 0.05);
+  --shadow-md: 0 6px 18px rgba(60, 45, 25, 0.08);
+  --shadow-lg: 0 14px 34px rgba(60, 45, 25, 0.14);
+  --radius: 14px;
+  --radius-sm: 5px;
+  --overlay: rgba(42, 32, 25, 0.5);
+
+  --fs-rail: 252px;
+}
+
+/* ── Tokens: dark (ink workspace, warm pale type; its own palette, not an inverted ivory) ── */
+html.fs[data-theme="dark"] {
+  --bg: #14191C;
+  --card: #1B2226;
+  --surface-sunken: #11161A;
+  --surface-hover: #242D32;
+  --input-bg: #161C20;
+  --border: #323C41;
+  --text: #EDE6D8;
+  --text-soft: #D3CCBD;
+  --muted: #AAA394;
+
+  --fs-action: #8E3A4C;
+  --fs-action-hover: #A04558;
+  --fs-link: #E6AEBA;
+  --fs-focus: #8CC7DD;
+  --fs-rail-bg: #101518;
+  --fs-rail-edge: #2A3338;
+  --fs-sage: #2D3A30;
+  --fs-brass: #C9A24E;
+  --fs-rule: #2E383D;
+
+  --gold: #D2A94F;
+  --red: #F08A93;
+  --green: #8FC783;
+
+  --nav-link: #D3CCBD;
+  --nav-hover-bg: rgba(237, 230, 216, 0.07);
+  --nav-control-bg: rgba(237, 230, 216, 0.06);
+  --nav-control-hover: rgba(237, 230, 216, 0.12);
+
+  --answered-bg: #1F2D22; --answered-bd: #4F7A4C;
+  --mc-hover-bg: #242D32; --mc-sel-bg: #1F272B;
+  --alert-error-bg: #33191D; --alert-error-fg: #F3A3AB; --alert-error-bd: #6A2B33;
+  --alert-ok-bg:    #1F2D22; --alert-ok-fg:    #A8D99D; --alert-ok-bd:    #3F6A3C;
+  --alert-info-bg:  #18262E; --alert-info-fg:  #9CCBE0; --alert-info-bd:  #2F5668;
+  --alert-warn-bg:  #2C2616; --alert-warn-fg:  #E4C77C; --alert-warn-bd:  #6F5A24;
+  --feedback-bg: #2C2616; --feedback-fg: #E4C77C;
+  --lamp-off-bg: #242D32; --lamp-off-bd: #323C41;
+  --track: #242D32; --track-edge: #323C41;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 6px 18px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 14px 34px rgba(0, 0, 0, 0.5);
+}
+
+/* ── Fills apart from links; a hover that differs from focus; no lift on what is not clickable ── */
+html.fs .btn-primary { background: var(--fs-action); color: #fff; }
+html.fs .btn-primary:hover { background: var(--fs-action-hover); }
+html.fs .btn-ghost { color: var(--fs-link); border-color: var(--fs-rule); }
+html.fs .btn-ghost:hover { background: var(--surface-hover); border-color: var(--fs-link); }
+html.fs .btn-secondary { background: var(--surface-hover); color: var(--text); border: 1px solid var(--border); }
+html.fs .btn-secondary:hover { background: var(--border); }
+html.fs .btn-danger { background: var(--red); color: #fff; }
+html.fs[data-theme="dark"] .btn-danger { background: #A8323F; }
+html.fs a { text-underline-offset: 3px; }
+html.fs a:not([class]), html.fs .link { color: var(--fs-link); }
+html.fs :focus-visible { outline: 2px solid var(--fs-focus); outline-offset: 2px; border-radius: 3px; }
+html.fs input:focus, html.fs textarea:focus, html.fs select:focus {
+  border-color: var(--fs-focus); box-shadow: 0 0 0 3px color-mix(in srgb, var(--fs-focus) 28%, transparent); outline: none;
+}
+html.fs .stat-tile { transition: none; }
+html.fs .stat-tile:hover { transform: none; box-shadow: var(--shadow-sm); }
+html.fs .status-dot.blue { background: #4E6F8C; }
+
+/* Role-based sizes: reading 16px, controls and metadata 14px, 12px only for genuinely secondary notes. */
+html.fs .btn, html.fs .btn-sm { font-size: 0.875rem; }
+html.fs .btn-sm { padding: 6px 13px; }
+html.fs label { font-size: 0.875rem; }
+html.fs input, html.fs textarea, html.fs select { font-size: 1rem; }
+html.fs table { font-size: 0.875rem; }
+html.fs table.mx { font-size: 0.875rem; }
+html.fs .list-item .li-title { font-size: 1rem; }
+html.fs .list-item .li-meta, html.fs .stat-tile .stat-label, html.fs .card-meta,
+html.fs .page-head .sub, html.fs .menu-item, html.fs .course-opt .co-sub, html.fs .menu-head .rl,
+html.fs .menu-head .nm, html.fs .section-card .sc-meta, html.fs .section-card .sc-instr,
+html.fs .progress-row .pr-label, html.fs .progress-row .pr-count { font-size: 0.875rem; }
+html.fs .field-hint, html.fs .error-msg { font-size: 0.8125rem; }
+html.fs .count-pill { font-size: 0.8125rem; }
+
+/* ── Surfaces: cards and tables ── */
+html.fs .card, html.fs .section-card, html.fs .list-item, html.fs .stat-tile {
+  border-color: var(--fs-rule);
+}
+html.fs .list-item { box-shadow: none; border-radius: 10px; }
+html.fs a.list-item:hover { box-shadow: var(--shadow-sm); border-color: var(--fs-link); background: var(--surface-hover); }
+html.fs .section-card .sc-tag { background: var(--fs-action); color: #fff; }
+html.fs table { border-collapse: collapse; }
+html.fs th {
+  background: transparent; color: var(--muted); font-weight: 600; font-size: 0.875rem;
+  border-bottom: 1px solid var(--fs-rule); padding: 8px 12px;
+}
+html.fs td { border-bottom: 1px solid var(--fs-rule); padding: 8px 12px; }
+html.fs table.mx thead th { background: var(--surface-sunken); color: var(--text-soft); }
+html.fs table.mx th.sticky-l, html.fs table.mx td.sticky-l { background: var(--card); }
+html.fs .fs-scroll { max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+html.fs .page-head h1 { font-weight: 600; font-size: 2rem; letter-spacing: -0.005em; line-height: 1.15; }
+html.fs .section-head h2 { font-family: var(--fs-serif); font-size: 1.45rem; font-weight: 600; }
+html.fs .card-title { font-family: var(--fs-serif); font-size: 1.2rem; font-weight: 600; }
+html.fs .empty-state h3 { font-family: var(--fs-serif); font-size: 1.25rem; font-weight: 600; }
+html.fs .alert { border-radius: 10px; }
+html.fs .site-footer { border-top-color: var(--fs-rule); }
+
+/* ── Context bar: the real section and today's date ── */
+html.fs .fs-context {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 16px;
+  max-width: 1180px; width: 100%; margin: 0 auto; padding: 22px 20px 0;
+  font-family: var(--fs-mono); font-size: 0.8125rem; letter-spacing: 0.09em; text-transform: uppercase;
+  color: var(--muted);
+}
+html.fs .fs-context .fs-ctx-left { min-width: 0; overflow-wrap: anywhere; }
+html.fs .fs-context .fs-ctx-date { white-space: nowrap; }
+html.fs .fs-context + main .page-wide, html.fs .fs-context + main.page-wide, html.fs .fs-context + .page-wide,
+html.fs .fs-context + main.page { padding-top: 14px; }
+
+/* ── The rail (1000px and up) ── */
+@media (min-width: 1000px) {
+  html.fs body { padding-left: var(--fs-rail); }
+  html.fs .topnav {
+    position: fixed; top: 0; left: 0; bottom: 0; width: var(--fs-rail); height: 100vh; z-index: 50;
+    background: var(--fs-rail-bg); border-right: 1px solid var(--fs-rail-edge); border-bottom: 0;
+    -webkit-backdrop-filter: none; backdrop-filter: none;
+  }
+  html.fs .topnav-inner {
+    display: flex; flex-direction: column; align-items: stretch; gap: 6px;
+    height: 100%; padding: 26px 14px 14px;
+  }
+  html.fs .nav-left { flex-direction: column; align-items: stretch; justify-self: auto; gap: 0; }
+  html.fs .topnav .brand { font-family: var(--fs-serif); font-size: 2.1rem; font-weight: 700; letter-spacing: 0.01em; margin: 0; padding: 0 8px; line-height: 1.1; }
+  html.fs .topnav .brand .brand-mark, html.fs .topnav .brand .brand-alt, html.fs .topnav .brand .brand-lw { display: none; }
+  html.fs .fs-brand-sub {
+    padding: 4px 8px 14px; font-family: var(--fs-mono); font-size: 0.8125rem; letter-spacing: 0.16em;
+    text-transform: uppercase; color: var(--muted); border-bottom: 1px solid var(--fs-rule); margin-bottom: 4px;
+  }
+  html.fs .topnav .brand-sub:not(.course-btn) {
+    margin: 0; padding: 10px 8px; border-left: 0; white-space: normal;
+    font-family: var(--fs-mono); font-size: 0.875rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-soft);
+  }
+  html.fs .course-menu { display: block; position: relative; }
+  html.fs .topnav .course-btn {
+    width: 100%; margin: 0; padding: 10px 8px; border: 0; border-radius: 6px; text-align: left;
+    justify-content: space-between; align-items: flex-start; gap: 8px;
+    font-family: var(--fs-mono); font-size: 0.875rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-soft);
+  }
+  html.fs .topnav .course-btn .cb-name { white-space: normal; overflow-wrap: anywhere; line-height: 1.3; max-width: none; }
+  html.fs .course-pop { left: 0; right: auto; width: 100%; min-width: 0; top: calc(100% + 4px); }
+  html.fs .course-pop .co-title { white-space: normal; overflow-wrap: anywhere; }
+  html.fs .nav-burger { display: none; }
+  html.fs .nav-links {
+    flex: 1 1 auto; min-height: 0; overflow-y: auto; flex-direction: column; align-items: stretch;
+    justify-self: auto; gap: 2px; margin-top: 8px; padding-right: 2px;
+  }
+  html.fs .nav-link {
+    padding: 10px 12px; font-size: 0.9375rem; gap: 12px; border-radius: 6px; color: var(--nav-link);
+    white-space: normal; box-shadow: none;
+  }
+  html.fs .nav-link:hover { background: var(--nav-hover-bg); color: var(--text); }
+  html.fs .nav-link.active { background: var(--fs-sage); color: var(--text); font-weight: 600; box-shadow: inset 3px 0 0 var(--fs-brass); }
+  html.fs .nav-link .ic { width: 22px; height: 22px; opacity: 1; }
+  html.fs .nav-right {
+    margin-top: auto; flex: none; display: flex; flex-wrap: wrap; align-items: center; justify-self: auto; gap: 4px 6px;
+    border-top: 1px solid var(--fs-rule); padding-top: 10px;
+  }
+  html.fs .fs-help {
+    order: -1; flex: 1 0 100%; display: flex; align-items: center; gap: 12px; padding: 9px 12px; border-radius: 6px;
+    font-size: 0.9375rem; color: var(--nav-link); text-decoration: none; margin-bottom: 4px; border-bottom: 1px solid var(--fs-rule); border-radius: 6px 6px 0 0;
+  }
+  html.fs .fs-help:hover { background: var(--nav-hover-bg); color: var(--text); }
+  html.fs .fs-help .ic { width: 22px; height: 22px; }
+  html.fs .user-menu { flex: 1 1 0; min-width: 0; }
+  html.fs .user-chip { width: 100%; justify-content: flex-start; padding: 6px 8px; border-radius: 8px; font-size: 0.9375rem; }
+  html.fs .user-chip .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1 1 auto; text-align: left; }
+  html.fs .user-chip .caret { margin-left: auto; font-size: 0.8rem; }
+  html.fs .menu-pop { top: auto; bottom: calc(100% + 8px); left: 0; right: auto; min-width: 232px; }
+  html.fs .theme-toggle { width: 40px; height: 40px; flex: none; }
+}
+@media (min-width: 1000px) {
+  /* the course picker opens downward from the top of the rail; the account menu opens upward from the bottom */
+  html.fs .course-pop { top: calc(100% + 4px); bottom: auto; left: 0; right: auto; width: 100%; }
+}
+html.fs .user-chip .avatar {
+  background: transparent; color: var(--text); border: 1.5px solid var(--text-soft); font-family: var(--fs-sans); font-size: 0.8125rem;
+}
+
+/* ── Below 1000px: a compact bar with a menu button ── */
+@media (max-width: 999px) {
+  html.fs .topnav { background: var(--fs-rail-bg); border-bottom: 1px solid var(--fs-rail-edge); -webkit-backdrop-filter: none; backdrop-filter: none; }
+  html.fs .topnav-inner { grid-template-columns: 1fr auto; height: 56px; padding: 0 14px; }
+  html.fs .topnav .brand { font-family: var(--fs-serif); font-size: 1.5rem; font-weight: 700; }
+  html.fs .topnav .brand .brand-mark, html.fs .topnav .brand .brand-alt, html.fs .topnav .brand .brand-lw { display: none; }
+  html.fs .fs-brand-sub, html.fs .fs-help { display: none; }
+  html.fs .nav-left { gap: 8px; min-width: 0; }
+  html.fs .topnav .course-btn { min-width: 0; font-size: 0.875rem; }
+  html.fs .topnav .course-btn .cb-name { max-width: 30vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  html.fs .nav-links {
+    position: absolute; top: 56px; left: 0; right: 0; flex-direction: column; align-items: stretch; gap: 2px;
+    background: var(--fs-rail-bg); border-bottom: 1px solid var(--fs-rail-edge); padding: 10px 14px 16px; justify-self: stretch;
+    box-shadow: var(--shadow-md); display: none; max-height: calc(100vh - 56px); overflow-y: auto;
+  }
+  html.fs .nav-links.open { display: flex; }
+  html.fs .nav-link { padding: 12px 12px; font-size: 1rem; gap: 12px; }
+  html.fs .nav-link.active { background: var(--fs-sage); box-shadow: inset 3px 0 0 var(--fs-brass); }
+  html.fs .nav-link .ic { width: 22px; height: 22px; }
+  html.fs .nav-burger { display: grid; place-items: center; width: 44px; height: 44px; }
+  html.fs .nav-right { gap: 2px; }
+  html.fs .menu-pop { right: 0; left: auto; }
+  html.fs .course-pop { left: 0; right: auto; width: min(320px, 86vw); }
+  html.fs .fs-context { padding: 14px 16px 0; font-size: 0.8125rem; letter-spacing: 0.06em; flex-wrap: wrap; gap: 2px 12px; }
+}
+@media (max-width: 560px) {
+  html.fs .page-head h1 { font-size: 1.6rem; }
+  html.fs .topnav .course-btn .cb-name { max-width: 26vw; }
+}
+
+/* ── Student dashboard (the overlay page uses these) ── */
+.fs-dash { width: 100%; margin: 0 auto; padding: 0 0 12px; }
+.fs-dash h1 { font-family: var(--fs-serif); font-size: clamp(2rem, 4.2vw, 3rem); font-weight: 600; line-height: 1.1; letter-spacing: -0.01em; margin: 6px 0 18px; }
+.fs-eyebrow { font-family: var(--fs-mono); font-size: 0.8125rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+
+.fs-next {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); gap: 20px; align-items: center;
+  background: var(--card); border: 1px solid var(--fs-rule); border-radius: 18px; box-shadow: var(--shadow-md);
+  padding: 26px 28px; margin-bottom: 30px;
+}
+.fs-next.no-art { grid-template-columns: minmax(0, 1fr); }
+.fs-next h2 { font-family: var(--fs-serif); font-size: clamp(1.9rem, 3.6vw, 2.9rem); font-weight: 600; line-height: 1.1; margin: 10px 0 14px; letter-spacing: -0.01em; overflow-wrap: anywhere; }
+.fs-next .fs-due { font-size: 1.0625rem; color: var(--text); margin-bottom: 4px; }
+.fs-next .fs-due.overdue { color: var(--red); font-weight: 600; }
+.fs-next .fs-meta { font-size: 0.875rem; color: var(--muted); margin-bottom: 18px; }
+.fs-next .btn-primary { padding: 12px 24px; font-size: 1rem; }
+.fs-next .fs-note { margin-top: 12px; font-size: 0.875rem; color: var(--muted); }
+.fs-next .fs-art { margin: 0; min-width: 0; }
+.fs-next .fs-art img { display: block; width: 100%; height: auto; max-height: 300px;
+  -webkit-mask-image: radial-gradient(ellipse 72% 78% at 50% 50%, #000 58%, transparent 100%); mask-image: radial-gradient(ellipse 72% 78% at 50% 50%, #000 58%, transparent 100%); }
+.fs-next .fs-art .fs-art-dark { display: none; }
+html[data-theme="dark"] .fs-next .fs-art .fs-art-light { display: none; }
+html[data-theme="dark"] .fs-next .fs-art .fs-art-dark { display: block; }
+
+.fs-counts { display: flex; flex-wrap: wrap; gap: 8px 0; margin-bottom: 30px; }
+.fs-count { flex: 1 1 150px; padding: 4px 22px 4px 0; margin-right: 22px; border-right: 1px solid var(--fs-rule); min-width: 0; }
+.fs-count:last-child { border-right: 0; margin-right: 0; }
+.fs-count b { display: block; font-family: var(--fs-serif); font-size: 2.6rem; font-weight: 600; line-height: 1.05; letter-spacing: -0.01em; overflow-wrap: anywhere; }
+.fs-count span { display: block; font-size: 0.875rem; color: var(--muted); margin-top: 2px; }
+
+.fs-week h2, .fs-block h2 { font-family: var(--fs-serif); font-size: 1.75rem; font-weight: 600; margin: 0 0 8px; }
+.fs-rows { list-style: none; margin: 0 0 8px; padding: 0; border-top: 1px solid var(--fs-rule); }
+.fs-rows li { border-bottom: 1px solid var(--fs-rule); }
+.fs-rows a, .fs-rows .fs-row {
+  display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 1fr); gap: 4px 16px; align-items: baseline;
+  padding: 14px 6px; color: inherit; text-decoration: none;
+}
+html.fs .fs-rows a { color: var(--text); }
+/* The row link also carries the page's own list-item class (the browser walk and any script find rows by it); its card look is switched off here. */
+html.fs .fs-rows a.list-item { border: 0; border-radius: 0; box-shadow: none; background: transparent; margin: 0; padding: 14px 6px; transform: none; display: grid; }
+html.fs .fs-rows a.list-item:hover { background: var(--surface-hover); border-color: transparent; box-shadow: none; }
+html.fs .fs-week h2.fs-sub { font-size: 1.3rem; margin-top: 22px; }
+.fs-rows a:hover { background: var(--surface-hover); }
+.fs-rows a:hover .fs-t { color: var(--fs-link); }
+.fs-rows .fs-t { font-family: var(--fs-serif); font-size: 1.3rem; font-weight: 600; overflow-wrap: anywhere; }
+.fs-rows .fs-d, .fs-rows .fs-s { font-size: 0.9375rem; color: var(--text-soft); }
+.fs-rows .fs-s.overdue { color: var(--red); font-weight: 600; }
+.fs-rowhead { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 1fr); gap: 16px; padding: 10px 6px 6px;
+  font-family: var(--fs-mono); font-size: 0.8125rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.fs-block { margin-top: 32px; }
+.fs-quiet { color: var(--muted); font-size: 0.9375rem; padding: 12px 6px; }
+.fs-err { border: 1px solid var(--alert-error-bd); background: var(--alert-error-bg); color: var(--alert-error-fg); border-radius: 12px; padding: 18px 20px; margin-bottom: 24px; }
+.fs-err b { display: block; font-size: 1.05rem; margin-bottom: 4px; }
+.fs-err .btn { margin-top: 12px; }
+.fs-state { display: flex; gap: 20px; align-items: center; }
+.fs-state img { width: 150px; flex: none; }
+.fs-state .fs-dark { display: none; }
+html[data-theme="dark"] .fs-state .fs-light { display: none; }
+html[data-theme="dark"] .fs-state .fs-dark { display: block; }
+.fs-state h2 { font-size: 1.9rem; margin: 6px 0 8px; font-family: var(--fs-serif); font-weight: 600; }
+.fs-state p { color: var(--text-soft); max-width: 44ch; }
+
+@media (max-width: 800px) {
+  .fs-next { grid-template-columns: 1fr; padding: 20px; }
+  .fs-next .fs-art { max-width: 220px; }
+  .fs-rows a, .fs-rows .fs-row, .fs-rowhead { grid-template-columns: 1fr; }
+  .fs-rowhead { display: none; }
+  .fs-count { flex: 1 1 40%; border-right: 0; margin-right: 0; }
+  .fs-state { flex-direction: column; align-items: flex-start; }
+}
+
+/* ── Small corrections found by measuring the pages ── */
+html.fs .deadline { font-size: 0.875rem; }
+html.fs .deadline.soon { color: #8A4B00; }
+html.fs[data-theme="dark"] .deadline.soon { color: #E8A84B; }
+html.fs .acct-row .v .why { font-size: 0.8125rem; }
+html.fs .crest { background: var(--fs-action); }
+
+/* Controls the site's own form rules do not cover (search, date, time) take the same surface. */
+html.fs input[type="search"], html.fs input[type="date"], html.fs input[type="time"],
+html.fs input[type="tel"], html.fs input[type="url"], html.fs input[type="datetime-local"] {
+  background: var(--input-bg); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  font-family: inherit; font-size: 1rem;
+}
+html.fs ::placeholder { color: var(--muted); opacity: 1; }
+
+/* With the rail the content is 252px narrower than the window, so the dashboard's three-column spotlight
+   collapses where the site's own rule (880px of WINDOW) would still leave it three columns wide. */
+@media (min-width: 1000px) and (max-width: 1240px) {
+  html.fs .spot { grid-template-columns: 1fr; }
+  html.fs .spot-col + .spot-col { border-left: 0; padding-left: 0; border-top: 1px solid var(--border); padding-top: 22px; }
+}
+
+/* Wide two-column pages: let the right-hand column shrink so its own table scrolls instead of the page. */
+html.fs [style*="grid-template-columns"] > * { min-width: 0; }
+/* Smallest text raised to the floor the sizes rule sets (secondary notes 12px, everything else 13px or more). */
+html.fs .score-badge, html.fs .stat-sub, html.fs .eff-cnt { font-size: 0.8125rem; }
+html.fs td.gb-cell, html.fs td.gb-sec { font-size: 0.875rem; }
+html.fs .gb-frac { font-size: 0.75rem; }
+html.fs.fs-p-items code, html.fs.fs-p-items .muted, html.fs.fs-p-system .muted { font-size: 0.8125rem; }
+html.fs .hh-tlnum, html.fs .hh-tick, html.fs .hh-bandnum, html.fs .hh-nolesson { font-size: 0.75rem; }
+html.fs .help-group-title { font-size: 0.8125rem; }
+
+/* Faculty dashboard: the work queue (what is waiting on the teacher) comes first, then the numbers.
+   Pure ordering; the page's own markup and its late-arriving queue host are untouched. The queue
+   host keeps its skeleton while it loads, so the page does not jump when it arrives. */
+html.fs.fs-p-dashboard.fs-r-faculty #main { display: flex; flex-direction: column; }
+html.fs.fs-p-dashboard.fs-r-faculty #main > .page-head { order: -3; }
+html.fs.fs-p-dashboard.fs-r-faculty #main > #dashTasks { order: -2; margin-bottom: 8px; }
+/* Package icons standing in for emoji. The words next to them stay live text. */
+html.fs .fs-emoji-sm { width: 1.05em; height: 1.05em; margin-right: .4em; vertical-align: -0.14em; }
+html.fs .fs-emoji-lg { width: 40px; height: 40px; display: block; margin: 0 auto; }
+html.fs .fb-launch-ic .fs-emoji-lg { width: 18px; height: 18px; display: inline-block; margin: 0; vertical-align: -3px; filter: brightness(0) invert(1); }
+
+/* The Feedback button sat bottom right over the page's own right-hand buttons (an Import button, a Save bar), taking
+   their clicks. With the rail it has a home of its own: in the rail, above Help. On a phone it shrinks to an icon. */
+@media (min-width: 1000px) {
+  html.fs .fb-root { right: auto; left: 16px; bottom: 132px; }
+  html.fs .fb-panel { right: auto; left: 0; }
+}
+@media (max-width: 999px) {
+  html.fs .fb-root { right: 12px; bottom: 12px; }
+  html.fs .fb-launch { padding: 10px; }
+  html.fs .fb-launch-tx { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+}
+
+/* Stat cards, softened: one quiet hairline all round, no heavy left bar, no shadow, no lift, and a neutral icon
+   chip. The accent colour is dropped from the border and the chip; the numbers and labels are the page's own. */
+html.fs .stat-tile, html.fs .stat-tile[class*="accent-"] {
+  border: 1px solid var(--fs-rule); border-left: 1px solid var(--fs-rule);
+  border-radius: 10px; box-shadow: none; background: var(--card);
+}
+html.fs .stat-tile:hover { box-shadow: none; transform: none; }
+html.fs .stat-tile .stat-ic { background: var(--surface-sunken); border-radius: 10px; width: 40px; height: 40px; }
+html.fs .stat-tile .stat-ic .ic { width: 22px; height: 22px; }
+html.fs .stat-tile .stat-num { font-family: var(--fs-serif); font-weight: 600; }
+
+/* Health chart: the number inside a coloured band always sits on its own dark chip, so it reads on every band
+   colour in both themes (it was white on pale-ish bands, 3.1:1 light and 2.2:1 dark). Digits, not colour, carry it. */
+html.fs .hh-band .hh-bandnum, html.fs .hh-band.pale .hh-bandnum {
+  color: #fff; background: #241c16; padding: 0 4px; border-radius: 3px; line-height: 1.25;
+}
+
+/* Gradebook on a phone: the name column and the Total column both stick, which left almost no room for scores and
+   put the Total over them. Below 700px only the name sticks (narrower); the Total scrolls with its row. */
+@media (max-width: 700px) {
+  html.fs .gb .gb-total { position: static; }
+  html.fs .gb .gb-name { min-width: 96px; max-width: 112px; white-space: normal; overflow-wrap: anywhere; }
+}
+
+/* Narrow reading pages line up with the context bar instead of floating in the middle. */
+@media (min-width: 1000px) {
+  html.fs .page { margin-left: max(0px, calc((100% - 1180px) / 2)); margin-right: auto; }
+}
