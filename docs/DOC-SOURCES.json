@@ -262,7 +262,7 @@
       "doc": "site/help/director-schema-reference.md",
       "kind": "help",
       "tier": "director",
-      "reviewed": "2026-11-10",
+      "reviewed": "2026-11-12",
       "sources": [
         "supabase/migrations/app/001_core_model.sql",
         "supabase/migrations/app/002_rls.sql",
@@ -285,6 +285,7 @@
         "supabase/migrations/app/018_feedback_completed.sql",
         "supabase/migrations/app/019_effort_partial_credit_flat.sql",
         "supabase/migrations/app/086_course_meeting_days.sql",
+        "supabase/migrations/app/089_feedback_triage.sql",
         "site/js/schema.js",
         "site/js/faculty-grade.js",
         "site/js/faculty-rollup.js"

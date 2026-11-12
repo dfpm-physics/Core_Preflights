@@ -6,6 +6,22 @@ can understand the history without re-deriving it from code or git.
 
 Newest entries first. Dates are `YYYY-MM-DD`.
 
+## 2026-11-12 — Matthew Recker via Claude (feedback triage: migration 089 and Feedback page; branch `v2-test-fixes`)
+
+- **What.** Added migration `supabase/migrations/app/089_feedback_triage.sql` (rollback in `rollback/`). `app.feedback.status` now also
+  allows `proposed` and `applied` (`feedback_status_ck` replaced); new columns `triage`, `agent_note`, `agent_ref`, `agent_at`,
+  `director_instructions`, `decided_by`, `decided_at`; `feedback_completed_accepted_ck` replaced so `completed_at` is valid on an accepted
+  or an applied row. The Feedback page (`site/faculty/feedback.html`, `site/js/faculty-feedback.js`) now groups items as Awaiting you,
+  Applied, New, In progress, Completed, Declined, Duplicate. A proposed item shows the agent's plan, an instructions box, and Approve and
+  Deny; an applied item shows the agent's note, its commit (linked when it is a sha) and a Close out button. Cards carry an
+  "Agent: simple/significant" tag. The director-schema-reference help page describes the new columns and the agent workflow.
+- **Why.** The course director wants an agent to triage tester feedback on the test site: simple fixes applied at once and left for his
+  closeout, significant changes proposed and held for his approval or denial, every item still visible.
+- **Checked.** `tests/app-schema/test-feedback-admin.mjs` (101 checks, extended for the new buckets, approval, denial and closeout
+  patches); `python .github/ci/run_offline_suites.py` (81 suites clean); `csp_pages.py --write` for the changed inline script.
+- **Not done.** Migration 089 is not applied to any database yet, and production is untouched. `site/js/db-schema.js` was not
+  regenerated (it is generated from the database after the migration is applied). Nothing committed or pushed.
+
 ## 2026-11-12 — Matthew Recker via Claude (test site: publish tool, training course seed, first publish; branch `v2-test-fixes`)
 
 - **What.** Added `scripts/staging/publish_test_site.py`, which builds a copy of `site/` that can reach only the staging

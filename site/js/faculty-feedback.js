@@ -34,10 +34,11 @@ import { db } from './supabase.js';
 export const FEEDBACK_SELECT =
   'id,submitted_by,submitter_name,role,page,page_title,category,message,created_at,'
   + 'status,resolution_note,roadmap_ref,resolved_by,resolved_at,updated_at,'
-  + 'completed_at,completed_by';
+  + 'completed_at,completed_by,'
+  + 'triage,agent_note,agent_ref,agent_at,director_instructions,decided_by,decided_at';
 
 /**
- * The four triage decisions, in the order they are offered. Deliberately few — these are the
+ * The four decisions a person makes BY HAND, in the order they are offered. Deliberately few — these are the
  * choices somebody will actually make in one sitting. Anything that becomes real work is the
  * roadmap's to track, not this table's.
  */
@@ -48,24 +49,39 @@ export const STATUSES = [
   { key: 'duplicate', label: 'Duplicate', hint: 'Already captured elsewhere' },
 ];
 
-export const STATUS_KEYS = STATUSES.map((s) => s.key);
+/**
+ * The two states only the triage agent's workflow reaches (migration 089): `proposed` (a plan,
+ * waiting for the director to approve or deny) and `applied` (the agent made the change, waiting
+ * for the director's closeout). They have their own card controls, not buttons in the segmented
+ * decision control, so STATUSES above stays the four a person picks.
+ */
+export const AGENT_STATUSES = [
+  { key: 'proposed', label: 'Proposed', hint: 'The agent proposes a change and waits for you' },
+  { key: 'applied',  label: 'Applied',  hint: 'The agent made the change and waits for your closeout' },
+];
+
+/** Every status the database accepts (feedback_status_ck, migration 089). */
+export const STATUS_KEYS = [...STATUSES, ...AGENT_STATUSES].map((s) => s.key);
 
 /**
- * The five DISPLAY buckets — the two DB axes (`status`, `completed_at`) flattened into the one
- * dimension a person reads. Identical to the statuses except that an accepted item which has been
- * built gets its own bucket, which is the entire point: "agreed to" and "agreed to and done" are
- * the two things the old four-way view could not tell apart, so a shipped item sat in the triage
- * list forever looking exactly like one agreed to five minutes ago.
+ * The eight DISPLAY buckets, in the order they are shown — the DB axes (`status`, `completed_at`)
+ * flattened into the one dimension a person reads. What waits on the director comes first:
+ * a proposal needs his answer, an applied change needs his closeout.
+ *
+ * `completed` is accepted OR applied with a completion stamp, so "agreed to and done" and "the
+ * agent did it and I closed it out" read the same: finished.
  *
  * `closed` marks the buckets with no work left in them. That flag is the single source of the
  * open-list / completed-drawer split — add a bucket here and both the matrix and the drawer follow.
  */
 export const BUCKETS = [
-  { key: 'new',       label: 'New',       hint: 'Not yet triaged',              closed: false },
-  { key: 'accepted',  label: 'Accepted',  hint: 'Agreed — still to build',      closed: false },
-  { key: 'completed', label: 'Done',      hint: 'Accepted, and built',          closed: true },
-  { key: 'declined',  label: 'Declined',  hint: 'Not going to do this',         closed: true },
-  { key: 'duplicate', label: 'Duplicate', hint: 'Already captured elsewhere',   closed: true },
+  { key: 'proposed',  label: 'Awaiting you',      hint: 'The agent proposed a change; approve or deny',  closed: false },
+  { key: 'applied',   label: 'Applied',           hint: 'The agent made the change; awaiting closeout',  closed: false },
+  { key: 'new',       label: 'New',               hint: 'Not yet triaged',                               closed: false },
+  { key: 'accepted',  label: 'In progress',       hint: 'Agreed — still to build',                       closed: false },
+  { key: 'completed', label: 'Completed',         hint: 'Built, and closed out',                         closed: true },
+  { key: 'declined',  label: 'Declined',          hint: 'Not going to do this',                          closed: true },
+  { key: 'duplicate', label: 'Duplicate',         hint: 'Already captured elsewhere',                    closed: true },
 ];
 
 export const BUCKET_KEYS = BUCKETS.map((b) => b.key);
@@ -87,12 +103,28 @@ export function isCompleted(row) {
  */
 export function bucketOf(row) {
   const status = STATUS_KEYS.includes(row?.status) ? row.status : 'new';
-  return status === 'accepted' && isCompleted(row) ? 'completed' : status;
+  return (status === 'accepted' || status === 'applied') && isCompleted(row) ? 'completed' : status;
 }
 
-/** Finished — done, declined or duplicate. Nothing is being waited on. */
+/** Finished — completed, declined or duplicate. Nothing is being waited on. */
 export function isClosed(row) {
   return CLOSED_KEYS.has(bucketOf(row));
+}
+
+/** Where a bucket sits in the display order (proposals first). Unknown buckets sort last. */
+export function bucketRank(row) {
+  const i = BUCKET_KEYS.indexOf(bucketOf(row));
+  return i < 0 ? BUCKET_KEYS.length : i;
+}
+
+/**
+ * Open rows in the order the page shows them: what waits on the director first, then by bucket.
+ * Stable, so within a bucket the query's newest-first order survives.
+ */
+export function sortOpen(rows) {
+  return (rows || []).map((r, i) => ({ r, i }))
+    .sort((a, b) => bucketRank(a.r) - bucketRank(b.r) || a.i - b.i)
+    .map((x) => x.r);
 }
 
 /**
@@ -142,7 +174,7 @@ export function buildMatrix(rows) {
     if (!isClosed(r)) cell.open += 1;
   }
   const pages = [...byPage.values()].sort((a, b) =>
-    b.new - a.new || b.total - a.total || a.page.localeCompare(b.page));
+    b.proposed - a.proposed || b.new - a.new || b.total - a.total || a.page.localeCompare(b.page));
 
   const totals = { total: 0, open: 0, ...Object.fromEntries(BUCKET_KEYS.map((k) => [k, 0])) };
   for (const p of pages) {
@@ -177,7 +209,7 @@ export function filterRows(rows, { bucket = null, page = null, q = null } = {}) 
     if (bucket && bucketOf(r) !== bucket) return false;
     if (page && pageKey(r) !== page) return false;
     if (needle) {
-      const hay = `${r?.message || ''} ${r?.submitter_name || ''} ${r?.resolution_note || ''}`.toLowerCase();
+      const hay = `${r?.message || ''} ${r?.submitter_name || ''} ${r?.resolution_note || ''} ${r?.agent_note || ''}`.toLowerCase();
       if (!hay.includes(needle)) return false;
     }
     return true;
@@ -240,6 +272,60 @@ export function resolutionPatch({ status, resolutionNote, roadmapRef, completed,
     completed_at: done ? (completedAt || now.toISOString()) : null,
     completed_by: done ? (completedBy || adminId || null) : null,
   };
+}
+
+/* ---------------------------------------------------------------------------
+ * The agent's proposals and applied changes (migration 089)
+ * ------------------------------------------------------------------------- */
+
+/** True when the row is a plan waiting for the director's answer. */
+export function isProposal(row) { return row?.status === 'proposed'; }
+
+/** True when the agent made the change and the director has not yet closed it out. */
+export function isAwaitingCloseout(row) { return row?.status === 'applied' && !isCompleted(row); }
+
+/** Validate the instructions text before approving or denying. */
+export function validateInstructions(text) {
+  return (text || '').length > 4000 ? 'The instructions are longer than 4000 characters — trim them a little.' : null;
+}
+
+/**
+ * Approve a proposal. Stamps both the 013 decision fields and the 089 ones, so the card and the
+ * older "decided" line agree. Empty instructions are NULL, never ''.
+ */
+export function approvalPatch({ instructions, adminId, now = new Date() }) {
+  const at = now.toISOString();
+  return {
+    status: 'accepted',
+    director_instructions: (instructions || '').trim() || null,
+    decided_by: adminId || null,
+    decided_at: at,
+    resolved_by: adminId || null,
+    resolved_at: at,
+  };
+}
+
+/** Deny a proposal. Any text typed is kept as the reason, in director_instructions. */
+export function denialPatch({ instructions, adminId, now = new Date() }) {
+  return { ...approvalPatch({ instructions, adminId, now }), status: 'declined' };
+}
+
+/**
+ * Close out an applied change: the same completion stamp the accepted tick writes. An existing
+ * stamp is kept so a second click can never re-date it.
+ */
+export function closeoutPatch({ completedAt = null, completedBy = null, adminId, now = new Date() }) {
+  return {
+    completed_at: completedAt || now.toISOString(),
+    completed_by: completedBy || adminId || null,
+  };
+}
+
+/** The commit URL for an agent_ref that looks like a sha (7 to 40 hex characters), else null. */
+export const COMMIT_BASE = 'https://github.com/dfpm-physics/Core_Preflights/commit/';
+export function commitUrl(ref) {
+  const r = (ref || '').trim();
+  return /^[0-9a-f]{7,40}$/i.test(r) ? COMMIT_BASE + r.toLowerCase() : null;
 }
 
 /* ---------------------------------------------------------------------------

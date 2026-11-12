@@ -517,11 +517,14 @@ next.
 | `page`, `page_title` | Which page they were on when they wrote it |
 | `category` | The reaction: like, dislike, or other when none was given. (feature, add and remove are also permitted, held in reserve) |
 | `message` | What they wrote, up to 4000 characters |
-| `status` | The decision: new, accepted, declined, or duplicate |
+| `status` | The decision: new, proposed, accepted, applied, declined, or duplicate. *Proposed* and *applied* are set by the triage agent (below) |
 | `resolution_note` | Why it was decided that way — the field that answers "why was this declined?" months later |
 | `roadmap_ref` | The roadmap item an accepted request became, e.g. `P1.16`. Only an accepted entry may carry one |
 | `resolved_by`, `resolved_at` | Who made the decision and when. Cleared if the entry is put back to new |
-| `completed_at`, `completed_by` | When the accepted request was actually built, and who marked it so. Empty until then. Only an accepted entry may be marked done, and withdrawing the acceptance clears it |
+| `completed_at`, `completed_by` | When the accepted request was actually built, and who marked it so. Empty until then. Only an accepted or applied entry may be marked done, and withdrawing the acceptance clears it |
+| `triage`, `agent_note`, `agent_ref`, `agent_at` | The triage agent's work: whether it judged the request simple or significant, what it did or plans to do, the commit or branch holding the change, and when |
+| `director_instructions` | What the administrator told the agent when approving a proposal, or the reason when denying one |
+| `decided_by`, `decided_at` | Who approved or denied a proposal, and when |
 
 **Only a system administrator can read it back, or decide it.** Anyone signed in can send feedback,
 but the collected feedback is not a board that instructors or students browse — it can name pages and
@@ -579,3 +582,9 @@ reading the data, not only to the website.
 
 The repository's operating contract and project reference remain authoritative. If this page and
 those files ever disagree, they win and this page is the bug.
+
+**The triage agent.** An agent reads new feedback on the test site. A *simple* fix it applies at once, marks
+*applied*, and leaves for the administrator to close out. A *significant* change it only *proposes*: the plan
+appears on the Feedback page under **Awaiting you**, and the administrator approves it (with optional
+instructions for the agent) or denies it; the agent never works on a denied item. Every entry stays on the page
+in one of its groups: awaiting you, applied and awaiting closeout, new, in progress, completed, declined, duplicate.

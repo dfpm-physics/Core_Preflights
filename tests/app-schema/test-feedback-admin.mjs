@@ -45,8 +45,12 @@ const DONE = '2026-07-26T09:00:00.000Z';
 /* ══════════════════════════════════════════════════════════════════════════ */
 section('statuses — the four triage decisions, and no more');
 
-eq('exactly four statuses, in offer order', F.STATUS_KEYS,
+eq('four decisions are offered by hand, in order', F.STATUSES.map((s) => s.key),
    ['new', 'accepted', 'declined', 'duplicate']);
+eq('the agent adds two states of its own (migration 089)', F.AGENT_STATUSES.map((s) => s.key),
+   ['proposed', 'applied']);
+eq('the database accepts all six', F.STATUS_KEYS,
+   ['new', 'accepted', 'declined', 'duplicate', 'proposed', 'applied']);
 check('every status carries a label and a hint',
       F.STATUSES.every((s) => s.label && s.hint));
 // There is deliberately no 'roadmapped' status — being written down is roadmap_ref, not a state.
@@ -60,8 +64,15 @@ check('completion is not a status — it is a separate axis (migration 018)',
 /* ══════════════════════════════════════════════════════════════════════════ */
 section('buckets — the two DB axes flattened into what a person reads');
 
-eq('five buckets, open first then closed', F.BUCKET_KEYS,
-   ['new', 'accepted', 'completed', 'declined', 'duplicate']);
+eq('seven buckets: what waits on the director first, closed last', F.BUCKET_KEYS,
+   ['proposed', 'applied', 'new', 'accepted', 'completed', 'declined', 'duplicate']);
+eq('a proposal is its own bucket', F.bucketOf(row({ status: 'proposed' })), 'proposed');
+eq('an applied change awaiting closeout is its own bucket', F.bucketOf(row({ status: 'applied' })), 'applied');
+eq('an applied change that was closed out is completed',
+   F.bucketOf(row({ status: 'applied', completed_at: DONE })), 'completed');
+eq('a stray completion on a proposal does not promote it',
+   F.bucketOf(row({ status: 'proposed', completed_at: DONE })), 'proposed');
+check('proposals and applied changes are open work', !F.isClosed(row({ status: 'proposed' })) && !F.isClosed(row({ status: 'applied' })));
 eq('an accepted item with no completion is still just accepted',
    F.bucketOf(row({ status: 'accepted' })), 'accepted');
 eq('an accepted item that was built becomes its own bucket',
@@ -94,6 +105,42 @@ section('splitByClosure — what the main list shows vs what the drawer holds');
   eq('input order is preserved within each half',
      F.splitByClosure([row({ id: '1' }), row({ id: '2' })]).open.map((r) => r.id), ['1', '2']);
   eq('a null list does not throw', F.splitByClosure(null).open.length, 0);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════ */
+section('sortOpen, approval and closeout (migration 089)');
+{
+  const o = F.sortOpen([row({ id: 'n', status: 'new' }), row({ id: 'a', status: 'accepted' }),
+    row({ id: 'p1', status: 'proposed' }), row({ id: 'ap', status: 'applied' }), row({ id: 'p2', status: 'proposed' })]);
+  eq('open rows sort proposals, applied, new, in progress; stable within a bucket',
+     o.map((r) => r.id), ['p1', 'p2', 'ap', 'n', 'a']);
+  eq('a null list does not throw', F.sortOpen(null).length, 0);
+  eq('buildMatrix puts a page with proposals first',
+     F.buildMatrix([row({ page_title: 'A', status: 'new' }), row({ page_title: 'A', status: 'new' }),
+                    row({ page_title: 'B', status: 'proposed' })]).pages.map((p) => p.page), ['B', 'A']);
+  check('isProposal / isAwaitingCloseout', F.isProposal(row({ status: 'proposed' })) &&
+        F.isAwaitingCloseout(row({ status: 'applied' })) && !F.isAwaitingCloseout(row({ status: 'applied', completed_at: DONE })));
+}
+{
+  const a = F.approvalPatch({ instructions: '  do it small  ', adminId: 'adm', now: new Date('2026-11-12T10:00:00.000Z') });
+  eq('approval accepts', a.status, 'accepted');
+  eq('approval trims and keeps the instructions', a.director_instructions, 'do it small');
+  eq('approval attributes and stamps the decision', [a.decided_by, a.decided_at], ['adm', '2026-11-12T10:00:00.000Z']);
+  eq('approval also stamps the older resolved_* pair', [a.resolved_by, a.resolved_at], ['adm', '2026-11-12T10:00:00.000Z']);
+  eq('blank instructions are NULL, not empty text', F.approvalPatch({ instructions: '  ', adminId: 'a' }).director_instructions, null);
+  const d = F.denialPatch({ instructions: 'not now', adminId: 'adm' });
+  eq('denial declines', d.status, 'declined');
+  eq('the text typed becomes the reason', d.director_instructions, 'not now');
+  check('a denial carries no completion or roadmap ref', !('completed_at' in d) && !('roadmap_ref' in d));
+  const c = F.closeoutPatch({ adminId: 'adm', now: new Date('2026-11-12T11:00:00.000Z') });
+  eq('closeout stamps the completion', [c.completed_at, c.completed_by], ['2026-11-12T11:00:00.000Z', 'adm']);
+  eq('an existing completion is never re-dated',
+     F.closeoutPatch({ completedAt: DONE, completedBy: 'first', adminId: 'adm' }).completed_at, DONE);
+  check('instructions over 4000 characters are refused', !!F.validateInstructions('x'.repeat(4001)) && !F.validateInstructions('ok'));
+  eq('a sha links to the commit', F.commitUrl('a5e5637'), F.COMMIT_BASE + 'a5e5637');
+  eq('a branch name does not', F.commitUrl('v2-test-fixes'), null);
+  eq('nothing does not', F.commitUrl(null), null);
+  eq('search reaches the agent note', F.filterRows([{ ...row({ id: 'z' }), agent_note: 'widen the Save button' }], { q: 'widen' }).length, 1);
 }
 
 /* ══════════════════════════════════════════════════════════════════════════ */

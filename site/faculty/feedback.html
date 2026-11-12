@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8=' 'sha256-wgbEML5a7cx1cSML8HDDyJ2lMD1oldyub0/YOwi2jjc='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8=' 'sha256-w2YfrjKGJJ7SHbcsT1Ipe5cwwohrs/X5G7tN3c/psBc='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Feedback · PREP</title>
   <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
@@ -114,7 +114,7 @@
             Give each a roadmap reference once written up.</div>` : ''}
         ${totals.total ? controlsHTML(open.length, closed.length) : ''}
         ${totals.total
-          ? (open.map(cardHTML).join('') || (closed.length ? '' : emptyFilter())) + drawerHTML(closed, expanded)
+          ? (FB.sortOpen(open).map(cardHTML).join('') || (closed.length ? '' : emptyFilter())) + drawerHTML(closed, expanded)
           : emptyState()}`;
 
       wire();
@@ -194,6 +194,49 @@
 
     const SENT = { like: '👍', dislike: '👎' };
 
+    /* ── the agent's part of a card (migration 089) ───────────────────────────
+     * What the triage agent wrote — its plan or what it did — plus where the change lives. A sha
+     * links to the commit; anything else (a branch name) is shown as plain text.
+     */
+    function agentHTML(r) {
+      if (!r.agent_note && !r.agent_ref && !r.director_instructions) return '';
+      const url = FB.commitUrl(r.agent_ref);
+      const refHTML = r.agent_ref
+        ? (url ? `<a href="${esc(url)}" target="_blank" rel="noopener">${esc(r.agent_ref.trim().slice(0, 12))}</a>`
+               : `<code>${esc(r.agent_ref)}</code>`)
+        : '';
+      const label = r.status === 'proposed' ? 'Agent\'s plan' : 'Agent\'s note';
+      return `<div class="fb-agent">
+        ${r.agent_note ? `<div class="fb-agent-label">${label}</div><div class="fb-agent-note">${esc(r.agent_note)}</div>` : ''}
+        ${refHTML || r.agent_at ? `<div class="muted fb-agent-meta">${refHTML}${refHTML && r.agent_at ? ' · ' : ''}${r.agent_at ? esc(fmtDateTime(new Date(r.agent_at))) : ''}</div>` : ''}
+        ${r.director_instructions && r.status !== 'proposed' ? `<div class="fb-agent-label">${r.status === 'declined' ? 'Your reason' : 'Your instructions'}</div><div class="fb-agent-note">${esc(r.director_instructions)}</div>` : ''}
+      </div>`;
+    }
+
+    // The controls of a proposed card (answer it) or an applied one (close it out).
+    function triageControlsHTML(r) {
+      if (FB.isProposal(r)) {
+        const instr = (dirty.get(r.id) || {}).instructions ?? '';
+        return `<textarea class="fb-note" data-instr rows="2" maxlength="4000"
+            placeholder="Instructions for the agent (optional)">${esc(instr)}</textarea>
+          <div class="row fb-item-foot">
+            <span class="error-msg" data-err></span>
+            <div class="grow"></div>
+            <button class="btn btn-ghost btn-sm" data-deny>Deny</button>
+            <button class="btn btn-primary btn-sm" data-approve>Approve</button>
+          </div>`;
+      }
+      const awaiting = FB.isAwaitingCloseout(r);
+      return `<div class="row fb-item-foot">
+          <span class="error-msg" data-err></span>
+          <div class="grow"></div>
+          ${r.completed_at ? `<span class="muted" style="font-size:.76em">closed out ${esc(fmtDateTime(new Date(r.completed_at)))}</span>` : ''}
+          ${awaiting
+            ? `<button class="btn btn-primary btn-sm" data-closeout>Close out</button>`
+            : `<button class="btn btn-ghost btn-sm" data-reopen>Reopen</button>`}
+        </div>`;
+    }
+
     function cardHTML(r) {
       const d = dirty.get(r.id) || {};
       const status = d.status ?? (r.status || 'new');
@@ -206,7 +249,9 @@
       const done = accepted && (d.completed ?? FB.isCompleted(r));
       // The card's colour follows the BUCKET, so a finished item reads as finished at a glance
       // rather than as an outstanding accepted one.
-      const bucket = done ? 'completed' : status;
+      const bucket = r.status === 'applied' ? FB.bucketOf(r) : (done ? 'completed' : status);
+      const agentMade = r.status === 'proposed' || r.status === 'applied';
+      const tag = r.triage ? `<span class="fb-triage-tag fb-triage-${esc(r.triage)}">Agent: ${esc(r.triage)}</span>` : '';
 
       return `<div class="card fb-item fb-st-${esc(bucket)}" data-id="${esc(r.id)}">
         <div class="fb-item-head">
@@ -215,13 +260,15 @@
           ${r.role ? `<span class="score-badge pending">${esc(r.role)}</span>` : ''}
           <span class="fb-item-page" title="${esc(r.page || '')}">${esc(FB.pageKey(r))}</span>
           ${sent ? `<span class="fb-sent-chip" title="${esc(r.category)}">${sent}</span>` : ''}
-          ${done ? '<span class="fb-done-chip">✓ Done</span>' : ''}
+          ${tag}
+          ${done || (r.status === 'applied' && FB.isCompleted(r)) ? '<span class="fb-done-chip">✓ Done</span>' : ''}
           <div class="grow"></div>
           <span class="muted" style="font-size:.78em">${esc(fmtDateTime(new Date(r.created_at)))}</span>
         </div>
 
         <div class="fb-item-msg">${esc(r.message)}</div>
-
+        ${agentHTML(r)}
+        ${agentMade ? triageControlsHTML(r) : `
         <div class="fb-item-res">
           <div class="fb-seg" role="group" aria-label="Decision">
             ${FB.STATUSES.map(s => `<button type="button" class="fb-stbtn fb-stbtn-${esc(s.key)}${status === s.key ? ' on' : ''}"
@@ -246,7 +293,7 @@
           ${r.resolved_at ? `<span class="muted" style="font-size:.76em">decided ${esc(fmtDateTime(new Date(r.resolved_at)))}</span>` : ''}
           ${r.completed_at ? `<span class="muted" style="font-size:.76em">done ${esc(fmtDateTime(new Date(r.completed_at)))}</span>` : ''}
           <button class="btn btn-primary btn-sm" data-save ${dirty.has(r.id) ? '' : 'disabled'}>Save</button>
-        </div>
+        </div>`}
       </div>`;
     }
 
@@ -313,6 +360,30 @@
         card.querySelector('[data-note]')?.addEventListener('input', (e) => mark({ resolution_note: e.target.value }));
         card.querySelector('[data-ref]')?.addEventListener('input', (e) => mark({ roadmap_ref: e.target.value }));
         card.querySelector('[data-save]')?.addEventListener('click', () => save(id, row, card));
+
+        // The agent's proposals and applied changes (migration 089). These write at once: an
+        // answer to a proposal is one decision, not a form to fill in and then save.
+        card.querySelector('[data-instr]')?.addEventListener('input', (e) => {
+          dirty.set(id, { ...(dirty.get(id) || {}), instructions: e.target.value });
+        });
+        const answer = (selector, build) => card.querySelector(selector)?.addEventListener('click', async (ev) => {
+          const instr = dirty.get(id)?.instructions ?? '';
+          const err = card.querySelector('[data-err]');
+          const bad = FB.validateInstructions(instr);
+          if (bad) { err.textContent = bad; return; }
+          err.textContent = '';
+          const btn = ev.currentTarget;
+          btn.disabled = true;
+          const { error } = await FB.saveResolution(id, build(instr));
+          if (error) { btn.disabled = false; err.textContent = 'Save failed: ' + error.message; return; }
+          dirty.delete(id);
+          await load({ quiet: true });
+        });
+        const adminId = ctx.user?.id;
+        answer('[data-approve]', (instr) => FB.approvalPatch({ instructions: instr, adminId }));
+        answer('[data-deny]', (instr) => FB.denialPatch({ instructions: instr, adminId }));
+        answer('[data-closeout]', () => FB.closeoutPatch({ completedAt: row.completed_at, completedBy: row.completed_by, adminId }));
+        answer('[data-reopen]', () => ({ completed_at: null, completed_by: null }));
       });
     }
 
