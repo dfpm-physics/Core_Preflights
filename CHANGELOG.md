@@ -6,6 +6,26 @@ can understand the history without re-deriving it from code or git.
 
 Newest entries first. Dates are `YYYY-MM-DD`.
 
+## 2026-11-12 — Matthew Recker via Claude (test site: publish tool, training course seed, first publish; branch `v2-test-fixes`)
+
+- **What.** Added `scripts/staging/publish_test_site.py`, which builds a copy of `site/` that can reach only the staging
+  database (the generated lesson pages' production address, key and published address are rewritten the way
+  `serve_local.py` does, every `*.supabase.co` Content-Security-Policy source is narrowed to the staging host, and the
+  result is verified free of the production ref and key) and can sync it into a clone of `dfpm-physics/iPREP-staging`.
+  Added `scripts/staging/seed_test_site.py` (a sandbox course `prep-train`, two sections, two staff, six cadets, four
+  written preflights), the offline test `scripts/staging/test_publish_test_site.py` (also listed in the CI suite list),
+  and `docs/operations/TEST-SITE.md`, registered in `docs/DOC-SOURCES.json`. `docs/ROADMAP.md` V2.4 is now in progress.
+- **Why.** V2.4: let instructors and testers try the site before step 1 without any route to production.
+- **Checked.** The new unit test passes offline (7 cases). A real build into a temporary directory outside the repository
+  verified clean (286 files copied, 128 rewritten). The seed ran as a dry run against staging and rolled back
+  (1 offering, 2 sections, 6 enrollments, 3 published items, 1 draft, 5 submissions, 5 grades).
+- **Done after the checks.** The course director created the public repository `dfpm-physics/iPREP-staging`
+  (`dfpm-physics` is a user account, so an agent cannot create repositories there). The seed was then run with
+  `--commit` against staging. The first publish pushed `2cc65cb` there, built from `a5e5637` (286 files, 128
+  rewritten, verify clean). This work lives on branch `v2-test-fixes`, which the director approved for commits and
+  pushes on 2026-11-12; it reaches `v2` only at his closeout.
+- **Not done.** GitHub Pages is not switched on yet (only the repository owner can). Nothing touched production.
+
 ## 2026-11-12 — Matthew Recker via Claude (orchestrator state file)
 
 - **What.** Added `iprep orchestrator.md` at the repository root. It is the state file of a standing Claude session

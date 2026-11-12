@@ -85,6 +85,7 @@ PY_OFFLINE = [
     "scripts/checks/worklist_eligibility_test.py",
     "scripts/artifacts/make_tutor_files_test.py",
     "scripts/staging/test_step1_tools.py",
+    "scripts/staging/test_publish_test_site.py",
     "tests/app-schema/test_v2_gate_lib_offline.py",
     "scripts/checks/name_scan_hash_test.py",
 ]

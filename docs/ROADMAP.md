@@ -2194,7 +2194,9 @@ director confirms the end date: they end before Spring 2027.*
 It runs alongside PREP until the 8 March Prog, and the two are compared. Findings about it in outside
 reviews may describe an older copy. Check them against the newest one first.
 
-### V2.4 — Letting other people test before go-live · *not started*
+### V2.4 — Letting other people test before go-live · *in progress, 2026-11-12*
+
+Tooling built, repo not yet created or published: see `docs/operations/TEST-SITE.md`.
 
 A second GitHub repository, `dfpm-physics/iPREP-staging`, serving the site from Pages
 (recommended). `site/js/config.js` already sends that address to staging. Netlify or Cloudflare

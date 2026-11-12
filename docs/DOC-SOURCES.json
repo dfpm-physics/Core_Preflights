@@ -560,6 +560,20 @@
         ".ai/instructions/CORE.md"
       ],
       "note": "Where the Ask Sage key is stored and what one iPREP session costs. The proxy is the source for the secret names, the allowlist and the staff gate; extract_prompts.py for the per-lesson prompt sizes the arithmetic in section 3 is built on. CORE.md section 2 is why the key cannot live in the static site at all. The token figures are ESTIMATES at 4 chars/token until a real run replaces them - when one does, section 3 is wrong until it is updated."
+    },
+    {
+      "doc": "docs/operations/TEST-SITE.md",
+      "kind": "operations",
+      "tier": null,
+      "reviewed": "2026-11-12",
+      "sources": [
+        "scripts/staging/publish_test_site.py",
+        "scripts/staging/seed_test_site.py",
+        "scripts/staging/seed_staging.py",
+        "scripts/staging/serve_local.py",
+        "site/js/config.js"
+      ],
+      "note": "The public test copy of the site. publish_test_site.py is the source for the flags, refusals and what the build rewrites and verifies; the two seeds for the logins, the course and the items; serve_local.py for the rewrite rule it reuses; config.js for which address reaches staging. The password rules are the site's own and are public, which is why the security note exists."
     }
   ]
 }
