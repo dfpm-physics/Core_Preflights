@@ -6,6 +6,24 @@ can understand the history without re-deriving it from code or git.
 
 Newest entries first. Dates are `YYYY-MM-DD`.
 
+## 2026-11-13 — Matthew Recker via Claude (staging: leftover test courses removed)
+
+- **What.** Deleted eight leftover test courses from the STAGING database (`wkibeptktbnaddfynrwr`, schema `app`):
+  `e30-lab`, `gate-entry`, `gate-train`, `gate-vector`, `items-nodays`, `mock-101`, `phys-356`, `ux-101`, with
+  their 12 offerings and everything under them, plus the 7 terms, 37 test cadets (ids 3000000401-3000000809), 3
+  non-seeded test staff and their 20 auth accounts that only those courses used. Kept unchanged: `phys-110`,
+  `phys-120`, `phys-215`, `phys-310`, `prep-train`, and every seeded staging login. Verified after: 5 courses remain,
+  each with the same offering, section, enrollment, item and staff counts as before.
+- **Why.** The course director: "There are a lot of extra courses and such in the staging database that will
+  confuse users testing the new website. They need to be removed." He confirmed the exact list before the delete.
+- **How.** Snapshot first (full rows, auth secret columns left out) to the git-ignored
+  `_snapshots/staging-course-cleanup-20261113T182639Z/`; snapshot primary-key sets matched live; a rolled-back real
+  delete passed; then one transaction, re-checked against the snapshot, committed. The one-off script is not in the repo.
+- **Not done.** Production was not touched. The append-only `grade_events` (2 rows) and `grade_excusal_events` (1)
+  rows that name removed rows were left in place. `seed_staging.py`, `seed_v2_gate.py` and `seed_v2_training.py`
+  still create the three `gate-*` courses, and some test suites create others, so a re-seed or test run brings
+  them back; the seeds were not changed.
+
 ## 2026-11-12 — Matthew Recker via Claude (orchestrator state file)
 
 - **What.** Added `iprep orchestrator.md` at the repository root. It is the state file of a standing Claude session
