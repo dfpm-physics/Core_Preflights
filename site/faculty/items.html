@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8=' 'sha256-QMu5JulNop1KuwKt34MSPS8LM01k4hJUpWsQEvYvqEg='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8=' 'sha256-wjnpqRHjDC+3wknYTp6B0dvjFYTZGPfdotRuZwqxUrI='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Assignments · PREP</title>
   <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
@@ -22,6 +22,7 @@
       <div class="modal-head"><h2 id="im-title">New assignment</h2><button class="modal-close" data-close>×</button></div>
       <div class="alert alert-error" id="im-error" style="display:none"></div>
       <div class="alert alert-info" id="im-note" style="display:none"></div>
+      <div id="i-q-top" style="display:none;margin:0 0 14px"></div>
 
       <div class="field"><label for="i-title">Title</label><input id="i-title" type="text" maxlength="200"></div>
       <div class="form-grid" style="--fg-min:150px">
@@ -466,7 +467,7 @@
       $('i-points').disabled = owned;
       $('i-attempts-wrap').style.display = $('i-grading').value === 'auto_checked' ? '' : 'none';
       $('i-points-note').textContent = owned
-        ? 'Set by the questions. Add them with the Questions button on the assignment once it is saved.' : '';
+        ? 'Set by the questions. Saving a new assignment opens its Questions page.' : '';
     }
     const currentKind = () => vm.kinds.find(k => k.id === $('i-kind').value) || null;
     const currentSetting = () => ({ delivery: $('i-delivery').value, grading: $('i-grading').value, withTutor: pathMode === 'both' && $('i-delivery').value === 'typed_response' });
@@ -526,6 +527,8 @@
         : (state.current ? 'This setting is not one of the usual choices. Any other combination is under "How the work is done" in More options.' : '');
       renderAiGap();
       const panel = $('i-q-panel');
+      const topBox = $('i-q-top');
+      topBox.style.display = 'none'; topBox.innerHTML = '';
       const showQ = !locked && (d === 'online_questions' || d === 'typed_response');
       panel.style.display = showQ ? 'block' : 'none';
       if (!showQ) return;
@@ -535,8 +538,13 @@
         if (saved && saved.delivery === 'online_questions' && saved.activityId) {
           panel.innerHTML = `<a class="btn btn-ghost btn-sm" id="i-q-link" href="questions.html?a=${encodeURIComponent(editing.offeringId)}">Open the questions page</a>
             <span class="muted" id="i-q-count" style="margin-left:8px">Counting the questions…</span>`;
+          // The same link, made prominent at the top of the form. The count in its label fills in once it is known.
+          const qHref = `questions.html?a=${encodeURIComponent(editing.offeringId)}`;
+          topBox.innerHTML = `<a class="btn btn-primary" id="i-q-top-link" href="${qHref}">Questions</a>`;
+          topBox.style.display = 'block';
           I.countQuestionsAndKeys(db, [saved.activityId]).then(c => {
             if (seq !== countSeq || !$('i-q-count')) return;
+            if (!c.error && $('i-q-top-link')) $('i-q-top-link').textContent = c.questions > 0 ? `Edit questions (${c.questions})` : 'Add questions';
             $('i-q-count').textContent = c.error ? 'The questions could not be counted. Reload the page to try again.'
               : c.questions === 1 ? '1 question so far.' : `${c.questions} questions so far.`;
           });
@@ -985,7 +993,19 @@
           return;
         }
         const wasNew = !editing;
+        // Questions answered on the site are written on their own page, so a NEW assignment of that kind goes straight there.
+        // (A typed response has its questions in this form, and the tutor and the other deliveries have none to write.)
+        const needsQuestionsPage = wasNew && form.delivery === 'online_questions' && !!res.offeringId;
         closeForm();
+        if (needsQuestionsPage) {
+          // Nothing more to show here, so a failed reload cannot report a good save as a stopped one. Alerts first.
+          if (res.publishError) {
+            console.error('item publish refused', res.publishError);
+            window.alert('The assignment was saved, but it is not published. ' + I.publishErrorText(res.publishError));
+          }
+          location.href = `questions.html?a=${encodeURIComponent(res.offeringId)}`;
+          return;
+        }
         await load();
         // A new assignment is saved unpublished and opened straight away for setup: how cadets do the work, then its questions.
         const created = wasNew && res.offeringId && vm && !vm.error ? vm.items.find(x => x.offeringId === res.offeringId) : null;

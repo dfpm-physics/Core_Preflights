@@ -6,6 +6,22 @@ can understand the history without re-deriving it from code or git.
 
 Newest entries first. Dates are `YYYY-MM-DD`.
 
+## 2026-11-13 — Matthew Recker via Claude (new auto-graded assignment opens its questions page; prominent questions button)
+
+- **What.** In `site/faculty/items.html`: (1) saving a NEW assignment whose delivery is "Questions answered on the site" (the
+  **Auto-graded questions** card) now goes straight to `questions.html?a=<offering id>`, the same address the row's Questions
+  icon uses, after any publish warning has been shown. A failed save, an edit of an existing assignment, and every other delivery
+  stay as before. (2) Editing a saved assignment of that kind shows a primary button at the top of the form, "Edit questions (N)"
+  or "Add questions" when it has none, linking to the same page. The older "Open the questions page" link under the cards stays.
+- **Detail.** The redirect happens before the list reloads, so a failed reload cannot report a good save as stopped. The top button reads "Questions" until the count loads (and on a count error).
+- **Why.** The director: "when an assignment is created that requires the instructor to add questions, it should just take them
+  to the add questions page. When they select the edit option from the list of assignments it should display the button to view
+  the questions, but it should be more prominent."
+- **Scope.** Only auto-graded (online_questions) uses the Questions page. AI-graded, instructor-graded and Both write their
+  questions in a box inside the form, so they are not redirected. Directors only; the instructor view is unchanged.
+- **Also.** CSP hash regenerated for items.html; `director-assignment-setup.md` updated and its `reviewed` date bumped.
+- **Not done.** No note shown on the questions page after the redirect; not tested against a live database or in a browser.
+
 ## 2026-11-13 — Matthew Recker via Claude (staging: leftover test courses removed)
 
 - **What.** Deleted eight leftover test courses from the STAGING database (`wkibeptktbnaddfynrwr`, schema `app`):

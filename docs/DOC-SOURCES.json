@@ -244,7 +244,7 @@
       "doc": "site/help/director-assignment-setup.md",
       "kind": "help",
       "tier": "director",
-      "reviewed": "2026-11-10",
+      "reviewed": "2026-11-13",
       "sources": [
         "site/faculty/items.html",
         "site/js/faculty-items.js",
