@@ -11,9 +11,8 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 - **What.** In `site/faculty/items.html`: (1) saving a NEW assignment whose delivery is "Questions answered on the site" (the
   **Auto-graded questions** card) now goes straight to `questions.html?a=<offering id>`, the same address the row's Questions
   icon uses, after any publish warning has been shown. A failed save, an edit of an existing assignment, and every other delivery
-  stay as before. (2) Editing a saved assignment of that kind shows a primary button at the top of the form, "Edit questions (N)"
-  or "Add questions" when it has none, linking to the same page. The older "Open the questions page" link under the cards stays.
-- **Detail.** The redirect happens before the list reloads, so a failed reload cannot report a good save as stopped. The top button reads "Questions" until the count loads (and on a count error).
+  stay as before. (2) A top-of-form questions button was added, then REMOVED the same day on the director's word ("there are two buttons ... The original was fine, it just needed to be larger and more conspicuous"). The original "Open the questions page" link under the cards is now a large primary button (`btn btn-primary` plus page-local larger padding and font size; styles.css has no `btn-lg`).
+- **Detail.** The redirect happens before the list reloads, so a failed reload cannot report a good save as stopped.
 - **Why.** The director: "when an assignment is created that requires the instructor to add questions, it should just take them
   to the add questions page. When they select the edit option from the list of assignments it should display the button to view
   the questions, but it should be more prominent."

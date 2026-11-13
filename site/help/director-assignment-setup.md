@@ -16,7 +16,7 @@ Pick one of four cards:
 Pick one of three cards:
 
 - **In class.** Done in person. Staff type in the scores.
-- **Auto-graded questions.** Cadets answer on the site and it is marked for them. Only homework offers this. On any other kind the card is grayed out, and hovering over it says why. When you save a new assignment set up this way, the Questions page opens straight away so you can add the questions. To come back later, edit the assignment: the button at the top of the form says **Add questions**, or **Edit questions** with the number so far, and it opens the same page.
+- **Auto-graded questions.** Cadets answer on the site and it is marked for them. Only homework offers this. On any other kind the card is grayed out, and hovering over it says why. When you save a new assignment set up this way, the Questions page opens straight away so you can add the questions. To come back later, edit the assignment and select the large **Open the questions page** button under the cards.
 - **Done elsewhere.** Done in another system, such as WebAssign or Gradescope. You import the scores.
 
 A new assignment starts on the card that suits its kind. Changing the kind of a new assignment picks that kind's cards again.
