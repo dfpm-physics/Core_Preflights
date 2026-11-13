@@ -10,6 +10,7 @@ database and nothing else, and everything in it is invented.
 | Database | staging, Supabase project `wkibeptktbnaddfynrwr`. Never production |
 | Data | invented people and lessons only. **Never put real cadet data in staging** |
 | Built by | `scripts/staging/publish_test_site.py` in `dfpm-physics/Core_Preflights` |
+| Fed by | the operator, by running this publisher by hand. The tester-feedback job (`scripts/staging/feedback_job.py`) never publishes and never commits: nothing lands unattended, and every fix is a proposal the operator approves before any commit (course director's decision, 2026-11-13). The job checks an AI's edits and writes each passing fix into its own uncommitted git worktree, with a risk hint (`text` or `code`) in `held.json`; the operator reviews the worktree, commits it to this repository, and then publishes. The job never runs git in the tree the AI edited. |
 
 The repository is generated. Nobody edits it by hand; the next publish replaces its files.
 

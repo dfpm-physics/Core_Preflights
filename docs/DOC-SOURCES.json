@@ -566,7 +566,7 @@
       "doc": "docs/operations/TEST-SITE.md",
       "kind": "operations",
       "tier": null,
-      "reviewed": "2026-11-12",
+      "reviewed": "2026-11-13",
       "sources": [
         "scripts/staging/publish_test_site.py",
         "scripts/staging/seed_test_site.py",
@@ -580,9 +580,10 @@
       "doc": ".ai/skills/feedback-triage/SKILL.md",
       "kind": "skill",
       "tier": null,
-      "reviewed": "2026-11-12",
+      "reviewed": "2026-11-13",
       "sources": [
         "scripts/staging/feedback_triage.py",
+        "scripts/staging/feedback_job.py",
         "supabase/migrations/app/089_feedback_triage.sql",
         "scripts/staging/publish_test_site.py",
         "docs/operations/TEST-SITE.md",
