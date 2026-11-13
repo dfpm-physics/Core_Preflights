@@ -312,6 +312,18 @@ Two things a scheduled run must do that an interactive one gets for free:
   saying why it declined is a useful entry, and a missing row is indistinguishable from a job that
   never fired.
 
+### The one sanctioned sweep: the overnight grader's 72-hour window
+
+`worklist --latest` and "one lesson, never a queue" stay the rule for this skill and for any agent
+or human running it. The single exception is the overnight grader
+(`supabase/admin/overnight_grade.py`, see `docs/operations/OVERNIGHT-GRADER.md`), which is not an
+agent and is bounded: it takes every eligible day track whose deadline passed in the last 72 hours,
+oldest first, at most 6 a night, on the **staging** database only. It stays safe against the reasons
+`--latest` is short-sighted because it never re-sends a cadet who already has a `schema: 1`
+assessment, never touches a finalized grade or an instructor's graded question, and does not pick
+up late or extended work, which is still graded by hand. Do not copy that window into this skill's
+own runs, and do not point the overnight grader at production without a decision record.
+
 ### The coordination gate, honestly
 
 CORE.md §0 requires a human to designate one operator and confirm no competing agent is mid-run.

@@ -1533,51 +1533,15 @@ def _pick_latest(rows):
                 next((r for r in tied if r["needs_run"]), tied[0]))
 
 
-def cmd_worklist(args, conn):
-    """What is past due in a course, and has it been analyzed yet.
+def worklist_rows(conn, course, day=None, as_of=None):
+    """The worklist query, as data: one dict per (offering, day track) past due.
 
-    Two callers, two very different appetites, and the difference is the whole design:
-
-      * A HUMAN wants the list — every past-due lesson with its status — because they may
-        legitimately want to re-run an older one after grading a late submission by hand.
-      * The AUTOMATED path wants ONLY the most recently due lesson, and only if it has never
-        been analyzed. It must never walk backwards through the term.
-
-    Why the automated path is deliberately short-sighted: an older lesson can look "unanalyzed"
-    for reasons a scheduler must not act on. A student on an approved extension submits days
-    late; a late submission is accepted by hand. Both are graded manually, on purpose. A cron
-    that swept up every outstanding lesson would re-grade those cohorts unattended and overwrite
-    the human judgement that was the entire point of handling them by hand. So it looks at one
-    lesson: the one whose deadline just passed.
-
-    Day tracks are separate work. A lesson's M sections and T sections close on different days,
-    so "most recently due" is answered per day track, not per lesson.
-
-    Except when they do not. Per-day deadlines are a per-course habit, not a rule the schema
-    enforces: as of 2026-08-07 phys-215 sets `assignment_due_dates` on all 74 offerings and its M
-    and T tracks close a day apart, while phys-110 sets them on one offering out of 37 — so every
-    other phys-110 lesson has both tracks resolving to the same offering default, closing at the
-    same instant. Both shapes are legitimate and both must work here. Two consequences, each
-    handled below rather than assumed away:
-
-      * "has this been analyzed" must be asked PER TRACK, because one stored row serves both.
-      * "the most recently due track" can name two rows, so --latest must break the tie on
-        something better than plan order.
+    Extracted from cmd_worklist with no change to the SQL, so the nightly grader and the
+    human command read the same rows. `section_ids` was added to the select for the grader;
+    nothing else moved.
     """
-    day = (getattr(args, "day", None) or "").strip().upper() or None
-
-    # --as-of is a REHEARSAL, and it is read-only in the strongest sense: worklist writes nothing
-    # at all, so the worst it can do is print a list. It exists because the interesting states of
-    # this command only occur after a deadline, which makes them untestable and unrehearsable
-    # until the moment they matter. It moves the clock ONLY for "which tracks are past due" —
-    # every other figure is live. Say so loudly, because a list of past-due lessons that is not
-    # actually past due is exactly the sort of output someone screenshots and acts on later.
-    as_of = getattr(args, "as_of", None) or None
-    if as_of:
-        print(f"⚠ REHEARSAL — pretending the clock reads {as_of}. Nothing here is a live "
-              f"instruction to run.\n")
     cur = conn.cursor(cursor_factory=RealDictCursor)
-    _refuse_null_delivery(cur, args.course)
+    _refuse_null_delivery(cur, course)
     flags = eligibility_flags(cur)        # (has the marker column, has the ai_drafted option)
     cur.execute("""
         with offering as (
@@ -1620,6 +1584,7 @@ def cmd_worklist(args, conn):
                d.track,
                d.due_at,
                d.section_codes,
+               d.section_ids,
                (select count(*) from submissions sub
                  where sub.assignment_offering_id = ao.id)                    as submissions,
                (select count(*) from grades g
@@ -1684,12 +1649,8 @@ def cmd_worklist(args, conn):
     """.replace("/*TRACK_COVERED*/", track_covered_sql("ar.payload", "d.section_ids"))
        .replace("/*ELIGIBLE*/", eligible_path_sql("oa", "ao", *flags))
        .replace("/*INELIGIBLE*/", ineligible_typed_sql("ob", "ao", *flags)),
-        {"course": args.course, "day": day, "kind": KIND, "as_of": as_of})
+        {"course": course, "day": day, "kind": KIND, "as_of": as_of})
     rows = cur.fetchall()
-    if not rows:
-        msg = f"Nothing past due in {args.course}" + (f" for day {day}" if day else "") + "."
-        print(json.dumps({"course": args.course, "day": day, "items": []}) if args.json else msg)
-        return
 
     for r in rows:
         # "Never analyzed" means BOTH: no successful run recorded, and no stored analysis. The
@@ -1698,6 +1659,58 @@ def cmd_worklist(args, conn):
         # no run row, and calling that "never analyzed" would invite a pointless re-run.
         r["needs_run"] = r["last_success"] is None and not r["has_analysis"]
         r["ready"] = r["submissions"] > 0
+    return rows
+
+
+def cmd_worklist(args, conn):
+    """What is past due in a course, and has it been analyzed yet.
+
+    Two callers, two very different appetites, and the difference is the whole design:
+
+      * A HUMAN wants the list — every past-due lesson with its status — because they may
+        legitimately want to re-run an older one after grading a late submission by hand.
+      * The AUTOMATED path wants ONLY the most recently due lesson, and only if it has never
+        been analyzed. It must never walk backwards through the term.
+
+    Why the automated path is deliberately short-sighted: an older lesson can look "unanalyzed"
+    for reasons a scheduler must not act on. A student on an approved extension submits days
+    late; a late submission is accepted by hand. Both are graded manually, on purpose. A cron
+    that swept up every outstanding lesson would re-grade those cohorts unattended and overwrite
+    the human judgement that was the entire point of handling them by hand. So it looks at one
+    lesson: the one whose deadline just passed.
+
+    Day tracks are separate work. A lesson's M sections and T sections close on different days,
+    so "most recently due" is answered per day track, not per lesson.
+
+    Except when they do not. Per-day deadlines are a per-course habit, not a rule the schema
+    enforces: as of 2026-08-07 phys-215 sets `assignment_due_dates` on all 74 offerings and its M
+    and T tracks close a day apart, while phys-110 sets them on one offering out of 37 — so every
+    other phys-110 lesson has both tracks resolving to the same offering default, closing at the
+    same instant. Both shapes are legitimate and both must work here. Two consequences, each
+    handled below rather than assumed away:
+
+      * "has this been analyzed" must be asked PER TRACK, because one stored row serves both.
+      * "the most recently due track" can name two rows, so --latest must break the tie on
+        something better than plan order.
+    """
+    day = (getattr(args, "day", None) or "").strip().upper() or None
+
+    # --as-of is a REHEARSAL, and it is read-only in the strongest sense: worklist writes nothing
+    # at all, so the worst it can do is print a list. It exists because the interesting states of
+    # this command only occur after a deadline, which makes them untestable and unrehearsable
+    # until the moment they matter. It moves the clock ONLY for "which tracks are past due" —
+    # every other figure is live. Say so loudly, because a list of past-due lessons that is not
+    # actually past due is exactly the sort of output someone screenshots and acts on later.
+    as_of = getattr(args, "as_of", None) or None
+    if as_of:
+        print(f"⚠ REHEARSAL — pretending the clock reads {as_of}. Nothing here is a live "
+              f"instruction to run.\n")
+    rows = worklist_rows(conn, args.course, day, as_of)
+    if not rows:
+        msg = f"Nothing past due in {args.course}" + (f" for day {day}" if day else "") + "."
+        print(json.dumps({"course": args.course, "day": day, "items": []}) if args.json else msg)
+        return
+
 
     # --latest is the automated contract: the most recently due track, and only if it has never
     # had a successful run. Anything older is left alone — see the docstring.

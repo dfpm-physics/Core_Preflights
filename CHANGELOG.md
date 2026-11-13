@@ -6,6 +6,44 @@ can understand the history without re-deriving it from code or git.
 
 Newest entries first. Dates are `YYYY-MM-DD`.
 
+## 2026-11-13 — Matthew Recker via Claude (overnight AI grader, staging only; built offline, not run, not committed)
+
+- **What.** New `supabase/admin/overnight_grade.py` and the `supabase/admin/overnight/` package: a script for the Linux
+  machine that sets up per-course grounding folders, finds AI-graded assignments past their deadline, and runs the lesson
+  cycle (grade, then aggregate) with a Gemini model chosen through GenAI.mil. It reads and writes the staging database
+  only and refuses any other target before it reads anything. Drafts are saved `is_finalized = false`. Runbook:
+  `docs/operations/OVERNIGHT-GRADER.md`. Tests: `supabase/admin/overnight_test.py` (offline; a fake model and an
+  in-memory store; no network and no database).
+- **Changed, same behaviour.** `lesson_aggregate.py`: the worklist query moved out of `cmd_worklist` into
+  `worklist_rows(conn, course, day, as_of)` and gained `d.section_ids` in its select; the human command calls it and
+  prints what it printed. `worklist_dayscope_test.py` now inspects `worklist_rows`. `.ai/skills/lesson-cycle/SKILL.md`
+  says the overnight grader's 72-hour window is the one sanctioned sweep.
+- **Chosen defaults (the course director's decisions for this first version).**
+  1. GenAI.mil use is cleared for this project; endpoint, key and project values come from a secret file, never from code.
+  2. Window: every eligible day track whose deadline passed in the last 72 hours, oldest first, at most 6 a night.
+  3. Models: newest stable flash for per-cadet grading, newest stable pro for aggregation, chosen from the API's list at
+     run time, with a fallback order and a config pin.
+  4. Grounding: text sidecars the operator places, plus optional curated equation digests; no new dependency.
+  5. Nightly token cap 8,000,000, configurable; the run stops cleanly at the cap.
+  6. Database: the DML role over psycopg2, reusing `lesson_aggregate.py` by import.
+  7. Questions with a figure are left for a person; no AI cell is written for them.
+- **Review fixes, same day.** (S1) The grade write is compare-and-set: the upsert applies only when the row still has the
+  `source` and `graded_at` read at the start, and a refused write is left for a person and makes the run exit 10. (S2)
+  Misconception labels are capped at 80 characters and descriptions at 300; the taxonomy list shown to the model is capped at
+  40 and screened for injection and links. (S3) Only the lesson's own question ids are sent, answers are cut at 4,000
+  characters with a marker, tokens are estimated when the API reports none, and a token cap of 0 or less is refused. (S4) The
+  client follows no redirect; a 3xx is an error. (S5) The aggregation prose gets the same link and citation checks as grading
+  feedback. (S6) New `max_run_minutes` (default 180) stops the run cleanly between cadets. The config directory must not be
+  group- or world-writable. (C1) A zero row written for a non-submission is replaced when work arrives. (C2) A track is no
+  longer skipped because it was aggregated before, so late work is graded; the track cap is applied after the run starts.
+  (C3) New tests cover the SQL text, the key mapping and the upsert without a database, and a new standalone
+  `supabase/admin/overnight_contract_test.py` runs a real `cmd_pull` output through the aggregator into the real `cmd_write`
+  with a fake connection (needs the repo `.venv` for `psycopg2`).
+- **Not done.** It has never run against staging or GenAI.mil, and no test makes a network call. Nothing was committed or
+  pushed, no database or migration changed, no cron entry was installed, and nothing was added to `requirements.txt`.
+  `scripts/staging/seed_staging.py` was not extended, so a live trial needs an AI-drafted staging item made by hand. The
+  runbook lists what is still unverified.
+
 ## 2026-11-12 — Matthew Recker via Claude (orchestrator state file)
 
 - **What.** Added `iprep orchestrator.md` at the repository root. It is the state file of a standing Claude session

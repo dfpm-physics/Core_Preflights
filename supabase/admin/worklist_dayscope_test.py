@@ -24,7 +24,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from app_tier_check import load, connect                              # noqa: E402
-from lesson_aggregate import _pick_latest, cmd_worklist, track_covered_sql   # noqa: E402
+from lesson_aggregate import _pick_latest, worklist_rows, track_covered_sql   # noqa: E402
 
 PASS, FAIL = "  [pass]", "  [FAIL]"
 results = []
@@ -91,8 +91,8 @@ def row(track, due, needs_run, subs):
 def test_wired():
     """The shipped query must actually use the predicate proven above."""
     print("\nwiring — the query uses the shared predicate, not a private copy")
-    src = inspect.getsource(cmd_worklist)
-    check("cmd_worklist splices the shared builder at its marker",
+    src = inspect.getsource(worklist_rows)   # the query moved out of cmd_worklist (2026-11-13)
+    check("worklist_rows splices the shared builder at its marker",
           "/*TRACK_COVERED*/" in src
           and 'track_covered_sql("ar.payload", "d.section_ids")' in src)
     check("has_analysis is no longer a bare row count  <- the original bug",

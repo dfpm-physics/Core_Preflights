@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated": "2026-09-11",
+  "updated": "2026-11-13",
   "_comment": [
     "Dependency index for documents that MUST STAY CURRENT. Each entry names the authoritative",
     "sources a document was derived from, and the date it was last checked against them.",
@@ -76,7 +76,7 @@
       "doc": "site/help/ai-and-your-work.md",
       "kind": "help",
       "tier": "student",
-      "reviewed": "2026-11-10",
+      "reviewed": "2026-11-13",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/instructions/PROJECT.md",
@@ -115,7 +115,7 @@
       "doc": "site/help/director-ai-rules.md",
       "kind": "help",
       "tier": "director",
-      "reviewed": "2026-11-10",
+      "reviewed": "2026-11-13",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/instructions/PROJECT.md",
@@ -491,7 +491,7 @@
       "doc": "docs/operations/ONBOARD-AGGREGATION.md",
       "kind": "operations",
       "tier": null,
-      "reviewed": "2026-11-10",
+      "reviewed": "2026-11-13",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/skills/lesson-cycle/SKILL.md",
@@ -523,7 +523,7 @@
       "doc": "docs/operations/SCHEDULED-LESSON-CYCLE.md",
       "kind": "operations",
       "tier": null,
-      "reviewed": "2026-11-10",
+      "reviewed": "2026-11-13",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/skills/lesson-cycle/SKILL.md",
@@ -560,6 +560,25 @@
         ".ai/instructions/CORE.md"
       ],
       "note": "Where the Ask Sage key is stored and what one iPREP session costs. The proxy is the source for the secret names, the allowlist and the staff gate; extract_prompts.py for the per-lesson prompt sizes the arithmetic in section 3 is built on. CORE.md section 2 is why the key cannot live in the static site at all. The token figures are ESTIMATES at 4 chars/token until a real run replaces them - when one does, section 3 is wrong until it is updated."
+    },
+    {
+      "doc": "docs/operations/OVERNIGHT-GRADER.md",
+      "kind": "operations",
+      "tier": null,
+      "reviewed": "2026-11-13",
+      "sources": [
+        "supabase/admin/overnight_grade.py",
+        "supabase/admin/overnight/config.py",
+        "supabase/admin/overnight/grade_run.py",
+        "supabase/admin/overnight/llm.py",
+        "supabase/admin/overnight/grounding.py",
+        "supabase/admin/lesson_aggregate.py",
+        ".ai/skills/preflight-analyze/SKILL.md",
+        ".ai/skills/lesson-cycle/SKILL.md",
+        "scripts/staging/db_target.py",
+        "textbook-pdfs/rag-manifest.txt"
+      ],
+      "note": "Operator runbook for the overnight grader (Linux, staging only). The exit codes, the config keys, the seven chosen defaults, the 72-hour window and the staging wall are all restated from the code, so any of those sources changing re-flags it. preflight-analyze SKILL.md is a source because the grader's prompt and guards are derived from it and a test pins the anchor phrases."
     }
   ]
 }
